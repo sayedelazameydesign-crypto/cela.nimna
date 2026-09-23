@@ -21,5 +21,16 @@ def build_agent(settings: Optional[Settings] = None, *, provider: Optional[Model
     provider = provider or create_provider(settings)
     skills = skills or SkillManager(settings.skills_dir)
     tools = tools or default_registry()
+    # Sprint 3: auto-load plugins if present (non-blocking, best-effort)
+    try:
+        from pathlib import Path
+        from .plugins.manager import load_plugins
+        plugins_dir = Path("plugins")
+        if plugins_dir.is_dir():
+            loaded = load_plugins(tools, plugins_dir, skills_manager=skills)
+            if loaded:
+                logging.getLogger(__name__).info("plugins loaded: %s", loaded)
+    except Exception as exc:
+        logging.getLogger(__name__).warning("plugin load failed: %s", exc)
     memory = memory or MemoryStore(settings.db_path)
     return Agent(provider, skills, tools, memory, settings, approval_policy)

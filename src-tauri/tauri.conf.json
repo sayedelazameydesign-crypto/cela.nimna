@@ -1,0 +1,29 @@
+{
+  "build": {
+    "beforeDevCommand": "nimna serve --port 8001",
+    "beforeBuildCommand": "nimna serve --port 8001 & sleep 2",
+    "devPath": "http://localhost:8001",
+    "distDir": "../nimna/api/static",
+    "withGlobalTauri": true
+  },
+  "package": {
+    "productName": "Nimna",
+    "version": "0.2.0"
+  },
+  "tauri": {
+    "allowlist": {
+      "shell": { "open": true },
+      "window": { "create": true, "maximize": true },
+      "globalShortcut": { "all": true }
+    },
+    "bundle": {
+      "active": true,
+      "category": "DeveloperTool",
+      "identifier": "com.nimna.desktop",
+      "targets": "all"
+    },
+    "security": { "csp": null },
+    "windows": [{ "title": "Nimna — Advanced Computer Use", "width": 1400, "height": 900, "resizable": true }],
+    "systemTray": { "iconPath": "icons/icon.png", "iconAsTemplate": true }
+  }
+}

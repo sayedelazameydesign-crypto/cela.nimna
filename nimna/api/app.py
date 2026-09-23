@@ -265,6 +265,14 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
         except Exception as exc:
             raise HTTPException(500, str(exc))
 
+    @app.get("/api/analytics/summary")
+    def analytics_summary() -> dict[str, Any]:
+        try:
+            from nimna.analytics.collector import get_collector
+            return get_collector().summary()
+        except Exception as exc:
+            raise HTTPException(500, str(exc))
+
     # -- computer control (VNC desktop) ----------------------------------
     @app.get("/api/computer/status")
     def computer_status() -> dict[str, Any]:

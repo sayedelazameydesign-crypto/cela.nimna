@@ -1,0 +1,12 @@
+{
+  "name": "example-hello",
+  "version": "0.1.0",
+  "display_name": "Hello Plugin (مثال)",
+  "description": "أداة تجريبية: ترحب وتعيد الوقت — توضح Plugin SDK",
+  "author": "nimna",
+  "tools": [
+    {"name": "hello_tool", "entrypoint": "tools/hello.py:register", "description": "ترحب بالمستخدم", "risk": "safe", "tags": ["demo"]}
+  ],
+  "skills": [],
+  "min_nimna_version": "0.2.0"
+}

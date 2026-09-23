@@ -1,0 +1,13 @@
+[package]
+name = "nimna-desktop"
+version = "0.2.0"
+edition = "2021"
+description = "Nimna Tauri wrapper — Advanced Computer Use"
+
+[build-dependencies]
+tauri-build = { version = "1.5", features = [] }
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tauri = { version = "1.5", features = ["shell-open", "window-maximize", "global-shortcut-all"] }
