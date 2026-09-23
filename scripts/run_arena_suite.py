@@ -387,7 +387,30 @@ def _build_agent(mode: str, spec: TaskSpec, workspace: Path):
     return agent, provider
 
 
-def _run_checks(spec: TaskSpec, workspace: Path, reply: str) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def _last_shell_delta(agent: Any, session_id: str) -> dict[str, Any] | None:
+    """Last non-empty filesystem delta recorded in the SHA-256 audit chain."""
+    try:
+        events = agent.memory.get_audit(session_id, limit=400)
+    except Exception:
+        return None
+    for event in reversed(events):
+        if event.get("event") == "shell_evidence":
+            payload = event.get("payload") or {}
+            changes = payload.get("filesystem_delta") or []
+            if changes:
+                return {
+                    "changes": changes,
+                    "snapshot_before": payload.get("snapshot_before") or "",
+                    "snapshot_after": payload.get("snapshot_after") or "",
+                    "before_root_hash": payload.get("before_root_hash") or "",
+                    "after_root_hash": payload.get("after_root_hash") or "",
+                    "summary": payload.get("delta_summary") or {},
+                }
+    return None
+
+
+def _run_checks(spec: TaskSpec, workspace: Path, reply: str,
+                fs_delta: dict[str, Any] | None = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     checks: list[dict[str, Any]] = []
     secret_hits: list[dict[str, Any]] = []
 
@@ -417,6 +440,31 @@ def _run_checks(spec: TaskSpec, workspace: Path, reply: str) -> tuple[list[dict[
         ok = term not in reply
         checks.append({"name": f"reply excludes {term!r}", "ok": ok,
                        "detail": "ok" if ok else "forbidden term in final reply"})
+
+    if fs_delta:
+        # P1-T2 §10: expected artifacts proven by execution evidence —
+        # observed in the delta AND re-verified by content hash
+        # (Delta + Re-observation = Evidence; Delta alone is a claim).
+        try:
+            from nimna.execution.observation import FilesystemDelta, WorkspaceObserver
+            delta = FilesystemDelta.from_payload(fs_delta)
+            observer = WorkspaceObserver(workspace)
+            verify = {r["path"]: r for r in observer.verify_delta(delta)}
+            observed = {c["path"]: c for c in fs_delta.get("changes") or []
+                        if c.get("kind") in {"CREATED", "MODIFIED", "RENAMED"}}
+            for artifact in spec.expected_artifacts:
+                change = observed.get(artifact.path)
+                if change is None:
+                    continue  # exists/contains check already covers absence
+                checks.append({"name": f"delta:{artifact.path} observed {change['kind']}",
+                               "ok": True, "detail": "from shell execution evidence"})
+                result = verify.get(artifact.path) or {}
+                checks.append({"name": f"delta:{artifact.path} sha re-verified",
+                               "ok": bool(result.get("match")),
+                               "detail": result.get("note") or "not re-verified"})
+        except Exception as exc:
+            checks.append({"name": "delta:evidence", "ok": False,
+                           "detail": f"delta verification failed: {exc.__class__.__name__}"})
 
     for rel, content in _workspace_texts(workspace).items():
         for line_no, pattern_name in scan_secret_hits(content):
@@ -554,7 +602,7 @@ def run_task(spec: TaskSpec, mode: str) -> dict[str, Any]:
         reply = getattr(result, "reply", "") or ""
         row["tools_called"] = [c.name for c in getattr(result, "tool_calls", []) if getattr(c, "name", None)]
         row["skills_used"] = list(getattr(result, "skills_used", []) or [])
-        checks, secret_hits = _run_checks(spec, workspace, reply)
+        checks, secret_hits = _run_checks(spec, workspace, reply, fs_delta=_last_shell_delta(agent, f"arena-{spec.id}"))
         row["checks"] = checks
         row["secret_hits"] = secret_hits
         row["checks_total"] = len(checks)
@@ -567,6 +615,8 @@ def run_task(spec: TaskSpec, mode: str) -> dict[str, Any]:
             row["verdict"] = "PASS" if not secret_hits and row["checks_passed"] == row["checks_total"] else "FAIL"
             row["status_detail"] = "live run — deterministic checks only (LLM judge arrives in P5)"
         row["metrics"] = _shell_metrics(agent, f"arena-{spec.id}", result, row, wall_ms)
+        row["metrics"]["delta_reverified"] = sum(
+            1 for c in checks if c["name"].endswith("sha re-verified") and c["ok"])
         return row
     except SuiteError as exc:
         row["verdict"] = "ERROR"
@@ -637,6 +687,7 @@ def run_suite(tasks: list[TaskSpec], mode: str, *, ledger_path: Path | None = DE
             "evidence_completeness": round(100.0 * ev_total / shell_exec_total, 1) if shell_exec_total else None,
             "recovered_tasks": sum(1 for m in metrics if m["recovered"]),
             "mean_wall_ms": round(sum(walls) / len(walls), 1) if walls else None,
+            "delta_reverified": sum(int(m.get("delta_reverified") or 0) for m in metrics),
         },
         "regressions": regressions,
     }
@@ -705,6 +756,12 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"recovered `{summary.get('recovered_tasks', '—')}` · mean wall `{summary.get('mean_wall_ms', '—')}`ms",
         "",
     ]
+    if summary.get("delta_reverified"):
+        lines += [
+            f"**Delta evidence:** `{summary['delta_reverified']}` artifact hash(es) re-verified against "
+            "execution evidence — Delta + Re-observation = Evidence (P1-T2).",
+            "",
+        ]
     if report["regressions"]:
         lines.append("**⚠️ Regressions vs ledger:**")
         for reg in report["regressions"]:

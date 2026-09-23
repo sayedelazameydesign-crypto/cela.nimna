@@ -329,6 +329,39 @@ Evidence لا claim، Recovery bounded) ونضيف طبقة واحدة جديد�
 > P1-T5 Tool Registry → P1-T6 Capability/Policy Gate → P1-T7 Browser → P1-T8 MCP`،
 > ثم `P2 Planning+Memory+Context → P3 Multi-agent → P4 Self-improvement`.
 
+### P1-T2 — Filesystem Observation/Delta → **منفَّذة كـ Primitive مستقلة** ✅
+
+> **✅ الحالة: نُفِّذت** (بتعديل المالك المعماري: ليست خاصية في `ShellResult` بل
+> Primitive مستقلة في حزمة جديدة `nimna/execution/` تستخدمها Shell اليوم وBrowser
+> وأدوات الملفات غداً).
+>
+> - **`nimna/execution/observation.py`:** `ObservationScope` (root/include/exclude/
+>   max_files/max_bytes/max_depth/max_file_bytes — الافتراضي workspace فقط)،
+>   `WorkspaceObserver` (snapshot → delta → verify_delta)، أنواع التغيير الخمسة
+>   `CREATED/MODIFIED/DELETED/RENAMED/UNCHANGED`، و`FilesystemDelta.from_payload`
+>   لإعادة البناء من الـ evidence.
+> - **محتوى لا mtime:** كل entry = path/type/size/mode/sha256؛ التعديل يثبته اختلاف
+>   الهاش. RENAME يُكتشف بالمحتوى (DELETED+CREATED بنفس sha256 → RENAMED).
+> - **محدود بالتصميم:** سقوف ملفات/بايت/عمق، ميزانية هاش تُستنفد بصدق (note)،
+>   والملف الكبير presence-only — والنطاق خارج workspace **مرفوض** (resolve →
+>   containment → walk، لا startswith).
+> - **Symlinks تُسجَّل ولا تُتَّبع أبداً** — لا هاش عبر الرابط ولا نزول في الهدف خارج الحوزة.
+> - **بلا محتوى في الـ Evidence:** هاشات وmetadata فقط — لا أسرار ولا PII ولا ملفات ضخمة.
+> - **الذرّية صادقة:** `NONZERO_EXIT`/`TIMEOUT` يظهران دلتا sides-effect كاملة
+>   (`a CREATED, b CREATED`) — الفشل لا يعيد العالم لخلفه.
+> - **البصمة:** `before_root_hash`/`after_root_hash` (Merkle-like قابلة للترقية) +
+>   snapshot ids — قبل ≠ بعد إشارة سريعة والدلتا التفاصيل.
+> - **إعادة التحقق:** `verify_delta` يعيد قراءة العالم ويقارن sha256 — «Delta + Re-observation
+>   = Evidence، وDelta ≠ Claim»؛ والعبث بعد الحقيقة يفشل إعادة التحقق (مُختبَر).
+> - **Arena §10:** الأرتيفاكت المُنتَج بـ shell لا يكتفي بـ "keyword found" — يُشترط
+>   مشاهدته في الدلتا **ومطابقة هاشه** (`delta:… observed CREATED` + `delta:… sha
+>   re-verified`). code-01 أصبح 5/5 فحوصاً وcode-05 أربعة من أربعة؛ وإجمالاً
+>   **2 هاش artifact مُعاد التحقق منهما** في baseline v3.
+> - **الحَكَم الطفري 4/4:** `MODIFIED→UNCHANGED` (3 اختبارات تفشل)، `DELETED→UNCHANGED`
+>   (2)، `outside→allowed` (1)، `timeout→empty delta` (1) — كلها اكتُشفت واستُعيدت.
+> - الاختبارات: `tests/test_observation.py` (15) + إضافات `test_shell_tool.py` (25)
+>   + `test_arena_suite.py` (14) = **164 passed**.
+
 ### P1-T2 — تحرير وبحث
 - `edit.py`: `edit_file(path, old_text, new_text, expect_once=true)` — فشل صريح إذا old_text غير موجود/متكرر؛ `apply_patch(diff)` بتحقق مسارات داخل jail؛ حد ملف 1MB.
 - `search.py`: `grep(pattern, path, max_results=50)` (regex، يستبعد binary) + `glob(pattern, path)`.

@@ -11,6 +11,7 @@ The user contract requires each of these to be a real test:
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -155,8 +156,15 @@ def test_success_with_filesystem_delta_and_full_evidence(tmp_path: Path):
     result, memory = run_shell(tmp_path, "printf 'naya' > out.txt && cat seed.txt", consent=True)
     assert result.status is ShellStatus.SUCCESS and result.exit_code == 0
     assert result.stdout.strip() == "hello"
-    changes = {(d["change"], d["path"]) for d in result.filesystem_delta}
-    assert ("added", "out.txt") in changes
+    changes = {(d["kind"], d["path"]) for d in result.filesystem_delta}
+    assert ("CREATED", "out.txt") in changes
+    created = next(d for d in result.filesystem_delta if d["path"] == "out.txt")
+    assert created["after"]["sha256"] == "sha256:" + hashlib.sha256(b"naya").hexdigest()
+    # P1-T2: snapshot ids + workspace fingerprints in the evidence
+    assert result.evidence["snapshot_before"].startswith("snap_")
+    assert result.evidence["snapshot_after"].startswith("snap_")
+    assert result.evidence["before_root_hash"] != result.evidence["after_root_hash"]
+    assert result.evidence["delta_summary"]["created"] == 1
     assert EVIDENCE_KEYS <= set(result.evidence)
     assert result.evidence["command_hash"].startswith("sha256:")
     assert "printf" not in result.evidence["command_hash"]  # raw command never echoed
@@ -268,3 +276,35 @@ def test_agent_flow_policy_blocked_shell_never_runs_even_approved(monkeypatch, t
     assert "POLICY_BLOCKED" in json.dumps(result.model_dump())
     assert not any(c.ok and c.name == "run_command" and "SUCCESS" in c.result_preview
                    for c in result.tool_calls)
+
+
+# --------------------------------------------------------------------------- #
+# 7) atomicity: failure/timeout do NOT hide side effects (P1-T2 §5, §7)
+# --------------------------------------------------------------------------- #
+def test_command_failure_still_reports_side_effects(tmp_path: Path):
+    # echo A > a; echo B > b; exit 1  ->  NONZERO_EXIT + both CREATED
+    result, _ = run_shell(tmp_path, "printf A > a.txt; printf B > b.txt; exit 1", consent=True)
+    assert result.status is ShellStatus.NONZERO_EXIT and result.exit_code == 1
+    kinds = {(d["kind"], d["path"]) for d in result.filesystem_delta}
+    assert ("CREATED", "a.txt") in kinds and ("CREATED", "b.txt") in kinds
+    assert result.evidence["delta_summary"]["created"] == 2
+    assert result.evidence["before_root_hash"] != result.evidence["after_root_hash"]
+
+
+def test_timeout_still_reports_created_files(tmp_path: Path):
+    # command creates a file, then sleeps past the deadline -> TIMEOUT + CREATED
+    result, _ = run_shell(tmp_path, "printf side-effect > side.txt; sleep 5",
+                          consent=True, timeout_ms=500)
+    assert result.status is ShellStatus.TIMEOUT and result.timed_out is True
+    kinds = {(d["kind"], d["path"]) for d in result.filesystem_delta}
+    assert ("CREATED", "side.txt") in kinds          # the truth: the file exists
+    assert (tmp_path / "side.txt").read_text() == "side-effect"
+    assert result.evidence["delta_summary"]["created"] == 1
+
+
+def test_successful_run_without_changes_reports_unchanged(tmp_path: Path):
+    result, _ = run_shell(tmp_path, "true", consent=True)
+    assert result.status is ShellStatus.SUCCESS
+    assert result.filesystem_delta == []             # no changes -> no fabricated ones
+    assert result.evidence["delta_summary"]["unchanged"] >= 1
+    assert result.evidence["before_root_hash"] == result.evidence["after_root_hash"]

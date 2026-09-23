@@ -60,6 +60,7 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
+from ...execution.observation import FilesystemDelta, WorkspaceObserver
 from ..base import Risk, ToolContext, ToolRegistry
 
 TOOL_NAME = "run_command"
@@ -71,8 +72,6 @@ MAX_TIMEOUT_MS = 60_000
 MIN_TIMEOUT_MS = 100
 MAX_OUTPUT_BYTES = 100_000        # returned to the model (clipped)
 MAX_HASH_INPUT_BYTES = 1_000_000  # evidence hashes cover up to 1MB per stream
-MAX_DELTA_ENTRIES = 200
-MAX_DELTA_FILE_BYTES = 256_000    # files bigger than this are listed, not hashed
 MAX_ENV_ENTRIES = 16
 MAX_ENV_VALUE_CHARS = 4_096
 
@@ -265,42 +264,9 @@ def shlex_split_safe(command: str) -> list[str]:
 # --------------------------------------------------------------------------- #
 # Filesystem delta
 # --------------------------------------------------------------------------- #
-def _snapshot(workspace: Path) -> dict[str, Optional[str]]:
-    state: dict[str, Optional[str]] = {}
-    count = 0
-    for path in sorted(workspace.rglob("*")):
-        if count >= MAX_DELTA_ENTRIES:
-            break
-        if not path.is_file():
-            continue
-        rel = str(path.relative_to(workspace))
-        try:
-            if path.stat().st_size > MAX_DELTA_FILE_BYTES:
-                state[rel] = None  # too big to hash — presence only
-            else:
-                state[rel] = hashlib.sha256(path.read_bytes()).hexdigest()
-            count += 1
-        except OSError:
-            state[rel] = None
-    return state
-
-
-def _filesystem_delta(before: dict[str, Optional[str]], after: dict[str, Optional[str]]) -> list[dict[str, Any]]:
-    delta: list[dict[str, Any]] = []
-    for path in sorted(set(before) | set(after)):
-        old, new = before.get(path), after.get(path)
-        if old == new:
-            continue
-        if old is None and new is not None:
-            delta.append({"change": "added", "path": path, "sha256": new})
-        elif new is None and old is not None:
-            delta.append({"change": "removed", "path": path, "sha256_old": old})
-        else:
-            delta.append({"change": "modified", "path": path,
-                          "sha256_old": old, "sha256": new})
-        if len(delta) >= MAX_DELTA_ENTRIES:
-            break
-    return delta
+# P1-T2: the ad-hoc snapshot helpers were replaced by the standalone
+# observation primitive (nimna/execution/observation.py) — bounded,
+# content-addressed, re-verifiable, shared with future tools.
 
 
 # --------------------------------------------------------------------------- #
@@ -447,7 +413,8 @@ def execute_shell(request: ShellRequest, *, settings: Any, workspace_root: Path,
     env, env_keys = _scrub_env(request.env, workspace_root)
     timeout_s = min(max(request.timeout_ms, MIN_TIMEOUT_MS), MAX_TIMEOUT_MS) / 1000.0
     max_out = int(getattr(settings, "shell_max_output_bytes", MAX_OUTPUT_BYTES) or MAX_OUTPUT_BYTES)
-    before = _snapshot(workspace_root)
+    observer = WorkspaceObserver(workspace_root)   # default scope: the workspace jail only
+    before = observer.snapshot()
     started_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
     try:
         out_bytes, err_bytes, exit_code, timed_out, duration_ms = _spawn(
@@ -462,8 +429,9 @@ def execute_shell(request: ShellRequest, *, settings: Any, workspace_root: Path,
         _audit(memory, session_id, run_id, "shell_denied", result.evidence | {"status": result.status, "reason": result.reason})
         return result
 
-    after = _snapshot(workspace_root)
-    delta = _filesystem_delta(before, after)
+    after = observer.snapshot()
+    delta = observer.delta(before, after)
+    delta_list = [change.to_dict() for change in delta.changes]
     stdout_text, stdout_total, stdout_clipped = _clip_bytes(out_bytes, max_out)
     stderr_text, stderr_total, stderr_clipped = _clip_bytes(err_bytes, max_out)
 
@@ -485,7 +453,13 @@ def execute_shell(request: ShellRequest, *, settings: Any, workspace_root: Path,
         "stderr_bytes": stderr_total,
         "stdout_clipped": stdout_clipped,
         "stderr_clipped": stderr_clipped,
-        "filesystem_delta": delta,
+        "filesystem_delta": delta_list,
+        "snapshot_before": delta.snapshot_before,
+        "snapshot_after": delta.snapshot_after,
+        "before_root_hash": delta.before_root_hash,
+        "after_root_hash": delta.after_root_hash,
+        "delta_summary": delta.summary,
+        "delta_truncated": delta.truncated,
         "env_keys": env_keys,
         "backend": "subprocess",
         "timed_out": timed_out,
@@ -498,7 +472,7 @@ def execute_shell(request: ShellRequest, *, settings: Any, workspace_root: Path,
         exit_code=exit_code,
         duration_ms=duration_ms,
         timed_out=timed_out,
-        filesystem_delta=delta,
+        filesystem_delta=delta_list,
         evidence=evidence,
         reason="" if status is not ShellStatus.TIMEOUT else f"timed out after {request.timeout_ms} ms",
     )

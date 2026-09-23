@@ -200,6 +200,35 @@ def test_json_report_shape_is_stable():
     json.dumps(report, ensure_ascii=False)  # must stay serializable
 
 
+def test_artifact_is_reverified_through_delta_evidence(tmp_path: Path):
+    """P1-T2 §10: an expected artifact produced via shell must pass BOTH the
+    file check AND the delta observation + sha256 re-verification."""
+    import hashlib
+
+    content = "1 2 Fizz"
+    spec = rs.TaskSpec.from_dict({
+        **MINIMAL_TASK,
+        "expected_artifacts": [{"path": "out/result.txt", "contains": "Fizz"}],
+    })
+    (tmp_path / "out").mkdir()
+    (tmp_path / "out" / "result.txt").write_text(content, encoding="utf-8")
+    sha = "sha256:" + hashlib.sha256(content.encode()).hexdigest()
+    fs_delta = {"changes": [{"path": "out/result.txt", "kind": "CREATED",
+                             "after": {"type": "file", "size": len(content), "sha256": sha}}],
+                "snapshot_before": "snap_a", "snapshot_after": "snap_b",
+                "before_root_hash": "h1", "after_root_hash": "h2", "summary": {"created": 1}}
+    checks, _ = rs._run_checks(spec, tmp_path, "reply", fs_delta=fs_delta)
+    names = {c["name"]: c["ok"] for c in checks}
+    assert names.get("delta:out/result.txt observed CREATED") is True
+    assert names.get("delta:out/result.txt sha re-verified") is True
+
+    # a tampered artifact (hash mismatch) must FAIL re-verification
+    (tmp_path / "out" / "result.txt").write_text("tampered", encoding="utf-8")
+    checks, _ = rs._run_checks(spec, tmp_path, "reply", fs_delta=fs_delta)
+    names = {c["name"]: c["ok"] for c in checks}
+    assert names.get("delta:out/result.txt sha re-verified") is False
+
+
 def test_seed_path_traversal_becomes_error_row_not_crash():
     spec = rs.TaskSpec.from_dict({**MINIMAL_TASK, "seed_files": [{"path": "../evil.txt", "content": "x"}]})
     row = rs.run_task(spec, "mock")

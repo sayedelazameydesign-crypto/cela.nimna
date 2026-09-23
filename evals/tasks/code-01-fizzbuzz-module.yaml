@@ -35,15 +35,18 @@ mock_script:
             print(" ".join(fizzbuzz(15)))
   - tool: run_command
     arguments:
-      command: python3 src/fizzbuzz.py
-      purpose: تشغيل الوحدة للتحقق من مخرجاتها
-mock_final: "تم إنشاء src/fizzbuzz.py وتشغيله عبر الطرفية بنجاح: 1 2 Fizz 4 Buzz Fizz 7 8 Fizz Buzz 11 Fizz 13 14 FizzBuzz"
+      command: python3 src/fizzbuzz.py > src/output.txt && cat src/output.txt
+      purpose: تشغيل الوحدة وحفظ مخرجاتها الحقيقية في src/output.txt
+mock_final: "تم إنشاء src/fizzbuzz.py وتشغيله عبر الطرفية؛ المخرجات محفوظة في src/output.txt: 1 2 Fizz 4 Buzz Fizz 7 8 Fizz Buzz 11 Fizz 13 14 FizzBuzz"
 expected_artifacts:
   - path: src/fizzbuzz.py
     contains: "def fizzbuzz"
+  - path: src/output.txt
+    contains: "FizzBuzz"
 must_include: ["fizzbuzz"]
 must_not_include: []
 judge_rubric: |-
   1) الملف src/fizzbuzz.py موجود وفيه الدالة المطلوبة بتوقيع صحيح.
   2) الوكيل شغّل الملف فعلاً عبر run_command (دليل shell_evidence في الـ audit).
   3) مخرجات n=15 صحيحة (3->Fizz, 5->Buzz, 15->FizzBuzz).
+  4) إثبات P1-T2: src/output.txt يظهر CREATED في filesystem_delta (أثر shell) مع sha256 مطابق لإعادة التحقق — Delta + Re-observation = Evidence، لا يكفي "keyword found".

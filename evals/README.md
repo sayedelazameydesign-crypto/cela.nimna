@@ -70,10 +70,12 @@ python scripts/run_arena_suite.py --mode mock --strict
 | `recovered` | مهمة اصطدمت بفشل ثم أكملت بفحوص 100% (مثل `code-05`) |
 | `mean_wall_ms` | متوسط زمن الجدار للمهام |
 
-**Baseline v2 (Agent+Shell، وضع mock، `SHELL_TOOL_ENABLED=1`):** 9 ran / 2 skipped /
-0 error / mean 55.6 / evidence completeness 100% / `code-01` قفزت 50.0 → **100.0**
-بتنفيذ shell فعلي، و`code-05` (فشل→إصلاح→نجاح) 100.0. راجع
-`ledger/BASELINE-mock.md` و`BASELINE-mock.json`.
+**Baseline v3 (P1-T1 Shell + P1-T2 Observation، وضع mock، `SHELL_TOOL_ENABLED=1`):**
+9 ran / 2 skipped / 0 error / mean 55.6 / evidence completeness 100% / **2 هاش
+artifact مُعاد التحقق منهما عبر الـ delta** (`code-01` الآن 5/5 فحوصاً — مخرجات
+التشغيل `src/output.txt` تُشاهَد CREATED وتُطابق sha256؛ و`code-05` 4/4).
+منذ v2: فحوص الأرتيفاكت المنتَج بـ shell لم تعد "keyword found" بل
+**Delta + Re-observation = Evidence**. راجع `ledger/BASELINE-mock.md` و`BASELINE-mock.json`.
 
 ## قواعد ثابتة
 

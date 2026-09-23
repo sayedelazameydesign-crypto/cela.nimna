@@ -1,8 +1,8 @@
 {
   "version": 1,
   "mode": "mock",
-  "repo_version": "5a91256",
-  "generated_at": "2026-09-23T17:28:29+00:00",
+  "repo_version": "876eb19",
+  "generated_at": "2026-09-23T17:38:36+00:00",
   "rows": [
     {
       "task_id": "arabic-01-market-brief",
@@ -31,7 +31,7 @@
       ],
       "requires": [],
       "metrics": {
-        "wall_ms": 10,
+        "wall_ms": 14,
         "tool_calls": 0,
         "failed_tool_calls": 0,
         "failed_shell_commands": 0,
@@ -40,11 +40,12 @@
         "evidence_complete": 0,
         "evidence_completeness": null,
         "recovered": false,
-        "verified": false
+        "verified": false,
+        "delta_reverified": 0
       },
-      "run_id": "e51d0f0839484ec2",
-      "ts": "2026-09-23T17:28:28+00:00",
-      "repo_version": "5a91256",
+      "run_id": "8e8fa39b7c5f4275",
+      "ts": "2026-09-23T17:38:36+00:00",
+      "repo_version": "876eb19",
       "previous_score": null
     },
     {
@@ -83,11 +84,12 @@
         "evidence_complete": 0,
         "evidence_completeness": null,
         "recovered": false,
-        "verified": false
+        "verified": false,
+        "delta_reverified": 0
       },
-      "run_id": "f481f207783d4130",
-      "ts": "2026-09-23T17:28:28+00:00",
-      "repo_version": "5a91256",
+      "run_id": "1ee501a7151a4c49",
+      "ts": "2026-09-23T17:38:36+00:00",
+      "repo_version": "876eb19",
       "previous_score": null
     },
     {
@@ -97,8 +99,8 @@
       "mode": "mock",
       "verdict": "MOCKED",
       "score": 100.0,
-      "checks_passed": 2,
-      "checks_total": 2,
+      "checks_passed": 5,
+      "checks_total": 5,
       "checks": [
         {
           "name": "artifact:src/fizzbuzz.py",
@@ -106,9 +108,24 @@
           "detail": "contains ok"
         },
         {
+          "name": "artifact:src/output.txt",
+          "ok": true,
+          "detail": "contains ok"
+        },
+        {
           "name": "reply contains 'fizzbuzz'",
           "ok": true,
           "detail": "ok"
+        },
+        {
+          "name": "delta:src/output.txt observed CREATED",
+          "ok": true,
+          "detail": "from shell execution evidence"
+        },
+        {
+          "name": "delta:src/output.txt sha re-verified",
+          "ok": true,
+          "detail": "hash verified"
         }
       ],
       "secret_hits": [],
@@ -134,11 +151,12 @@
         "evidence_complete": 1,
         "evidence_completeness": 100.0,
         "recovered": false,
-        "verified": true
+        "verified": true,
+        "delta_reverified": 1
       },
-      "run_id": "691364e4fd8548c3",
-      "ts": "2026-09-23T17:28:28+00:00",
-      "repo_version": "5a91256",
+      "run_id": "a3ab1827c6de4c87",
+      "ts": "2026-09-23T17:38:36+00:00",
+      "repo_version": "876eb19",
       "previous_score": null
     },
     {
@@ -173,7 +191,7 @@
       ],
       "requires": [],
       "metrics": {
-        "wall_ms": 7,
+        "wall_ms": 8,
         "tool_calls": 0,
         "failed_tool_calls": 0,
         "failed_shell_commands": 0,
@@ -182,11 +200,12 @@
         "evidence_complete": 0,
         "evidence_completeness": null,
         "recovered": false,
-        "verified": true
+        "verified": true,
+        "delta_reverified": 0
       },
-      "run_id": "dba99c534db241fd",
-      "ts": "2026-09-23T17:28:28+00:00",
-      "repo_version": "5a91256",
+      "run_id": "593d4d6afe80402d",
+      "ts": "2026-09-23T17:38:36+00:00",
+      "repo_version": "876eb19",
       "previous_score": null
     },
     {
@@ -230,11 +249,12 @@
         "evidence_complete": 0,
         "evidence_completeness": null,
         "recovered": false,
-        "verified": false
+        "verified": false,
+        "delta_reverified": 0
       },
-      "run_id": "c8ea5f3c895e49bd",
-      "ts": "2026-09-23T17:28:29+00:00",
-      "repo_version": "5a91256",
+      "run_id": "6859764d666f4584",
+      "ts": "2026-09-23T17:38:36+00:00",
+      "repo_version": "876eb19",
       "previous_score": null
     },
     {
@@ -273,11 +293,12 @@
         "evidence_complete": 0,
         "evidence_completeness": null,
         "recovered": false,
-        "verified": true
+        "verified": true,
+        "delta_reverified": 0
       },
-      "run_id": "998ecc6fab2b4666",
-      "ts": "2026-09-23T17:28:29+00:00",
-      "repo_version": "5a91256",
+      "run_id": "d8634e400fe64979",
+      "ts": "2026-09-23T17:38:36+00:00",
+      "repo_version": "876eb19",
       "previous_score": null
     },
     {
@@ -287,8 +308,8 @@
       "mode": "mock",
       "verdict": "MOCKED",
       "score": 100.0,
-      "checks_passed": 2,
-      "checks_total": 2,
+      "checks_passed": 4,
+      "checks_total": 4,
       "checks": [
         {
           "name": "artifact:scripts_src/result.txt",
@@ -299,6 +320,16 @@
           "name": "reply contains 'result.txt'",
           "ok": true,
           "detail": "ok"
+        },
+        {
+          "name": "delta:scripts_src/result.txt observed CREATED",
+          "ok": true,
+          "detail": "from shell execution evidence"
+        },
+        {
+          "name": "delta:scripts_src/result.txt sha re-verified",
+          "ok": true,
+          "detail": "hash verified"
         }
       ],
       "secret_hits": [],
@@ -325,11 +356,12 @@
         "evidence_complete": 2,
         "evidence_completeness": 100.0,
         "recovered": true,
-        "verified": true
+        "verified": true,
+        "delta_reverified": 1
       },
-      "run_id": "5dc1d0de478e4975",
-      "ts": "2026-09-23T17:28:29+00:00",
-      "repo_version": "5a91256",
+      "run_id": "dbcca098219145d8",
+      "ts": "2026-09-23T17:38:36+00:00",
+      "repo_version": "876eb19",
       "previous_score": null
     },
     {
@@ -373,11 +405,12 @@
         "evidence_complete": 0,
         "evidence_completeness": null,
         "recovered": false,
-        "verified": false
+        "verified": false,
+        "delta_reverified": 0
       },
-      "run_id": "0e38476bc1714f0c",
-      "ts": "2026-09-23T17:28:29+00:00",
-      "repo_version": "5a91256",
+      "run_id": "3955ed3925d04f03",
+      "ts": "2026-09-23T17:38:36+00:00",
+      "repo_version": "876eb19",
       "previous_score": null
     },
     {
@@ -407,7 +440,7 @@
       ],
       "requires": [],
       "metrics": {
-        "wall_ms": 7,
+        "wall_ms": 10,
         "tool_calls": 0,
         "failed_tool_calls": 0,
         "failed_shell_commands": 0,
@@ -416,11 +449,12 @@
         "evidence_complete": 0,
         "evidence_completeness": null,
         "recovered": false,
-        "verified": false
+        "verified": false,
+        "delta_reverified": 0
       },
-      "run_id": "4c95a8df52254ce1",
-      "ts": "2026-09-23T17:28:29+00:00",
-      "repo_version": "5a91256",
+      "run_id": "cc6f451df43b4f60",
+      "ts": "2026-09-23T17:38:36+00:00",
+      "repo_version": "876eb19",
       "previous_score": null
     },
     {
@@ -442,9 +476,9 @@
         "network"
       ],
       "metrics": {},
-      "run_id": "6e89f1fb6fe640c2",
-      "ts": "2026-09-23T17:28:29+00:00",
-      "repo_version": "5a91256",
+      "run_id": "0f0d598d70524d6b",
+      "ts": "2026-09-23T17:38:36+00:00",
+      "repo_version": "876eb19",
       "previous_score": null
     },
     {
@@ -466,9 +500,9 @@
         "network"
       ],
       "metrics": {},
-      "run_id": "7d30a7e749c94783",
-      "ts": "2026-09-23T17:28:29+00:00",
-      "repo_version": "5a91256",
+      "run_id": "a6e5809d009c4010",
+      "ts": "2026-09-23T17:38:36+00:00",
+      "repo_version": "876eb19",
       "previous_score": null
     }
   ],
@@ -487,7 +521,8 @@
     "shell_executions": 3,
     "evidence_completeness": 100.0,
     "recovered_tasks": 1,
-    "mean_wall_ms": 15.3
+    "mean_wall_ms": 16.2,
+    "delta_reverified": 2
   },
   "regressions": []
 }
