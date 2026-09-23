@@ -161,20 +161,28 @@ def _resolve_refs(node: Any, defs: dict[str, Any]) -> Any:
     return node
 
 
-def normalize_json_schema(schema: dict[str, Any]) -> dict[str, Any]:
+def normalize_json_schema(schema: dict[str, Any], *, keep_defaults: bool = False) -> dict[str, Any]:
     """Inline ``$defs`` and drop noise pydantic adds (``title``/``default``).
 
     The result is still standard JSON schema (accepted by OpenAI-style APIs).
+
+    ``keep_defaults`` retains ``default`` values. Schemas generated from a
+    pydantic model do not need them, but a schema authored elsewhere (an MCP
+    server's ``inputSchema``) carries defaults that tell the model what a
+    parameter falls back to; dropping those is a loss of information, not
+    noise removal.
     """
     schema = copy.deepcopy(schema)
     defs = schema.pop("$defs", {}) or {}
     schema = _resolve_refs(schema, defs)
 
+    dropped = {"title", "additionalProperties"} if keep_defaults else {"title", "default", "additionalProperties"}
+
     def clean(node: Any) -> Any:
         if isinstance(node, dict):
             out: dict[str, Any] = {}
             for key, value in node.items():
-                if key in {"title", "default", "additionalProperties"}:
+                if key in dropped:
                     continue
                 out[key] = clean(value)
             return out

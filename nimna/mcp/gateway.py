@@ -404,7 +404,7 @@ class MCPGateway:
         request = build_discover_request(
             self._next_id(), client_name=self.client_name, client_version=self.client_version
         )
-        response = self._send(state, request)
+        response = self._send(state, request, session_id=session_id, run_id=run_id)
         result = response.unwrap()
         discovery = parse_discover_result(result.value)
         self._record(
@@ -433,7 +433,7 @@ class MCPGateway:
             client_name=self.client_name,
             client_version=self.client_version,
         )
-        response = self._send(state, request)
+        response = self._send(state, request, session_id=session_id, run_id=run_id)
         result = response.unwrap()
         ttl, scope = validate_cacheable_result(result.value)
         definitions = parse_tool_list(result.value)
@@ -485,17 +485,32 @@ class MCPGateway:
         if not state.config.enabled:
             raise MCPGatewayError(f"MCP server {server!r} is disabled")
 
-    def _send(self, state: _ServerState, request: Any) -> MCPResponse:
+    def _send(
+        self,
+        state: _ServerState,
+        request: Any,
+        *,
+        session_id: Optional[str] = None,
+        run_id: Optional[str] = None,
+    ) -> MCPResponse:
         definition = None
         if request.method == METHOD_TOOLS_CALL:
             name = request.params.get("name")
             definition = state.definitions.get(str(name))
+
+        def on_notification(event: Any) -> None:
+            # Notifications belong to the request that caused them, so they are
+            # recorded against that run. Filing them with no run id would leave
+            # them in the journal but unattributable — present and useless.
+            self._record(
+                session_id,
+                run_id,
+                "mcp.notification",
+                {"server": state.config.name, "event": event.event, "method": request.method},
+            )
+
         return state.transport.send(
-            request,
-            tool_definition=definition,
-            on_notification=lambda event: self._record(
-                None, None, "mcp.notification", {"server": state.config.name, "event": event.event}
-            ),
+            request, tool_definition=definition, on_notification=on_notification
         )
 
     # -- governed tool call ----------------------------------------------
@@ -619,7 +634,7 @@ class MCPGateway:
             params={"name": tool, "arguments": payload},
         )
         try:
-            response = self._send(state, request)
+            response = self._send(state, request, session_id=session_id, run_id=run_id)
         except (MCPTransportError, MCPLegacyServerError, MCPProtocolError) as exc:
             self._record(
                 session_id, run_id, "mcp.error",

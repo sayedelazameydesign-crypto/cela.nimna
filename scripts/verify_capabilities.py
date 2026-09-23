@@ -20,7 +20,11 @@ REQUIRED_FILES = (
     ROOT / "nimna" / "mcp" / "headers.py",
     ROOT / "nimna" / "mcp" / "transport.py",
     ROOT / "nimna" / "mcp" / "gateway.py",
+    ROOT / "nimna" / "mcp" / "registry.py",
+    ROOT / "skills" / "mcp_servers" / "SKILL.md",
     ROOT / "tests" / "test_mcp_gateway.py",
+    ROOT / "tests" / "test_mcp_integration.py",
+    ROOT / "tests" / "mcp_mock_server.py",
 )
 
 
@@ -102,6 +106,27 @@ def main() -> int:
         if re.search(pattern, contract_source, re.MULTILINE):
             print(f"MCP contract reintroduces removed machinery: {label}", file=sys.stderr)
             return 1
+
+    # The capability row claims the gateway is wired into the agent loop. Check
+    # that wiring still exists, so the claim cannot outlive the code.
+    agent_source = (ROOT / "nimna" / "core" / "agent.py").read_text(encoding="utf-8")
+    if "attach_gateway" not in agent_source:
+        print("MCP claim unbacked: agent.py no longer attaches the gateway", file=sys.stderr)
+        return 1
+    if "fnmatch" not in agent_source:
+        print("MCP claim unbacked: allowed_tools glob expansion is gone", file=sys.stderr)
+        return 1
+    registry_source = (ROOT / "nimna" / "mcp" / "registry.py").read_text(encoding="utf-8")
+    if 'risk="confirm"' not in registry_source:
+        print(
+            "MCP safety invariant broken: remote tools must be registered as confirm",
+            file=sys.stderr,
+        )
+        return 1
+    skill = (ROOT / "skills" / "mcp_servers" / "SKILL.md").read_text(encoding="utf-8")
+    if "mcp__*__*" not in skill:
+        print("MCP claim unbacked: the mcp_servers skill no longer grants mcp__*__*", file=sys.stderr)
+        return 1
 
     print(
         f"integrity PASS: {len(REQUIRED_FILES)} capability files and Python syntax verified "

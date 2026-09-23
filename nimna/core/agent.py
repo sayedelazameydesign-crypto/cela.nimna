@@ -11,6 +11,7 @@
 Runs are serialisable (:class:`RunState`), so a run can pause when a tool
 needs approval and be resumed later by :meth:`Agent.resume`.
 """
+import fnmatch
 import json
 import logging
 import time
@@ -40,6 +41,7 @@ def _get_swarm_components():
 from ..config import Settings
 from ..evidence import EvidenceJournal
 from ..governance import PolicyDecision, PolicyEngine
+from ..mcp.registry import attach_gateway
 from ..memory.store import MemoryStore
 from ..models import BudgetExceededError, CostGuard, GovernedModelProvider, ModelRegistry
 from ..providers.base import Message, ModelProvider, ProviderError, ToolCall
@@ -77,7 +79,8 @@ class Agent:
     def __init__(self, provider: ModelProvider, skills: SkillManager, tools: ToolRegistry,
                  memory: MemoryStore, settings: Settings,
                  approval_policy: Optional[ApprovalPolicy] = None, *,
-                 workspace: Optional[Any] = None, use_llm_planner: bool = True):
+                 workspace: Optional[Any] = None, use_llm_planner: bool = True,
+                 mcp_gateway: Optional[Any] = None):
         # Put the budget gate at the provider boundary so planner, verifier,
         # normal turns, and swarm calls share one policy.  The wrapper forwards
         # provider-specific attributes (for example MockProvider.calls).
@@ -100,6 +103,10 @@ class Agent:
         )
         self.selector = SkillSelector(self.provider, skills, max_skills=settings.max_skills,
                                       use_llm=use_llm_planner)
+        # Transport for governed remote MCP tools. Held, not called: nothing
+        # contacts an MCP server unless the registry contains a tool that
+        # forwards to it, and that only happens when a skill asks for one.
+        self.mcp_gateway = mcp_gateway
         self.evidence = EvidenceJournal(memory)
         self.runtime_manifest = build_manifest(
             settings=settings,
@@ -280,15 +287,43 @@ class Agent:
         if state.loaded_skills:
             for skill_name in state.loaded_skills:
                 for tool_name in self.skills.get(skill_name).meta.allowed_tools:
-                    if tool_name in self.tools and tool_name not in allowed:
-                        allowed.append(tool_name)
-                    elif tool_name not in self.tools:
-                        log.warning("skill %s references unknown tool %s", skill_name, tool_name)
+                    for resolved in self._resolve_tool_entry(skill_name, tool_name):
+                        if resolved not in allowed:
+                            allowed.append(resolved)
         else:
             for tool_name in self.settings.default_tools:
                 if tool_name in self.tools and tool_name not in allowed:
                     allowed.append(tool_name)
         state.allowed_tools = allowed
+
+    def _resolve_tool_entry(self, skill_name: str, entry: str) -> list[str]:
+        """Resolve one skill ``allowed_tools`` entry to concrete tool names.
+
+        A plain name resolves to itself. An entry containing ``*`` or ``?`` is
+        a glob, matched against the registry — which is what lets a skill grant
+        tools whose names are only known at runtime. Remote MCP tools are named
+        ``mcp__{server}__{tool}`` after whatever servers the operator enabled,
+        so a ``SKILL.md`` cannot list them literally; it declares the shape
+        (``mcp__*__*``) and the gate stays here, in the registry match, rather
+        than becoming documentation-only.
+
+        A row that matches nothing is a warning, not a silent no-op: a skill
+        that grants nothing is usually a mistake, and a remote server that
+        failed to register would otherwise look like a skill with no tools.
+        """
+        if "*" in entry or "?" in entry:
+            matched = [
+                name for name in sorted(self.tools.names()) if fnmatch.fnmatchcase(name, entry)
+            ]
+            if not matched:
+                log.warning(
+                    "skill %s pattern %r matched no registered tool", skill_name, entry
+                )
+            return matched
+        if entry in self.tools:
+            return [entry]
+        log.warning("skill %s references unknown tool %s", skill_name, entry)
+        return []
 
     def _system_prompt(self, state: RunState) -> str:
         sections = [BASE_SYSTEM_PROMPT.strip()]
@@ -449,6 +484,7 @@ class Agent:
         return ToolContext(
             settings=self.settings, workspace=self.workspace, session_id=state.session_id,
             memory=self.memory, skills=self.skills, run_id=state.run_id, on_skill_loaded=on_skill_loaded,
+            extras=attach_gateway(self.mcp_gateway),
         )
 
     def _execute_calls(self, state: RunState, *, start_index: int) -> str:

@@ -49,7 +49,8 @@
 - `pytest -q`: **83 passed**.
 - `python scripts/verify_capabilities.py`: **integrity PASS**.
 - Browser Use live smoke: **لم يُشغّل**؛ لا يوجد API key في CI ولا يجب استهلاك credits أو تعديل بيانات خارجية في Pull Request عادي.
-- Docker sandbox الحقيقي وrootless runtime وMCP Gateway وPostgreSQL multi-replica: ما زالت موثقة كـ`partial` أو `planned` في `docs/CAPABILITY-MATRIX.md`.
+- Docker sandbox الحقيقي وrootless runtime وPostgreSQL multi-replica: ما زالت موثقة كـ`partial` أو `planned` في `docs/CAPABILITY-MATRIX.md`.
+- MCP Gateway: صار `implemented` بعد ربطه بحلقة الوكيل (`nimna/mcp/registry.py` + مهارة `mcp_servers`). يبقى `G18` (`BLOCKED`) لأن اختبار خادم طرف ثالث حقيقي لم يُشغَّل، والبوابة معطّلة افتراضياً.
 
 ### ملفات مرجعية
 

@@ -23,7 +23,9 @@
 | G15 MCP header agreement | `pytest -q tests/test_mcp_gateway.py -k "header"` | offline | PASS | header/body mismatch + injection tests |
 | G16 MCP transport binding | `pytest -q tests/test_mcp_gateway.py -k "sse or 202 or legacy"` | `httpx.MockTransport` | PASS / MOCKED | no session header, no initialize, no resumability |
 | G17 MCP governance | `pytest -q tests/test_mcp_gateway.py -k "denied or approval or scope or audited"` | offline | PASS | policy denial + audit chain assertions |
-| G18 MCP live server | explicit opt-in smoke against a real MCP endpoint | external server | BLOCKED | not implemented; `initialize`-based revisions are refused |
+| G18 MCP third-party live | explicit opt-in smoke against a real third-party MCP server | external account | BLOCKED | not run; enabling requires `MCP_ENABLED=true` + a server + credential |
+| G19 MCP integration | `pytest -q tests/test_mcp_integration.py` | loopback socket, no internet | PASS | real HTTP server validates mirrored headers; `-32020` on mismatch |
+| G20 MCP agent loop | `pytest -q tests/test_mcp_integration.py -k "agent"` | offline | PASS | scope → policy → approval → forward, plus denial and audit |
 
 ## Interpretation
 

@@ -1,11 +1,14 @@
 # MCP Gateway في Nimna
 
-> **حالة التكامل:** طبقة عقود + حدود + سياسة في `nimna/mcp/` مع اختبارات offline
-> حتمية (`tests/test_mcp_gateway.py`). **غير موصولة بحلقة الوكيل بعد**، ومعطّلة
-> افتراضياً (`MCP_ENABLED=false`). الصف في `docs/CAPABILITY-MATRIX.md` يبقى
-> `partial` ولا يدّعي `implemented`.
+> **حالة التكامل:** طبقة عقود + حدود + سياسة + ربط بحلقة الوكيل في `nimna/mcp/`،
+> مع اختبارات offline حتمية (`tests/test_mcp_gateway.py`) واختبار تكامل مقابل
+> **خادم MCP حقيقي على socket** (`tests/test_mcp_integration.py`). الصف في
+> `docs/CAPABILITY-MATRIX.md` هو `implemented`.
 >
 > **المراجعة:** 2026-09-23 مقابل مواصفة MCP إصدار `2026-07-28`.
+>
+> **ما يبقى غير مثبت:** لا يوجد اختبار مقابل خادم MCP طرف ثالث حقيقي (بوابة
+> `G18` = `BLOCKED`)، والبوابة معطّلة افتراضياً.
 
 ## الإصدار المستهدف والقرار المهم
 
@@ -121,26 +124,89 @@ MCP_ALLOW_PRIVATE_NETWORKS=false  # يخالف الافتراضي فقط عند 
 | stream ينتهي بلا رد | `MCPStreamTruncatedError` — الطلب مفقود، أعد إرساله بمعرّف جديد |
 | نتيجة `input_required` | `approval_required` — البوابة **لا تجيب نيابة عن المستخدم** |
 
+## الربط بحلقة الوكيل
+
+الأدوات البعيدة تُسجَّل كأدوات عادية في `ToolRegistry` عبر
+`nimna/mcp/registry.py`، فتمر بنفس مسار الأدوات المحلية: النطاق ← التحقق ←
+السياسة ← الموافقة ← التنفيذ ← التدقيق. لا يوجد مسار تحكم ثانٍ.
+
+### البوابة المزدوجة ليست تفصيلاً شكلياً
+
+الأداة البعيدة تُسجَّل بـ`risk="confirm"` **فرضاً**، وهذا غير قابل للتهيئة.
+السبب: الـhandler يمرّر `explicit_consent=True` إلى `MCPGateway.call_tool`،
+لأن الوصول إلى الـhandler يعني أن بوابة الوكيل وافقت على أداة `confirm`
+بالفعل. لو كان التسجيل بـ`safe` ممكناً، لكان الـhandler يعمل بلا موافقة،
+ولصار `explicit_consent=True` ثغرة تجاوز لا تأكيداً. الفرض هو ما يجعل
+التمرير سليماً:
+
+1. الوكيل يرى `mcp__demo__get_weather` بـ`confirm` → يعلّق الطلب ويطلب موافقة.
+2. عند الموافقة فقط يُستدعى الـhandler.
+3. الـhandler يمرّر `explicit_consent=True` → لا سؤال ثانٍ، فيصل الطلب للخادم.
+
+### المخطط المنشور هو مخطط الخادم
+
+`inputSchema` القادم من `tools/list` يُمرَّر للنموذج كما هو عبر حقل
+`Tool.parameters` (مع حلّ `$defs` والحفاظ على `default`). السبب أن مواصفة
+`2026-07-28` وسّعت `inputSchema` لأي JSON Schema 2020-12 (`oneOf`, `$ref`,
+شروط)، وإعادة إنتاجها عبر نموذج Pydantic ستغيّرها بصمت. لذلك:
+
+- **النموذج** يرى أسماء المعاملات الحقيقية التي يقبلها الخادم.
+- **التحقق المحلي** (`validate_arguments`) فحص أولي متعمد الجزئية: وجود
+  المعاملات المطلوبة، رفض المعاملات غير المعروفة عندما يُغلق المخطط الكائن،
+  وأنواع المعاملات الأولية. ما تجاوز ذلك — التركيب والشروط و`$ref` والحدود
+  الرقمية — يبقى للخادم، لأن ادّعاء تحقق كامل من JSON Schema ادّعاء لا تسنده
+  هذه الدالة.
+
+### النطاق عبر glob في المهارة
+
+الـ`SKILL.md` لا يستطيع كتابة أسماء أدوات لا تعرفها إلا وقت التشغيل، فيعلن
+الشكل:
+
+```yaml
+allowed_tools:
+  - "mcp__*__*"
+```
+
+و`Agent._resolve_tool_entry` يطابق النمط مقابل السجل. حدّان صريحان يبقيان:
+`SCOPE` على مستوى الخادم، وإعلان المهارة. مهارة لا تطلب أدوات MCP لا تحصل
+عليها — وهذا مثبت في `test_glob_scope_grants_remote_tools_only_through_a_skill`.
+
+## الإعداد الكامل من البيئة
+
+```text
+MCP_ENABLED=true
+MCP_SERVERS=demo
+MCPSERVER_DEMO_URL=https://mcp.example.com/mcp
+MCPSERVER_DEMO_TOKEN_ENV=DEMO_MCP_TOKEN   # اسم المتغير الحامل للسر، لا السر
+MCPSERVER_DEMO_SCOPE=get_weather          # فارغ = كل ما يعلنه الخادم
+MCPSERVER_DEMO_RISK=confirm
+MCPSERVER_DEMO_AUTH=true
+```
+
+`MCPGateway.from_settings()` يقرأها، و`bootstrap.build_gateway()` يبني البوابة
+عند التفعيل فقط (وإلا يعيد `None` — لا بوابة خاملة)، و`build_agent()` ينشر
+الأدوات. خادم غير متاح يُبلَّغ عنه في `report.errors` ولا يمنع الإقلاع.
+
 ## ما لم يُنفَّذ بعد (صراحة)
 
-- **الربط بحلقة الوكيل**: الأدوات البعيدة لا تُسجَّل في `default_registry()`،
-  فالنموذج لا يراها ولا يستدعيها اليوم. `capability_scope()` تنتج الأسماء
-  المؤهَّلة (`mcp__{server}__{tool}`) الجاهزة لذلك الربط.
-- **إصدارات `initialize`**: غير منفَّذة، وتُرفض صراحةً.
+- **إصدارات `initialize`**: غير منفَّذة، وتُرفض صراحةً (`MCPLegacyServerError`).
 - **`subscriptions/listen`**: الثابت موجود، ولم تُنفَّذ إدارة stream طويل الأمد.
-- **اختبار تكامل مع خادم MCP حقيقي**: غير موجود؛ كل الاختبارات عبر
-  `httpx.MockTransport`. الحالة الصحيحة لذلك `MOCKED` لا `PASS production`.
+- **خادم طرف ثالث حقيقي**: لم يُختبر. اختبار التكامل يستخدم خادماً حقيقياً
+  داخل المستودع على socket حقيقي — يتحقق من الترويسات ويرفض `-32020` عند
+  الاختلاف، لكنه ليس تنفيذاً مستقلاً لطرف ثالث. لذلك `G18` = `BLOCKED`.
+- **`stdio`**: مستبعد بالتصميم (subprocess ليس حدّاً أمنياً هنا).
 
 ## Definition of Done مقابل هذه الحالة
 
 | الشرط | الحالة |
 |---|---|
-| code exists | ✅ `nimna/mcp/` |
+| code exists | ✅ `nimna/mcp/` + `nimna/mcp/registry.py` + `skills/mcp_servers/` |
 | scoped boundary | ✅ `headers.py` (اتفاق الترويسة/الـbody) + `gateway.py` (نطاق وسياسة ومصادقة) |
 | deterministic offline test | ✅ 85 اختباراً بلا شبكة |
-| integration/contract test where external | ❌ لا خادم حقيقي — `MOCKED` |
+| integration/contract test where external | ✅ 23 اختبار تكامل مقابل خادم على socket حقيقي (`G19`) |
 | policy and failure behavior | ✅ `PolicyEngine` + جدول الفشل أعلاه |
 | audit/evidence event | ✅ أحداث `mcp.*` عبر `EvidenceJournal` |
-| capability row and verification row | ✅ `G14` في `docs/VERIFICATION-MATRIX.md` |
+| capability row and verification row | ✅ `G14`–`G20` في `docs/VERIFICATION-MATRIX.md` |
 
-لذلك الصف `partial` لا `implemented`.
+النتيجة: `implemented` للبوابة والربط. يبقى `G18` (`BLOCKED`) صريحاً حتى
+يُشغَّل smoke مقابل خادم طرف ثالث.
