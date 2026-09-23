@@ -17,13 +17,16 @@ services:
       - nimna-data:/app/data
     restart: unless-stopped
 
-  # ── Local sandbox with Docker isolation ──────────────────────────────────
+  # ── Local sandbox with Docker isolation (development only) ───────────────
   # This service mounts the Docker socket, which grants the container near-
-  # host control (can create arbitrary containers). Use only for local
-  # development and never in production.
+  # host control (can create arbitrary privileged containers) — even read-only
+  # mount is not sufficient isolation. Do NOT use in production or untrusted CI.
+  # Use only for local development on a machine without sensitive data.
   #
   #   docker compose --profile local-sandbox up nimna-sandbox
   #
+  # The default `nimna` service does NOT mount the socket (verify with
+  # `docker compose config | grep -F docker.sock` — should return nothing).
   nimna-sandbox:
     extends:
       service: nimna

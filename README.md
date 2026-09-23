@@ -1,5 +1,8 @@
 # Nimna – وكيل ذكي قابل لإعادة استخدام المهارات
 
+> **حالة المشروع: نسخة مرشحة للإصدار (Release Candidate) — محصّن وفق نطاق الاختبارات الحالية (77 اختبارًا)**
+> الاختبارات لا تثبت الأمان المطلق. الحاويات تشترك في **نواة المضيف**؛ يجب إبقاء المضيف وDocker محدثين واستخدام **seccomp/AppArmor أو SELinux** عند النشر. لا تستخدم `subprocess` كعزل أمني، ولا تعتبر `mock` دليلًا على اتصال مزود حقيقي.
+
 وكيل عام يعمل فوق **مفتاح Gemini المجاني** (أو NVIDIA NIM أو أي نموذج متوافق مع OpenAI) ولا يحشر كل التعليمات داخل الـ prompt؛ بل يملك **مكتبة مهارات** على شكل مجلدات `SKILL.md`:
 
 > يقرأ الوكيل أوصاف المهارات أولًا ← يختار المناسب منها ← يحمّل تفاصيلها عند الحاجة ← ينفذها بأدوات محددة ومسموح بها فقط ← يطلب موافقتك قبل أي عملية حساسة ← يتحقق من النتيجة ← يرد.
@@ -260,8 +263,9 @@ docker compose --profile local-sandbox up --build   # يشغل nimna-sandbox م�
 ```
 
 - المجلدات `skills/` و`workspace/` مركّبة كـ volumes: أضف مهارة أو ملفًا دون إعادة بناء.
-- **تحذير:** تركيب `/var/run/docker.sock` يمنح الحاوية تحكمًا شبه كامل بالمضيف (يمكنها إنشاء حاويات بصلاحيات عالية) ويلغي عزل الـ sandbox. لذلك **الخدمة الافتراضية `nimna` لا تركّب الـ socket** وتعمل بـ `SANDBOX_BACKEND=subprocess` (يطلب موافقة). استخدم الخدمة `nimna-sandbox` ذات الـ profile فقط للتطوير المحلي، أو شغّل Nimna خارج Docker واجعل `run_python` يستخدم Docker Engine، أو استخدم proxy محدود الصلاحيات / Podman / خدمة sandbox منفصلة — انظر `SECURITY.md` و`docker-compose.yml`.
-- عند استخدام الـ profile، يعمل `run_python` داخل `python:3.11-slim` بلا شبكة، بحدود ذاكرة/CPU/عمليات، وبكل الصلاحيات محذوفة، ويصبح مصنفًا **safe** (لا يحتاج موافقة).
+- **تحذير صريح:** تركيب `/var/run/docker.sock` يمنح الحاوية تحكمًا شبه كامل بالمضيف (يمكنها إنشاء حاويات بصلاحيات عالية، حتى لو بوضع القراءة فقط) ويلغي عزل الـ sandbox — الوصول إلى الـ socket يعادل عمليًا صلاحيات واسعة جدًا على المضيف، وحتى التركيب بوضع القراءة فقط ليس عزلًا كافيًا. لذلك **الخدمة الافتراضية `nimna` لا تركّب الـ socket** وتعمل بـ `SANDBOX_BACKEND=subprocess` (يطلب موافقة). `local-sandbox` **خيار تطوير واضح فقط** — يجب ألا يكون متاحًا في أمر نشر اعتيادي أو CI غير موثوق. استخدم الخدمة `nimna-sandbox` ذات الـ profile فقط للتطوير المحلي على جهاز لا يحتوي بيانات حساسة، أو شغّل Nimna خارج Docker واجعل `run_python` يستخدم Docker Engine، أو استخدم proxy محدود الصلاحيات / Podman / خدمة sandbox منفصلة — انظر `SECURITY.md` و`docker-compose.yml`.
+- عند استخدام الـ profile، يعمل `run_python` داخل `python:3.11-slim` بلا شبكة (`--network none`)، بحدود ذاكرة/CPU/عمليات، وكل الصلاحيات محذوفة (`--cap-drop ALL` + `--security-opt no-new-privileges`)، ويصبح مصنفًا **safe** (لا يحتاج موافقة).
+- **الإنتاج الموصى به:** استخدم **Docker rootless** أو **Podman** مع مستخدم غير `root`، وحدود CPU والذاكرة، و`cap-drop=ALL` و`no-new-privileges` وملف **seccomp** أو **AppArmor/SELinux** مناسب. وضع rootless يقلل أثر اختراق الحاوية مقارنةً بـ Docker daemon يعمل بصلاحيات root.
 
 ---
 
@@ -283,15 +287,17 @@ docker compose --profile local-sandbox up --build   # يشغل nimna-sandbox م�
 | `AGENT_DEFAULT_TOOLS` | `load_skill,memory_search,list_files` | الأدوات عندما لا تُختار أي مهارة |
 | `AGENT_MAX_FILE_BYTES` | 5000000 | أقصى حجم ملف يُقرأ |
 | `AGENT_MAX_WRITE_BYTES` | 2000000 | أقصى حجم كتابة |
-| `SANDBOX_BACKEND` | `docker` | `docker` (افتراضي، عزل حقيقي) أو `subprocess` (يطلب موافقة) |
+| `SANDBOX_BACKEND` | `subprocess` | `docker` (عزل حقيقي، يحتاج Docker) أو `subprocess` (افتراضي آمن، يطلب موافقة) |
 | `WORKSPACE_DIR` / `SKILLS_DIR` / `DB_PATH` | `workspace` / `skills` / `data/nimna.db` | المسارات |
 
 ---
 
 ## الأمان وحدود التصميم
 
+> **تنبيه:** Nimna محصّن **وفق نطاق الاختبارات الحالية (77 اختبارًا)** — لا يثبت الأمان المطلق. الحاويات تشترك في نواة المضيف؛ يجب إبقاء المضيف وDocker محدثين واستخدام `seccomp`/`AppArmor` أو `SELinux` عند النشر.
+
 - المفتاح المجاني يوفّر قدرة النموذج فقط؛ نظام المهارات والذاكرة والصلاحيات مبني حوله ولا يعتمد على مزود بعينه.
-- `subprocess` sandbox يعزل البيئة والمسار ويحد الموارد لكنه **ليس حدًا أمنيًا**؛ لذلك مصنف `confirm` (يطلب موافقة). الافتراضي الآن `docker` (`--network none`، `--cap-drop ALL`، بلا صلاحيات جديدة، حدود ذاكرة/CPU) وهو **safe**. `nimna doctor` ينبه إن لم يكن Docker متوفرًا.
+- `subprocess` sandbox يعزل البيئة والمسار ويحد الموارد لكنه **ليس حدًا أمنيًا** (`confirm` دائمًا) — لا تعتبره عزلًا أمنيًا. الافتراضي الآمن الآن `subprocess`؛ وضع `docker` (`--network none`، `--cap-drop ALL`، `--security-opt no-new-privileges`، حدود ذاكرة/CPU/عمليات) هو **safe** لكنه لا يزال يشارك النواة ويحتاج تحديثات وملف seccomp/AppArmor.
 - الوكيل لا يرسل ولا يشتري ولا يحذف شيئًا دون موافقة صريحة، والنظام يفرض ذلك برمجيًا لا بالـ prompt فقط.
 - مخرجات الأدوات تُقتطع (`AGENT_TOOL_RESULT_MAX_CHARS`) لحماية نافذة السياق.
 - محتوى الويب غير موثوق؛ تعليمات المهارة `web_research` تطلب من النموذج معاملته كبيانات لا كأوامر.
@@ -301,6 +307,12 @@ docker compose --profile local-sandbox up --build   # يشغل nimna-sandbox م�
 - توقف الحلقة تلقائيًا عند: تكرار نفس استدعاء الأداة 3 مرات بلا تقدم، تكرار نفس نص النموذج 3 مرات، تجاوز `MAX_STEPS`/`MAX_TOOL_CALLS`/`MAX_RUNTIME`، أو 5 أخطاء أدوات متتالية.
 - لا يمكن لمهارة إعلان أداة غير مسجلة — `nimna skills validate` ينبه وruntime يتجاهلها.
 - أوامر التشخيص: `nimna doctor --offline` يتحقق من `.env`، المفاتيح، Docker، صلاحيات `workspace`، اتصال SQLite، وصحة مخططات الأدوات.
+- **قواعد تشغيل آمنة (إلزامية):**
+  - لا تستخدم `--profile local-sandbox` على جهاز يحتوي بيانات حساسة
+  - لا تشغّل الخدمة كـ `root` — الصورة تستخدم `USER nimna` (uid 1000) ويُنصح بـ Docker rootless/Podman
+  - لا تضع مفاتيح API داخل صورة Docker — مررها عبر `env_file: .env` (chmod 600) أو متغيرات البيئة
+  - لا تعتبر `subprocess` عزلًا أمنيًا
+  - الـ `mock` والاختبارات لا يثبتان نجاح الاتصال بمزود حقيقي — يجب اختبار Gemini/NVIDIA فعليًا قبل الإنتاج
 
 ---
 

@@ -1,18 +1,21 @@
 # Security policy
 
+> **حالة المشروع: نسخة مرشحة للإصدار (Release Candidate) — محصّن وفق نطاق الاختبارات الحالية (77 اختبارًا)**
+> الاختبارات لا تثبت الأمان المطلق. الحاويات تشترك في **نواة المضيف**؛ يجب إبقاء المضيف وDocker محدثين واستخدام **seccomp/AppArmor أو SELinux** عند النشر. راجع `README.md` و`docker-compose.yml`.
+
 ## Reporting a vulnerability
 Please email the maintainers or open a private security advisory on GitHub.
 Do **not** file a public issue for sensitive reports. We aim to acknowledge
 within 72 hours and to ship a fix within 14 days.
 
 ## Keys and secrets
-- Never commit `.env`.  It is git-ignored. Copy `.env.example` instead.
-- Keys are read only from environment variables (`GEMINI_API_KEY`,
-  `OPENAI_API_KEY` / `NVIDIA_API_KEY`). They are never written to logs,
+- Never commit `.env`.  It is git-ignored. Copy `.env.example` instead. Run `chmod 600 .env`.
+- Do **not** bake API keys into the Docker image — pass them at runtime via `env_file: .env` or environment variables.
+- Keys are read only from environment variables (`GEMINI_API_KEY` / `GOOGLE_API_KEY` fallback, `OPENAI_API_KEY` / `NVIDIA_API_KEY` fallback). They are never written to logs,
   audit payloads, or the model history – `nimna/tools/base.py: redact_payload`
   and `nimna/memory/store.py` scrub `api_key`, `secret`, `password`, `token`
-  before persistence.
-- `nimna doctor --offline` verifies the setup without pinging the provider.
+  and tokens like `sk-*`/`nvapi-*` before persistence or `log.exception`.
+- `nimna doctor --offline` verifies the setup without pinging the provider and checks `.env`/`DB` permissions (0600).
 
 ## Filesystem isolation
 - Every tool that touches a path goes through `ToolContext.resolve_path`
@@ -23,29 +26,29 @@ within 72 hours and to ship a fix within 14 days.
   escape the workspace.
 - `read_file` refuses files larger than `AGENT_MAX_FILE_BYTES` (default 5 MB);
   `write_file` / `write_report` enforce `AGENT_MAX_WRITE_BYTES` (2 MB).
-- The workspace and SQLite directory are created with restrictive defaults;
-  run `nimna doctor` to check writability.
+- The workspace (`0700`) and SQLite directory (`0700`, DB `0600`) are created with restrictive defaults;
+  run `nimna doctor` to check writability and permissions. The `.env` file is also tightened to `0600` by `ensure_dirs()`.
 
 ## Network isolation
 - `fetch_url` / `web_search` call `_assert_public_url` (see
   `nimna/tools/builtin/web.py`): only `http`/`https`, literal private IPs and
   hostnames that resolve to private / loopback / link-local / reserved /
-  multicast / unspecified addresses are rejected. Local suffixes (`.local`,
+  multicast / unspecified addresses are rejected. IPv4-mapped IPv6 (`::ffff:127.0.0.1`) is handled by inspecting the mapped IPv4. Local suffixes (`.local`,
   `.internal`, `.localhost`) and `localhost` / `0.0.0.0` / `::1` are blocked.
-  Redirects are followed hop-by-hop with the same checks (max 5 hops).
+  Redirects are followed hop-by-hop with fresh DNS per hop and the same checks (max 5 hops) — no connection pooling to avoid DNS rebinding.
 - The search tool never contacts the user's private network directly; it only
   queries `html.duckduckgo.com`.
 
 ## Code execution
-- `SANDBOX_BACKEND=docker` (the default, see `.env.example`) runs
-  `run_python` in a `python:3.11-slim` container with `--network none`,
-  `--cap-drop ALL`, `--security-opt no-new-privileges`, memory/cpu/pids limits,
-  and only the workspace mounted (`nimna/tools/sandbox.py`).
-- `SANDBOX_BACKEND=subprocess` uses a scrubbed environment, `cwd=workspace`,
-  and POSIX `RLIMIT_AS` / `RLIMIT_CPU` / `RLIMIT_FSIZE` / `RLIMIT_NPROC`,
-  but it is **not** a security boundary – the `run_python` tool is then
-  `confirm` (requires approval) and `nimna doctor` warns.
+- **Default (safe):** `SANDBOX_BACKEND=subprocess` (no socket) — scrubbed env, `cwd=workspace`, POSIX `RLIMIT_AS` / `RLIMIT_CPU` / `RLIMIT_FSIZE` / `RLIMIT_NPROC`, but it is **not a security boundary** and is `confirm` (requires approval).
+- **Docker isolation (opt-in):** `SANDBOX_BACKEND=docker` runs `run_python` in `python:3.11-slim` with `--network none`, `--cap-drop ALL`, `--security-opt no-new-privileges`, memory/cpu/pids limits, and only the workspace mounted (`nimna/tools/sandbox.py`). Even then containers **share the host kernel** — keep the host and Docker updated and apply a seccomp/AppArmor or SELinux profile in production.
 - No tool ever executes code without going through the sandbox module.
+- Image `nimna-agent:latest` runs as non-root `nimna` (uid 1000) — do **not** run as root. For production, prefer **Docker rootless** or **Podman**; it significantly reduces the impact of a container breakout versus a root daemon.
+
+## Docker socket — local-sandbox profile
+- The default `docker-compose.yml` service `nimna` **does not mount** `/var/run/docker.sock`. Verification: `docker compose config | grep -F docker.sock` must return nothing.
+- An optional service `nimna-sandbox` with `profiles: ["local-sandbox"]` mounts the socket and sets `SANDBOX_BACKEND=docker`. **Mounting the socket grants the container near-host control (can create arbitrary privileged containers) and is equivalent to very broad host privileges — even read-only mount is not sufficient isolation.** It is a **development-only** option and **must not** be available in a normal deployment or untrusted CI. Never use `--profile local-sandbox` on a machine with sensitive data.
+- Alternatives: run Nimna outside Docker and let `run_python` use the host's Docker Engine, or use a least-privilege socket proxy / Podman / separate sandbox service.
 
 ## Approvals
 - Risk `confirm` tools (`delete_file`, overwriting `write_file`/`write_report`,
@@ -54,8 +57,10 @@ within 72 hours and to ship a fix within 14 days.
   `status=awaiting_approval` with `{approval_id, tool_name, arguments, description}`
   and `POST /api/approvals/{id}` resolves it. Overwrites render as
   `هذه العملية ستكتب فوق: workspace/...` in both CLI and web UI.
+- `ALWAYS` is scoped to `tool + skill + version` (see `nimna/core/agent.py: _approval_key`). A permanent approval does not carry to a different skill-set/version.
 - Denied calls feed `{"error":"denied"}` back to the model; the agent is
   instructed never to retry a denied tool.
+- Resume is immutable: the stored `tool_call` is executed; client cannot mutate it. Duplicate resume is rejected via atomic `WHERE resolved_at IS NULL`.
 
 ## Limits that stop runaway loops
 `nimna/config.py` (all env-overridable):
@@ -78,6 +83,20 @@ identical model text (≥3), unknown/forbidden tool, or validation failures.
 - `nimna skills validate` (and `SKILL.md`'s `risk_level`) flag skills that
   reference unknown tools or are marked `restricted`.
 
+## Dependency pinning and scanning
+- Direct dependencies are pinned in `pyproject.toml` / `requirements.txt` (e.g. `pydantic==2.13.5`, `fastapi==0.141.1`, `google-genai==2.25.0`). Re-pin after `pip freeze` and test.
+- Run `pip-audit -r requirements.txt` regularly and before every release. For container images, run `trivy image nimna:latest`.
+- Provider and network code is outside the mock test scope — a passing mock suite does **not** prove real provider connectivity.
+
+## Mandatory operational rules
+```
+لا تستخدم --profile local-sandbox على جهاز يحتوي بيانات حساسة
+لا تشغّل الخدمة كـ root
+لا تضع مفاتيح API داخل صورة Docker
+لا تعتبر subprocess عزلًا أمنيًا
+الـ mock والاختبارات لا يثبتان نجاح الاتصال بمزود حقيقي
+```
+
 ## Updates
 Use `docker compose pull && docker compose up -d` or `pip install -U .`.
-Pin `SANDBOX_IMAGE` if you need reproducibility.
+Pin `SANDBOX_IMAGE` if you need reproducibility. Security fixes for the host/Docker/kernel are the operator's responsibility.
