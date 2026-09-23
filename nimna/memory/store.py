@@ -2,7 +2,7 @@
 
 * ``sessions`` / ``messages``  – short-term conversational memory
 * ``memories``                 – long-term notes & user preferences
-* ``audit_log``                – every skill loaded / tool call / approval
+* ``audit_log``                – every skill loaded / tool call / approval + SHA-256 evidence links
 * ``pending_runs``             – suspended runs awaiting user approval
 """
 import json
@@ -215,17 +215,46 @@ class MemoryStore:
     # -- audit -----------------------------------------------------------
     def log(self, session_id: Optional[str], run_id: Optional[str], event: str,
             payload: Optional[dict[str, Any]] = None) -> None:
-        # never persist raw secrets – redact before storage
+        # Never persist raw secrets – redact before storage.  Each entry also
+        # receives a SHA-256 link to the previous audit entry.  This is an
+        # evidence journal: it detects tampering, while not pretending to be a
+        # signed non-repudiation system.
         if payload is not None:
             try:
                 from ..tools.base import redact_payload  # local import to avoid cycle
                 payload = redact_payload(payload)
             except Exception:
                 pass
+        clean_payload = dict(payload or {})
+        # Callers cannot smuggle a replacement hash into the chain.
+        clean_payload.pop("_evidence", None)
+        created_at = _now()
+        from ..provenance.hashchain import evidence_hash
         with self._lock:
+            previous_hash: Optional[str] = None
+            row = self._conn.execute("SELECT payload FROM audit_log ORDER BY id DESC LIMIT 1").fetchone()
+            if row is not None:
+                previous = _loads(row["payload"], {}) or {}
+                previous_hash = ((previous.get("_evidence") or {}).get("hash")) if isinstance(previous, dict) else None
+            digest = evidence_hash(
+                session_id=session_id,
+                run_id=run_id,
+                event=event,
+                payload=clean_payload,
+                created_at=created_at,
+                previous_hash=previous_hash,
+            )
+            stored_payload = {
+                **clean_payload,
+                "_evidence": {
+                    "algorithm": "sha256",
+                    "hash": digest,
+                    "previous_hash": previous_hash,
+                },
+            }
             self._conn.execute(
                 "INSERT INTO audit_log(session_id, run_id, event, payload, created_at) VALUES (?,?,?,?,?)",
-                (session_id, run_id, event, _dumps(payload) if payload is not None else None, _now()),
+                (session_id, run_id, event, _dumps(stored_payload), created_at),
             )
             self._conn.commit()
 
@@ -247,6 +276,70 @@ class MemoryStore:
         for item in result:
             item["payload"] = _loads(item.get("payload"), None)
         return result
+
+    def verify_audit_chain(self, session_id: Optional[str] = None, run_id: Optional[str] = None,
+                           limit: int = 1000) -> dict[str, Any]:
+        """Verify evidence hashes for a run/session without exposing secrets.
+
+        ``anchored`` is true when a filtered first event points to a hash that
+        exists in the complete journal (or is the genesis event).  This lets a
+        caller verify a single run while preserving the global append-only link.
+        """
+        from ..provenance.hashchain import evidence_hash
+
+        clauses, params = [], []
+        if session_id:
+            clauses.append("session_id = ?")
+            params.append(session_id)
+        if run_id:
+            clauses.append("run_id = ?")
+            params.append(run_id)
+        where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+        with self._lock:
+            rows = self._conn.execute(
+                f"SELECT * FROM audit_log {where} ORDER BY id ASC LIMIT ?", (*params, limit)
+            ).fetchall()
+            all_rows = self._conn.execute("SELECT payload FROM audit_log ORDER BY id ASC").fetchall()
+        all_hashes: set[str] = set()
+        for row in all_rows:
+            data = _loads(row["payload"], {}) or {}
+            if isinstance(data, dict):
+                value = (data.get("_evidence") or {}).get("hash")
+                if value:
+                    all_hashes.add(str(value))
+        checked = 0
+        invalid: list[int] = []
+        first_previous: Optional[str] = None
+        for row in rows:
+            data = _loads(row["payload"], {}) or {}
+            evidence = data.pop("_evidence", None) if isinstance(data, dict) else None
+            if not isinstance(evidence, dict):
+                invalid.append(int(row["id"]))
+                continue
+            previous = evidence.get("previous_hash")
+            if checked == 0:
+                first_previous = previous
+            if previous is not None and str(previous) not in all_hashes:
+                invalid.append(int(row["id"]))
+            expected = evidence_hash(
+                session_id=row["session_id"],
+                run_id=row["run_id"],
+                event=row["event"],
+                payload=data,
+                created_at=row["created_at"],
+                previous_hash=previous,
+            )
+            checked += 1
+            if expected != evidence.get("hash"):
+                invalid.append(int(row["id"]))
+        anchored = checked == 0 or first_previous is None or str(first_previous) in all_hashes
+        return {
+            "valid": not invalid,
+            "anchored": anchored,
+            "checked": checked,
+            "invalid_ids": invalid,
+            "algorithm": "sha256",
+        }
 
     def _pending_expired(self, created_at: str) -> bool:
         try:

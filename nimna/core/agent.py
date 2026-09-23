@@ -38,8 +38,12 @@ def _get_swarm_components():
         return None, None
 
 from ..config import Settings
+from ..evidence import EvidenceJournal
+from ..governance import PolicyDecision, PolicyEngine
 from ..memory.store import MemoryStore
+from ..models import BudgetExceededError, CostGuard, GovernedModelProvider, ModelRegistry
 from ..providers.base import Message, ModelProvider, ProviderError, ToolCall
+from ..provenance.manifest import build_manifest
 from ..skills.manager import SkillManager
 from ..tools.base import Tool, ToolContext, ToolRegistry, ToolValidationError, serialize_result
 from .approval import ApprovalPolicy, AutoApprove, DeferToClient
@@ -74,7 +78,18 @@ class Agent:
                  memory: MemoryStore, settings: Settings,
                  approval_policy: Optional[ApprovalPolicy] = None, *,
                  workspace: Optional[Any] = None, use_llm_planner: bool = True):
-        self.provider = provider
+        # Put the budget gate at the provider boundary so planner, verifier,
+        # normal turns, and swarm calls share one policy.  The wrapper forwards
+        # provider-specific attributes (for example MockProvider.calls).
+        provider_info = provider.describe()
+        self.model_registry = ModelRegistry.for_settings(settings, provider_info)
+        if isinstance(provider, GovernedModelProvider):
+            self.provider = provider
+            self.cost_guard = provider.guard
+        else:
+            self.cost_guard = CostGuard.from_settings(settings, provider_info)
+            self.provider = GovernedModelProvider(provider, self.cost_guard)
+        self.policy = PolicyEngine()
         self.skills = skills
         self.tools = tools
         self.memory = memory
@@ -83,8 +98,15 @@ class Agent:
         self.approval_policy: ApprovalPolicy = approval_policy or (
             AutoApprove() if settings.auto_approve else DeferToClient()
         )
-        self.selector = SkillSelector(provider, skills, max_skills=settings.max_skills,
+        self.selector = SkillSelector(self.provider, skills, max_skills=settings.max_skills,
                                       use_llm=use_llm_planner)
+        self.evidence = EvidenceJournal(memory)
+        self.runtime_manifest = build_manifest(
+            settings=settings,
+            provider=self.provider.describe(),
+            skills=skills.list(),
+            tools=tools.all(),
+        )
 
     # ------------------------------------------------------------------
     # public API
@@ -120,7 +142,8 @@ class Agent:
         session_id = session_id or uuid.uuid4().hex[:12]
         self.memory.ensure_session(session_id)
         state = RunState(session_id=session_id, user_message=user_message, started_at=time.perf_counter())
-        self._audit(state, "run_started", {"message": user_message[:500], "mode": "swarm"})
+        self._audit(state, "run_started", {"message": user_message[:500], "mode": "swarm",
+                                             "runtime_fingerprint": self.runtime_manifest.get("sha256")})
         self.memory.add_message(session_id, "user", user_message, {"run_id": state.run_id, "mode": "swarm"})
         try:
             PlannerSwarm, _ = _get_swarm_components()
@@ -153,6 +176,8 @@ class Agent:
             # persist synthesis
             self._audit(state, "swarm_finished", {"tasks": swarm_out.get("tasks"), "elapsed_ms": swarm_out.get("elapsed_ms"), "all_ok": swarm_out.get("all_ok")})
             return self._finish(state)
+        except BudgetExceededError as exc:
+            return self._fail(state, f"cost guard blocked the run: {exc}")
         except ProviderError as exc:
             return self._fail(state, f"model provider error: {exc}")
         except Exception as exc:
@@ -172,11 +197,14 @@ class Agent:
         session_id = session_id or uuid.uuid4().hex[:12]
         self.memory.ensure_session(session_id)
         state = RunState(session_id=session_id, user_message=user_message, started_at=time.perf_counter())
-        self._audit(state, "run_started", {"message": user_message[:500]})
+        self._audit(state, "run_started", {"message": user_message[:500],
+                                             "runtime_fingerprint": self.runtime_manifest.get("sha256")})
         self.memory.add_message(session_id, "user", user_message, {"run_id": state.run_id})
         try:
             self._prepare(state)
             return self._drive(state)
+        except BudgetExceededError as exc:
+            return self._fail(state, f"cost guard blocked the run: {exc}")
         except ProviderError as exc:
             return self._fail(state, f"model provider error: {exc}")
         except Exception as exc:  # pragma: no cover - last resort
@@ -205,6 +233,8 @@ class Agent:
                 return self._suspend(state)
             state.status = RunStatus.RUNNING
             return self._drive(state)
+        except BudgetExceededError as exc:
+            return self._fail(state, f"cost guard blocked the run: {exc}")
         except ProviderError as exc:
             return self._fail(state, f"model provider error: {exc}")
 
@@ -337,7 +367,8 @@ class Agent:
             state.step += 1
             state.add_usage(response.usage)
             self._audit(state, "model_call", {"step": state.step, "tool_calls": [c.name for c in response.tool_calls],
-                                              "usage": response.usage, "text_preview": response.text[:200]})
+                                              "usage": response.usage, "cost_guard": self.cost_guard.status(),
+                                              "text_preview": response.text[:200]})
             # repetition guard on plain text answers
             if not response.tool_calls:
                 text_norm = response.text.strip()
@@ -462,11 +493,30 @@ class Agent:
                 state.consecutive_failures += 1
                 continue
             risk = tool.effective_risk(params, ctx)
-            # permanent approval is scoped to tool + skill set + versions (review §2)
+            # A restricted skill raises even read-only tools to the approval
+            # tier; the skill boundary must not be a documentation-only label.
+            if risk == "safe" and any(
+                self.skills.get(skill_name).meta.risk_level == "restricted"
+                for skill_name in state.loaded_skills
+            ):
+                risk = "confirm"
+            # Governance is checked after scope/validation but before any side
+            # effect.  The legacy approval policy remains the user-facing gate.
             approval_key = self._approval_key(tool.name, state)
             legacy_approved = tool.name in state.approved_tools
             scoped_approved = approval_key in state.approved_tools
-            if risk == "confirm" and not scoped_approved and not legacy_approved and not self.settings.auto_approve:
+            policy_result = self.policy.evaluate(
+                tool_name=tool.name,
+                declared_risk=risk,
+                allowed_tools=state.allowed_tools,
+                explicit_consent=(scoped_approved or legacy_approved or self.settings.auto_approve),
+                contains_secret=("secret" in tool.tags),
+            )
+            if policy_result.decision is PolicyDecision.DENY:
+                self._record_tool_error(state, call, f"policy denied '{tool.name}': {policy_result.reason}")
+                state.consecutive_failures += 1
+                continue
+            if policy_result.decision is PolicyDecision.APPROVAL_REQUIRED and not scoped_approved and not legacy_approved and not self.settings.auto_approve:
                 decision = self.approval_policy.decide(state, tool, call)
                 self._audit(state, "approval_requested", {"tool": tool.name, "arguments": call.arguments,
                                                           "decision": decision.value, "approval_key": approval_key})
@@ -489,7 +539,7 @@ class Agent:
                     if tool.name not in state.approved_tools:
                         state.approved_tools.append(tool.name)
             # approved or safe – run it
-            self._run_tool(state, tool, call, ctx, approved=(risk == "confirm") or None)
+            self._run_tool(state, tool, call, ctx, approved=(risk != "safe") or None)
             # update counters
             state.tool_call_count += 1
             last_record = state.tool_calls[-1] if state.tool_calls else None
@@ -772,8 +822,10 @@ class Agent:
                 "run_id": state.run_id, "skills": state.loaded_skills,
                 "tools": [c.name for c in state.tool_calls],
             })
+        elapsed_ms = int(max(0.0, time.perf_counter() - state.started_at) * 1000) if state.started_at else 0
         self._audit(state, "run_finished", {"status": state.status.value, "steps": state.step,
-                                            "skills": state.loaded_skills, "usage": state.usage})
+                                            "skills": state.loaded_skills, "usage": state.usage,
+                                            "elapsed_ms": elapsed_ms})
         return AgentResult.from_state(state)
 
     def _fail(self, state: RunState, message: str) -> AgentResult:
@@ -785,6 +837,6 @@ class Agent:
 
     def _audit(self, state: RunState, event: str, payload: Optional[dict[str, Any]] = None) -> None:
         try:
-            self.memory.log(state.session_id, state.run_id, event, payload)
+            self.evidence.record(state.session_id, state.run_id, event, payload)
         except Exception:  # pragma: no cover - never let logging break a run
             log.exception("audit log failed")

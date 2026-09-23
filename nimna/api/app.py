@@ -29,6 +29,9 @@ from ..config import Settings
 from ..core.agent import Agent
 from ..core.approval import DeferToClient
 from ..core.state import AgentResult
+from ..evidence import EvidenceJournal
+from ..models import ModelRegistry
+from ..observability import summarize_events
 
 log = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).parent / "static"
@@ -53,6 +56,8 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
     app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
     app.state.agent = agent
     app.state.settings = settings
+    app.state.evidence = EvidenceJournal(agent.memory)
+    app.state.models = getattr(agent, "model_registry", ModelRegistry.for_settings(settings, agent.provider.describe()))
 
     # -- UI --------------------------------------------------------------
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)
@@ -125,9 +130,74 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
                 "max_runtime_seconds": settings.max_runtime_seconds,
                 "max_response_tokens": settings.max_response_tokens,
             },
+            "governance": {
+                "cost": agent.cost_guard.status(),
+                "policy": "scope -> validation -> policy -> approval -> execution",
+                "sandbox": settings.sandbox_backend,
+            },
+            "provenance": {"runtime_fingerprint": agent.runtime_manifest.get("sha256")},
+            "browser_use": {
+                "enabled": bool(getattr(settings, "browser_use_enabled", False)),
+                "v4": True,
+                "max_spend_usd": float(getattr(settings, "browser_use_max_spend_usd", 0.0)),
+            },
             "port": int(__import__("os").getenv("PORT", "8000")),
             "infra": {"redis_url": bool(settings.redis_url), "vision_cache_ttl": settings.vision_cache_ttl, "qdrant_url": bool(settings.qdrant_url)},
         }
+
+    @app.get("/api/models")
+    def models() -> dict[str, Any]:
+        """Expose the active model profile and the hard budget state."""
+        return {
+            "models": app.state.models.describe(),
+            "active": agent.provider.describe(),
+            "budget": agent.cost_guard.status(),
+        }
+
+    @app.get("/api/capabilities")
+    def capabilities() -> dict[str, Any]:
+        """Machine-readable capability claims; verification stays evidence-backed."""
+        browser_enabled = bool(getattr(settings, "browser_use_enabled", False))
+        browser_configured = bool(getattr(settings, "browser_use_api_key", None)) and float(getattr(settings, "browser_use_max_spend_usd", 0.0)) > 0
+        browser_status = "configured" if browser_enabled and browser_configured else ("blocked" if browser_enabled else "available_opt_in")
+        return {
+            "capabilities": {
+                "mission_runtime": {"status": "implemented", "evidence": ["nimna/core/agent.py"]},
+                "skill_scoping": {"status": "implemented", "evidence": ["nimna/skills", "nimna/core/agent.py"]},
+                "tool_governance": {"status": "implemented", "evidence": ["nimna/governance/policy.py", "nimna/core/approval.py"]},
+                "sqlite_source_of_truth": {"status": "implemented", "evidence": ["nimna/memory/store.py"]},
+                "evidence_hash_chain": {"status": "implemented", "evidence": ["nimna/provenance/hashchain.py", "nimna/memory/store.py"]},
+                "model_registry": {"status": "implemented", "evidence": ["nimna/models/registry.py"]},
+                "browser_use_cloud_v4": {
+                    "status": browser_status,
+                    "evidence": ["nimna/browser/cloud_v4.py", "docs/browser_use_v4.md"],
+                },
+                "host_sandbox": {"status": "partial", "evidence": ["nimna/tools/sandbox.py", "SECURITY.md"]},
+            },
+            "status_vocabulary": ["implemented", "configured", "available_opt_in", "partial", "planned", "blocked", "unknown"],
+        }
+
+    @app.get("/api/provenance")
+    def provenance() -> dict[str, Any]:
+        return agent.runtime_manifest
+
+    @app.get("/api/browser-use/status")
+    def browser_use_status() -> dict[str, Any]:
+        return {
+            "enabled": bool(getattr(settings, "browser_use_enabled", False)),
+            "configured": bool(getattr(settings, "browser_use_api_key", None)) and float(getattr(settings, "browser_use_max_spend_usd", 0.0)) > 0,
+            "api_version": "v4",
+            "base_url": getattr(settings, "browser_use_base_url", "https://api.browser-use.com"),
+            "max_spend_usd": float(getattr(settings, "browser_use_max_spend_usd", 0.0)),
+            "lifecycle": "owned browsers must be stopped in finally",
+        }
+
+    @app.get("/api/runs/{run_id}/evidence")
+    def run_evidence(run_id: str, limit: int = 1000) -> dict[str, Any]:
+        evidence = app.state.evidence.for_run(run_id, limit=min(max(limit, 1), 2000))
+        events = evidence["events"]
+        evidence["metrics"] = summarize_events(run_id, events).to_dict()
+        return evidence
 
     @app.get("/api/swarm/status")
     def swarm_status() -> dict[str, Any]:
