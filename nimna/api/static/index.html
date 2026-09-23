@@ -2,389 +2,193 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="color-scheme" content="dark light">
-<title>Nimna — مساعد المهارات القابلة لإعادة الاستخدام</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Nimna • Advanced Computer Use</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-<script>
-tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Inter','Noto Sans Arabic','system-ui','sans-serif'],mono:['JetBrains Mono','monospace']},colors:{zinc:{950:'#0a0a0b',900:'#141416',850:'#1a1a1e',800:'#232326',700:'#2e2e32',600:'#3a3a3e',500:'#5a5a5e'},violet:{500:'#7c3aed',600:'#6d28d9'},accent:{500:'#00d492',600:'#00bc7d'}},animation:{'pulse-slow':'pulse 2.5s cubic-bezier(0.4,0,0.6,1) infinite','shimmer':'shimmer 1.8s linear infinite','in':'fadeIn .35s ease'}}}}
-</script>
+<script>tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Inter','IBM Plex Sans Arabic','sans-serif'],mono:['JetBrains Mono','monospace']}}}}</script>
 <style>
-*{font-variant-ligatures:common-ligatures}
-html{scrollbar-width:thin;scrollbar-color:#3a3a3e transparent}
-::-webkit-scrollbar{width:6px;height:6px}
-::-webkit-scrollbar-thumb{background:#3a3a3e;border-radius:999px}
-::-webkit-scrollbar-track{background:transparent}
-:root{--bg:#0a0a0b;--panel:#141416;--panel2:#1a1a1e;--border:#232326;--border2:#2e2e32;--text:#fafafa;--muted:#9f9fa9;--accent:#00d492;--violet:#7c3aed}
-.light{--bg:#fcfcfc;--panel:#ffffff;--panel2:#f4f4f5;--border:#e4e4e7;--border2:#d4d4d8;--text:#0a0a0b;--muted:#71717a}
-body{background:var(--bg);color:var(--text)}
-*::selection{background:rgba(124,58,237,.2)}
-.shimmer{background:linear-gradient(90deg, transparent, rgba(255,255,255,.06), transparent);background-size:200% 100%;animation:shimmer 1.8s infinite}
-@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
-@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-.glass{backdrop-filter:blur(16px) saturate(180%);-webkit-backdrop-filter:blur(16px) saturate(180%)}
+:root{--bg:#080a0f;--panel:#0f1219;--panel2:#151924;--panel3:#1c2333;--border:#1e2636;--border2:#263148;--text:#e6eaf2;--muted:#8b95a8;--accent:#7c3aed;--neon:#00ffa3;--neon2:#00d4ff;--amber:#f59e0b}
+*{scrollbar-width:thin;scrollbar-color:#263148 transparent}
+::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-thumb{background:#263148;border-radius:999px}
+body{background:var(--bg);color:var(--text);font-family:'Inter','IBM Plex Sans Arabic',sans-serif}
 .mono{font-family:'JetBrains Mono',monospace}
-.grid-dots{background-image:radial-gradient(circle at 1px 1px, rgba(255,255,255,.06) 1px, transparent 0);background-size:20px 20px}
-.range{accent-color:var(--accent)}
-pre{scrollbar-width:thin}
-code{font-family:'JetBrains Mono',monospace}
-.prose{line-height:1.75}
-.prose h1{font-size:1.5rem;font-weight:700;margin:1.2em 0 .4em}
-.prose h2{font-size:1.25rem;font-weight:700;margin:1em 0 .4em}
-.prose h3{font-size:1.05rem;font-weight:600;margin:.8em 0 .3em}
-.prose p{margin:.5em 0}
-.prose ul{list-style:disc;padding-inline-start:1.4em;margin:.5em 0}
-.prose ol{list-style:decimal;padding-inline-start:1.4em}
-.prose blockquote{border-inline-start:3px solid var(--border2);padding-inline-start:12px;color:var(--muted);margin:.8em 0}
-.prose a{color:#7c3aed;text-decoration:underline;text-underline-offset:3px}
-.prose table{width:100%;border-collapse:collapse;font-size:.92em;margin:.8em 0;overflow:hidden;border-radius:10px;border:1px solid var(--border)}
-.prose th{text-align:start;background:var(--panel2);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--border)}
-.prose td{padding:7px 10px;border-bottom:1px solid var(--border)}
-.prose code:not(pre code){background:var(--panel2);border:1px solid var(--border);padding:2px 6px;border-radius:6px;font-size:.88em}
-.prose pre{background:#0a0a0b;border:1px solid #232326;border-radius:12px;padding:14px;overflow:auto}
-.light .prose pre{background:#0a0a0b;color:#fafafa}
-.dot-red{position:absolute;width:16px;height:16px;background:#ff3b30;border:2px solid #fff;border-radius:999px;transform:translate(-50%,-50%);box-shadow:0 0 0 8px rgba(255,59,48,.18),0 4px 12px rgba(0,0,0,.4);animation:dotPulse 1.4s infinite}
-@keyframes dotPulse{0%{box-shadow:0 0 0 8px rgba(255,59,48,.18)}50%{box-shadow:0 0 0 14px rgba(255,59,48,.08)}100%{box-shadow:0 0 0 8px rgba(255,59,48,.18)}}
-.thinking-line{height:2px;background:linear-gradient(90deg, #7c3aed, #00d492, #7c3aed);background-size:200% 100%;animation:shimmer 1.2s linear infinite}
+.glass{backdrop-filter:blur(16px) saturate(160%);-webkit-backdrop-filter:blur(16px) saturate(160%)}
+.neon-box{position:absolute;border:1.5px solid var(--neon);border-radius:8px;box-shadow:0 0 0 1px rgba(0,255,163,.2),0 0 18px rgba(0,255,163,.45),inset 0 0 12px rgba(0,255,163,.12);animation:neonPulse 1.6s infinite;background:linear-gradient(180deg,rgba(0,255,163,.08),transparent)}
+.neon-box::before{content:attr(data-label);position:absolute;top:-22px;inset-inline-start:0;background:var(--neon);color:#00110a;font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;letter-spacing:.02em;white-space:nowrap;box-shadow:0 2px 8px rgba(0,255,163,.4)}
+.neon-box.alt{border-color:var(--neon2);box-shadow:0 0 0 1px rgba(0,212,255,.2),0 0 18px rgba(0,212,255,.45),inset 0 0 12px rgba(0,212,255,.12)}
+.neon-box.alt::before{background:var(--neon2);color:#001018}
+@keyframes neonPulse{0%,100%{box-shadow:0 0 0 1px rgba(0,255,163,.2),0 0 18px rgba(0,255,163,.45),inset 0 0 12px rgba(0,255,163,.12)}50%{box-shadow:0 0 0 1px rgba(0,255,163,.3),0 0 28px rgba(0,255,163,.6),inset 0 0 16px rgba(0,255,163,.18)}}
+.ai-cursor{position:absolute;width:20px;height:20px;pointer-events:none;z-index:30;transform:translate(-2px,-2px);transition:left .42s cubic-bezier(.22,1,.36,1),top .42s cubic-bezier(.22,1,.36,1);filter:drop-shadow(0 2px 8px rgba(0,0,0,.6))}
+.ai-cursor::before{content:'';position:absolute;left:0;top:0;width:0;height:0;border-left:12px solid #fff;border-top:12px solid #fff;border-right:6px solid transparent;border-bottom:6px solid transparent;transform:rotate(-8deg);box-shadow:0 1px 0 rgba(0,0,0,.4)}
+.ai-cursor::after{content:'';position:absolute;left:9px;top:9px;width:7px;height:7px;background:var(--neon);border:1.5px solid #fff;border-radius:50%;box-shadow:0 0 10px var(--neon)}
+.ai-cursor.clicking{animation:cursorClick .28s}
+@keyframes cursorClick{0%{transform:translate(-2px,-2px) scale(1)}50%{transform:translate(-2px,-2px) scale(.82)}100%{transform:translate(-2px,-2px) scale(1)}}
+.click-ripple{position:absolute;width:36px;height:36px;border:2px solid #fff;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;animation:ripple .7s ease-out forwards;box-shadow:0 0 0 6px rgba(255,255,255,.12)}
+@keyframes ripple{0%{transform:translate(-50%,-50%) scale(.4);opacity:1}100%{transform:translate(-50%,-50%) scale(1.8);opacity:0}}
+.timeline-track{height:2px;background:linear-gradient(90deg,var(--neon),var(--neon2));background-size:200% 100%;animation:shimmer 1.4s linear infinite}
+@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+.prose{line-height:1.7}
+.prose a{color:#a78bfa;text-decoration:underline}
+.prose code:not(pre code){background:#1c2333;border:1px solid #263148;padding:1px 6px;border-radius:6px;font-size:.88em}
+.prose pre{background:#05070a;border:1px solid #1e2636;border-radius:12px;padding:14px;overflow:auto}
 </style>
 </head>
-<body class="min-h-screen flex flex-col antialiased selection:bg-violet-500/20">
+<body class="h-screen flex flex-col overflow-hidden">
 <!-- Top Bar -->
-<header class="h-[56px] shrink-0 sticky top-0 z-40 border-b flex items-center gap-3 px-3 md:px-4 glass" style="background:rgba(20,20,22,.78);border-color:var(--border)">
-  <div class="flex items-center gap-3 min-w-0">
-    <button id="toggleLeft" class="lg:hidden size-9 grid place-items-center rounded-xl hover:bg-white/10 border border-transparent hover:border-white/10 transition">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
-    </button>
-    <div class="flex items-center gap-3">
-      <div class="size-9 rounded-xl grid place-items-center text-white font-bold text-[13px] shadow-lg" style="background:linear-gradient(135deg,#7c3aed,#00d492)">N</div>
-      <div class="leading-tight hidden sm:block">
-        <div class="font-semibold tracking-tight text-[14px] flex items-baseline gap-1.5">Nimna <span class="text-[11px] font-medium px-1.5 py-0.5 rounded-full border" style="background:rgba(124,58,237,.12);border-color:rgba(124,58,237,.22);color:#a78bfa">v0.1.0-rc1</span></div>
-        <div class="text-[11px]" style="color:var(--muted)">محصّن وفق نطاق الاختبارات الحالية • Reusable-skills agent</div>
-      </div>
-    </div>
-    <div class="hidden md:flex items-center gap-2 ms-4">
-      <div class="h-6 w-px" style="background:var(--border)"></div>
-      <div class="flex items-center gap-2 text-[12px] px-2.5 py-1.5 rounded-full border" style="background:var(--panel);border-color:var(--border)">
-        <span class="size-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,.6)] animate-pulse"></span>
-        <span id="providerLabel" class="font-medium">mock • gemini-2.5-flash</span>
-        <span class="opacity-40">•</span>
-        <span id="modelLabel" style="color:var(--muted)">auto</span>
-      </div>
-      <span id="limitsPill" class="hidden md:inline-flex text-[11px] px-2.5 py-1 rounded-full border" style="background:var(--panel2);border-color:var(--border);color:var(--muted)"></span>
+<header class="h-[52px] shrink-0 flex items-center gap-3 px-3 border-b glass sticky top-0 z-40" style="background:rgba(8,10,15,.82);border-color:var(--border)">
+  <div class="flex items-center gap-3">
+    <div class="size-8 rounded-lg grid place-items-center font-bold text-white text-[13px]" style="background:linear-gradient(135deg,#7c3aed,#00ffa3)">N</div>
+    <div class="hidden md:block leading-tight">
+      <div class="font-semibold text-[13px] flex items-center gap-1.5">Nimna <span class="text-[10px] px-1.5 py-0.5 rounded-full border" style="background:rgba(124,58,237,.14);border-color:rgba(124,58,237,.3);color:#c4b5fd">manus-beating • v0.1</span></div>
+      <div class="text-[11px]" style="color:var(--muted)">Advanced Computer Use • Live Bounding Boxes</div>
     </div>
   </div>
+  <div class="hidden lg:flex items-center gap-2 ms-6 text-[11px]">
+    <span class="size-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,.7)]"></span>
+    <span id="providerLbl" class="font-medium">mock</span><span style="color:var(--muted)" id="modelLbl">gemini-2.5-flash</span>
+    <span class="h-4 w-px" style="background:var(--border)"></span>
+    <span id="limitsLbl" class="mono" style="color:var(--muted)"></span>
+  </div>
   <div class="flex-1"></div>
-  <div class="flex items-center gap-1.5">
-    <div class="hidden sm:flex items-center gap-1 p-1 rounded-full border" style="background:var(--panel);border-color:var(--border)">
-      <button id="themeBtn" class="size-7 grid place-items-center rounded-full hover:bg-white/10 transition" title="تبديل المظهر">☾</button>
-      <div class="w-px h-5" style="background:var(--border)"></div>
-      <button id="cmdBtn" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium hover:bg-white/10 transition" style="color:var(--muted)"><span class="hidden md:inline">الأوامر</span> <span class="mono bg-white/10 border border-white/10 rounded px-1 py-0.5 text-[10px]">⌘K</span></button>
-    </div>
-    <div id="wsBadge" class="flex items-center gap-2 px-2.5 py-1.5 rounded-full border text-[12px] font-medium transition" style="background:var(--panel);border-color:var(--border)">
-      <span id="wsDot" class="size-2 rounded-full bg-zinc-500"></span>
-      <span id="wsText">HTTP</span>
-      <span class="hidden sm:inline text-[11px] opacity-60">Live</span>
-    </div>
-    <button id="newSessionBtn" class="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-[#7c3aed] hover:bg-[#6d28d9] text-white text-[13px] font-semibold shadow-[0_4px_16px_rgba(124,58,237,.3)] transition">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> جلسة جديدة
-    </button>
-    <button id="toggleRight" class="size-9 grid place-items-center rounded-xl border hover:bg-white/10 transition lg:hidden" style="border-color:var(--border)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg></button>
+  <div class="flex items-center gap-2">
+    <div id="wsBadge" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-medium" style="background:var(--panel);border-color:var(--border)"><span id="wsDot" class="size-2 rounded-full bg-zinc-500"></span><span id="wsTxt">HTTP</span></div>
+    <button id="cmdBtn" class="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border text-[11px] hover:bg-white/5" style="border-color:var(--border);color:var(--muted)">⌘K <span class="mono bg-white/10 px-1 rounded">palette</span></button>
+    <button id="newBtn" class="px-3.5 py-1.5 rounded-full bg-[#7c3aed] hover:bg-[#6d28d9] text-white text-[12px] font-semibold hidden sm:flex">＋ جلسة جديدة</button>
   </div>
 </header>
 
-<!-- App Grid -->
-<div id="app" class="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[300px_1fr_420px] xl:grid-cols-[320px_1fr_440px]">
-  <!-- Left -->
-  <aside id="leftPanel" class="hidden lg:flex flex-col border-e min-h-0 overflow-hidden" style="background:var(--panel);border-color:var(--border)">
-    <!-- composer quick -->
-    <div class="p-3 border-b shrink-0" style="border-color:var(--border)">
-      <button id="quickNew" class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl border text-[13px] font-medium hover:bg-white/[0.04] transition" style="border-color:var(--border);background:var(--panel2)">
-        <span class="size-7 rounded-full grid place-items-center bg-[#7c3aed] text-white shrink-0">✦</span>
-        <span class="flex-1 text-start">ماذا تريد أن تنجز اليوم؟</span>
-        <span class="mono text-[10px] px-1.5 py-1 rounded border hidden xl:inline" style="background:var(--panel);border-color:var(--border);color:var(--muted)">↵</span>
-      </button>
-      <div class="mt-2.5 flex gap-1.5 overflow-auto scrollbar-none">
-        <button class="prompt-chip shrink-0 px-2.5 py-1.5 rounded-full border text-[11px] font-medium hover:border-violet-500/30 hover:bg-violet-500/10 transition" data-prompt="حلّل sales.csv وأنشئ تقريرًا بصريًا جديدًا بدون الكتابة فوق الأصلي">📊 حلّل المبيعات</button>
-        <button class="prompt-chip shrink-0 px-2.5 py-1.5 rounded-full border text-[11px] font-medium hover:border-emerald-500/30 hover:bg-emerald-500/10 transition" data-prompt="افتح المتصفح في الكمبيوتر المعزول وابحث عن حالة الطقس">🖥️ افتح المتصفح</button>
-        <button class="prompt-chip shrink-0 px-2.5 py-1.5 rounded-full border text-[11px] font-medium hover:border-zinc-500/30 hover:bg-white/5 transition" data-prompt="اعرض لي الأوامر المتاحة والمهارات المثبتة">🧩 المهارات</button>
-      </div>
-    </div>
-    <div class="flex-1 overflow-auto p-3 space-y-5 scrollbar-thin">
-      <!-- Sessions -->
-      <div>
-        <div class="flex items-center justify-between mb-2">
-          <h2 class="text-[11px] font-semibold tracking-widest uppercase" style="color:var(--muted)">الجلسات</h2>
-          <button id="refreshSessions" class="size-6 grid place-items-center rounded-full hover:bg-white/10 text-[12px]" style="color:var(--muted)">↻</button>
-        </div>
-        <div id="sessionsList" class="space-y-1"></div>
-      </div>
-      <!-- Skills -->
-      <div>
-        <div class="flex items-center gap-2 mb-2">
-          <h2 class="text-[11px] font-semibold tracking-widest uppercase flex-1" style="color:var(--muted)">المهارات المثبتة</h2>
-          <span id="skillCount" class="mono text-[10px] px-1.5 py-0.5 rounded-full border" style="background:var(--panel2);border-color:var(--border);color:var(--muted)">—</span>
-        </div>
+<div class="flex-1 min-h-0 flex">
+  <!-- Sidebar -->
+  <aside class="w-[240px] shrink-0 hidden lg:flex flex-col border-e" style="background:var(--panel);border-color:var(--border)">
+    <nav class="p-2 space-y-1 text-[12.5px]">
+      <a data-nav="tasks" class="nav-link flex items-center gap-2.5 px-2.5 py-2 rounded-xl bg-white text-zinc-900 font-medium"><span>◎</span> المهام <span class="ms-auto mono text-[10px] bg-zinc-900 text-white px-1.5 py-0.5 rounded-full" id="tasksCount">0</span></a>
+      <a data-nav="memory" class="nav-link flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-white/5" style="color:var(--muted)"><span>◈</span> الذاكرة</a>
+      <a data-nav="projects" class="nav-link flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-white/5" style="color:var(--muted)"><span>▦</span> المشاريع</a>
+      <a data-nav="files" class="nav-link flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-white/5" style="color:var(--muted)"><span>⧉</span> الملفات <span class="ms-auto text-[10px]">workspace</span></a>
+      <a data-nav="settings" class="nav-link flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-white/5" style="color:var(--muted)"><span>⚙</span> الإعدادات</a>
+    </nav>
+    <div class="mx-2 h-px" style="background:var(--border)"></div>
+    <div class="flex-1 overflow-auto p-3 space-y-4">
+      <div id="sideContent">
+        <div class="text-[11px] font-semibold tracking-widest uppercase mb-2" style="color:var(--muted)">المهارات • <span id="skillCnt">—</span></div>
         <div id="skillsList" class="space-y-2"></div>
+        <div class="mt-4 text-[11px] font-semibold tracking-widest uppercase mb-2" style="color:var(--muted)">الأدوات • <span id="toolCnt">—</span></div>
+        <div id="toolsList" class="flex flex-wrap gap-1"></div>
       </div>
-      <!-- Tools -->
-      <div>
-        <h2 class="text-[11px] font-semibold tracking-widest uppercase mb-2" style="color:var(--muted)">الأدوات • <span id="toolCount" class="mono">—</span></h2>
-        <div id="toolsCloud" class="flex flex-wrap gap-1.5"></div>
-      </div>
-      <!-- Thought stream mini -->
-      <div>
-        <h2 class="text-[11px] font-semibold tracking-widest uppercase mb-2" style="color:var(--muted)">سجل التفكير الحي</h2>
-        <div id="thoughtLog" class="space-y-2">
-          <div class="rounded-xl border border-dashed p-3 text-center text-[11px] leading-relaxed" style="border-color:var(--border);color:var(--muted);background:var(--panel2)">سيظهر تسلسل التفكير والتنفيذ هنا لحظة بلحظة<br><span class="opacity-60">Visual Thought Process</span></div>
-        </div>
-      </div>
-      <div class="rounded-xl border p-3 text-[11px] leading-relaxed" style="border-color:rgba(245,158,11,.22);background:rgba(245,158,11,.07);color:var(--muted)">
-        <b style="color:#f59e0b">🛡️ محصّن وفق نطاق الاختبارات</b><br>الاختبارات ≠ أمان مطلق. النواة مشتركة مع المضيف — حافظ على تحديث النظام و Docker، وفعّل seccomp/AppArmor، ولا تستخدم <code class="mono text-[10px]">--profile local-sandbox</code> في الإنتاج.
-      </div>
+      <div class="rounded-xl border p-3 text-[11px] leading-relaxed" style="background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.2);color:var(--muted)"><b style="color:#f59e0b">🛡️ محصّن وفق الاختبارات</b><br>فصل `computer_control` عن `code_execution` — موافقة منفصلة لكل طبقة.</div>
     </div>
-    <div class="p-3 border-t text-[11px] flex items-center justify-between" style="border-color:var(--border);color:var(--muted)">
-      <span>© Nimna</span><span class="mono">⌘K للأوامر</span>
-    </div>
+    <div class="p-3 border-t flex items-center gap-2 text-[11px]" style="border-color:var(--border);color:var(--muted)"><div class="size-7 rounded-full bg-zinc-700 grid place-items-center text-white">S</div><div class="leading-tight"><div style="color:var(--text)" class="font-medium">Studio</div><div>محلي • subprocess</div></div><span class="ms-auto mono">⌘K</span></div>
   </aside>
 
-  <!-- Center -->
-  <main class="flex flex-col min-h-0 min-w-0 relative" style="background:var(--bg)">
-    <!-- Center header tabs -->
-    <div class="h-[44px] shrink-0 flex items-center gap-2 px-3 border-b overflow-auto" style="border-color:var(--border);background:rgba(20,20,22,.6)">
-      <div class="flex items-center gap-1.5 text-[12px]">
-        <span class="size-2 rounded-full bg-emerald-500 animate-pulse"></span>
-        <span class="font-medium">المحادثة</span>
-        <span id="sessionLabel" class="mono text-[11px] px-1.5 py-0.5 rounded border hidden sm:inline" style="background:var(--panel2);border-color:var(--border);color:var(--muted)">بدون جلسة</span>
+  <!-- Chat Column -->
+  <section class="w-[380px] xl:w-[420px] shrink-0 hidden md:flex flex-col border-e min-h-0" style="background:var(--bg);border-color:var(--border)">
+    <div class="h-[40px] shrink-0 flex items-center gap-2 px-3 border-b text-[11px] font-semibold tracking-widest uppercase" style="border-color:var(--border);color:var(--muted)"><span class="size-1.5 rounded-full bg-emerald-500 animate-pulse"></span> AI Chat Box • Chain of Thought<span id="sessLbl" class="ms-auto mono normal-case tracking-normal" style="color:var(--muted)">—</span></div>
+    <div id="chatLog" class="flex-1 overflow-auto p-3 space-y-3">
+      <div id="emptyChat" class="rounded-2xl border p-4" style="background:var(--panel);border-color:var(--border)">
+        <div class="text-[13px] font-semibold">مرحباً — أنا Nimna</div>
+        <div class="text-[11px] mt-1 leading-relaxed" style="color:var(--muted)">أكتب مهمتك. سأفكر بصوت عالٍ (Chain of Thought) وأنفذ خطوة بخطوة مع تحديد بصري حيّ يتفوق على Manus.</div>
+        <div class="grid grid-cols-2 gap-2 mt-3">
+          <button class="promptBtn text-start rounded-xl border p-2.5 text-[11px] leading-relaxed hover:border-violet-500/30 hover:bg-violet-500/10" style="border-color:var(--border);background:var(--panel2)" data-prompt="افتح المتصفح في الكمبيوتر المعزول والتقط صورة ثم حدد Firefox">🖥️ افتح المتصفح + حدد</button>
+          <button class="promptBtn text-start rounded-xl border p-2.5 text-[11px] leading-relaxed hover:border-emerald-500/30 hover:bg-emerald-500/10" style="border-color:var(--border);background:var(--panel2)" data-prompt="حلّل sales.csv وأنشئ تقريراً جديداً مع رسم">📊 حلّل المبيعات</button>
+        </div>
       </div>
+      <div id="messages" class="space-y-3"></div>
+    </div>
+    <div id="thoughtBox" class="mx-3 mb-2 rounded-xl border overflow-hidden hidden" style="border-color:var(--border);background:var(--panel)">
+      <div class="h-7 flex items-center gap-2 px-2.5 text-[11px] font-semibold" style="background:var(--panel2);border-bottom:1px solid var(--border)"><span class="size-1.5 rounded-full bg-violet-500 animate-pulse"></span> Chain of Thought — يفكر الآن<div class="ms-auto mono text-[10px]" style="color:var(--muted)" id="thoughtStep">—</div></div>
+      <div id="thoughtLog" class="max-h-[160px] overflow-auto p-2 space-y-1.5 text-[11px] leading-relaxed" style="color:var(--muted)"></div>
+      <div class="timeline-track"></div>
+    </div>
+    <div class="p-3 border-t" style="border-color:var(--border);background:var(--panel)">
+      <div class="rounded-2xl border flex flex-col overflow-hidden" style="background:var(--panel2);border-color:var(--border)">
+        <textarea id="chatInput" rows="1" placeholder="وجّه الأمر — / للأوامر السريعة" class="bg-transparent outline-none text-[13px] p-3 min-h-[44px] max-h-[120px] resize-none placeholder:text-zinc-500"></textarea>
+        <div class="flex items-center gap-2 px-2 pb-2">
+          <span class="mono text-[10px] px-1.5 py-1 rounded border" style="background:var(--panel);border-color:var(--border);color:var(--muted)">↵ إرسال • ⇧↵ سطر</span>
+          <div class="flex-1"></div>
+          <span id="charCnt" class="mono text-[10px]" style="color:var(--muted)">0</span>
+          <button id="sendBtn" class="size-8 rounded-full bg-white text-zinc-900 grid place-items-center hover:bg-zinc-100">▸</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Advanced Computer Use Display -->
+  <main class="flex-1 min-w-0 flex flex-col min-h-0" style="background:var(--bg)">
+    <!-- Computer header -->
+    <div class="h-[40px] shrink-0 flex items-center gap-2 px-3 border-b" style="border-color:var(--border);background:var(--panel)">
+      <div class="flex items-center gap-1.5 text-[11px] font-semibold"><span class="size-2 rounded-full bg-emerald-500 animate-pulse"></span> Advanced Computer Use <span class="hidden sm:inline font-normal" style="color:var(--muted)">— Live Bounding Boxes • Neon</span></div>
       <div class="flex-1"></div>
-      <div class="flex items-center gap-1">
-        <button class="px-2.5 py-1.5 rounded-full border text-[11px] font-medium hover:bg-white/5" style="border-color:var(--border);color:var(--muted)" id="copyTranscript">نسخ</button>
-        <button class="px-2.5 py-1.5 rounded-full border text-[11px] font-medium hover:bg-white/5" style="border-color:var(--border);color:var(--muted)" id="clearChat">مسح</button>
-      </div>
+      <span class="hidden md:flex items-center gap-1.5 mono text-[10px] px-2 py-1 rounded-full border" style="background:var(--panel2);border-color:var(--border);color:var(--muted)"><span class="size-1.5 rounded-full bg-emerald-500"></span> Mirror View • 1280×800</span>
+      <button id="btnScreenshot" class="px-2.5 py-1 rounded-full bg-white text-zinc-900 text-[11px] font-semibold">📸 لقطة</button>
+      <button id="btnGrid" class="px-2.5 py-1 rounded-full border text-[11px] hover:bg-white/5" style="border-color:var(--border)">شبكة</button>
+      <button id="btnFullscreen" class="size-7 grid place-items-center rounded-full border hover:bg-white/5" style="border-color:var(--border)">⛶</button>
     </div>
 
-    <!-- Log -->
-    <div id="log" class="flex-1 overflow-auto scroll-smooth">
-      <!-- Empty state -->
-      <div id="emptyState" class="max-w-[760px] mx-auto px-4 md:px-6 py-8 md:py-10">
-        <div class="rounded-[20px] border p-5 md:p-7" style="background:linear-gradient(180deg, rgba(124,58,237,.08), transparent), var(--panel);border-color:var(--border)">
-          <div class="flex flex-wrap gap-2 mb-4 text-[11px]">
-            <span class="px-2 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-600">✓ خالٍ من docker.sock افتراضيًا</span>
-            <span class="px-2 py-1 rounded-full bg-violet-500/10 border border-violet-500/20 text-violet-600">✓ موافقة بصرية</span>
-            <span class="px-2 py-1 rounded-full border" style="background:var(--panel2);border-color:var(--border);color:var(--muted)">✓ قناة رؤية Vision Gateway</span>
-          </div>
-          <h1 class="text-[22px] md:text-[28px] font-bold tracking-tight leading-tight">مرحباً — أنا <span class="bg-gradient-to-l from-violet-600 to-emerald-500 bg-clip-text text-transparent">Nimna</span>، وكيل المهارات القابلة لإعادة الاستخدام.</h1>
-          <p class="text-[13px] md:text-[14px] mt-2 leading-relaxed" style="color:var(--muted)">أكتب مهمتك بلغتك. سأختار المهارة المناسبة، أحمّل تعليماتها كاملة، وأعمل خطوة بخطوة مع موافقتك البصرية على كل إجراء حساس. جرّب أحد القوالب:</p>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-5">
-            <button class="group text-start rounded-2xl border p-4 hover:border-violet-500/30 hover:bg-violet-500/[0.06] transition text-[13px] leading-relaxed" style="border-color:var(--border);background:var(--panel2)" data-prompt="حلّل ملف sales.csv الموجود في workspace وأنشئ تقريرًا جديدًا باسم sales-report-2025.md بدون الكتابة فوق أي ملف موجود، مع جدول ملخص ورسم بياني">
-              <div class="flex items-center gap-2 font-semibold"><span class="size-8 rounded-xl grid place-items-center bg-violet-600 text-white">▦</span> تحليل المبيعات <span class="ms-auto text-[10px] px-1.5 py-0.5 rounded-full border opacity-60 group-hover:opacity-100" style="border-color:var(--border)">CSV</span></div>
-              <div style="color:var(--muted)" class="mt-1">يقرأ sales.csv → يحسب الإحصائيات → يرسم chart.png → يكتب تقريراً جديداً</div>
-              <div class="mt-2 text-[11px] font-medium text-violet-600">جرّب الآن →</div>
-            </button>
-            <button class="group text-start rounded-2xl border p-4 hover:border-emerald-500/30 hover:bg-emerald-500/[0.06] transition text-[13px] leading-relaxed" style="border-color:var(--border);background:var(--panel2)" data-prompt="افتح المتصفح في الكمبيوتر المعزول والتقط صورة للشاشة ثم حدد إحداثيات Firefox بدقة">
-              <div class="flex items-center gap-2 font-semibold"><span class="size-8 rounded-xl grid place-items-center bg-emerald-600 text-white">◉</span> تحكم بالكمبيوتر <span class="ms-auto text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-600">restricted</span></div>
-              <div style="color:var(--muted)" class="mt-1">لاحظ → خطط → نفّذ عبر VNC مع شبكة إحداثيات ونقطة حمراء للموافقة</div>
-              <div class="mt-2 text-[11px] font-medium text-emerald-600">تشغيل Mirror View →</div>
-            </button>
-            <button class="group text-start rounded-2xl border p-4 hover:border-zinc-500/30 hover:bg-white/[0.03] transition text-[13px] leading-relaxed" style="border-color:var(--border);background:var(--panel2)" data-prompt="ابحث في الويب عن أفضل ممارسات تأمين وكلاء الذكاء الاصطناعي ثم لخصها في تقرير">
-              <div class="flex items-center gap-2 font-semibold"><span class="size-8 rounded-xl grid place-items-center bg-zinc-800 text-white">⦿</span> بحث ويب آمن</div>
-              <div style="color:var(--muted)" class="mt-1">بحث DuckDuckGo + تنظيف نص + حماية rebinding وفحص داخلي</div>
-              <div class="mt-2 text-[11px]" style="color:var(--muted)">مع مصادر موثقة →</div>
-            </button>
-            <button class="group text-start rounded-2xl border p-4 hover:border-zinc-500/30 hover:bg-white/[0.03] transition text-[13px] leading-relaxed" style="border-color:var(--border);background:var(--panel2)" data-prompt="أنشئ مهارة جديدة باسم travel_planner لحجز الرحلات">
-              <div class="flex items-center gap-2 font-semibold"><span class="size-8 rounded-xl grid place-items-center bg-zinc-800 text-white">✎</span> إنشاء مهارة</div>
-              <div style="color:var(--muted)" class="mt-1">يولّد SKILL.md مع أدوات مصرحة وتعليمات قابلة للتطوير</div>
-              <div class="mt-2 text-[11px]" style="color:var(--muted)">Progressive disclosure →</div>
-            </button>
-          </div>
-          <div class="mt-6 flex flex-wrap gap-2 text-[11px]" style="color:var(--muted)">
-            <span>اختصارات:</span>
-            <span class="mono px-1.5 py-0.5 rounded border" style="background:var(--panel2);border-color:var(--border)">⌘K</span><span>لوحة الأوامر</span>
-            <span class="mono px-1.5 py-0.5 rounded border" style="background:var(--panel2);border-color:var(--border)">/</span><span>أوامر سريعة</span>
-            <span class="mono px-1.5 py-0.5 rounded border" style="background:var(--panel2);border-color:var(--border)">⇧Enter</span><span>سطر جديد</span>
+    <!-- Central viewport -->
+    <div id="viewport" class="flex-1 min-h-0 relative overflow-hidden flex flex-col" style="background:#05070a">
+      <!-- Stage -->
+      <div id="stage" class="flex-1 relative overflow-hidden grid place-items-center p-4 md:p-6">
+        <div id="screenWrap" class="relative w-full max-w-[960px] aspect-[1280/800] rounded-2xl overflow-hidden border shadow-[0_20px_60px_rgba(0,0,0,.6)]" style="background:#000;border-color:var(--border2)">
+          <!-- macOS chrome -->
+          <div class="h-7 flex items-center gap-1.5 px-3 border-b shrink-0" style="background:#0f1219;border-color:var(--border)"><span class="size-2.5 rounded-full bg-[#ff5f57]"></span><span class="size-2.5 rounded-full bg-[#febc2e]"></span><span class="size-2.5 rounded-full bg-[#28c840]"></span><span class="flex-1 mx-3 mono text-[10px] px-2 py-1 rounded-full border text-center truncate" style="background:var(--panel2);border-color:var(--border);color:var(--muted)" id="screenUrl">isolated desktop — دورو Ubuntu LXDE • VNC</span><span class="mono text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">LIVE</span></div>
+          <div id="canvasArea" class="relative flex-1 overflow-hidden bg-black" style="height:calc(100% - 28px)">
+            <img id="screenImg" class="w-full h-full object-contain hidden" alt="desktop">
+            <div id="screenPlaceholder" class="absolute inset-0 grid place-items-center p-8 text-center">
+              <div class="max-w-[420px]">
+                <div class="size-16 mx-auto rounded-2xl grid place-items-center text-[28px] border" style="background:var(--panel);border-color:var(--border)">🖥️</div>
+                <div class="font-semibold mt-3">بث حي — في انتظار أول لقطة</div>
+                <div class="text-[11px] mt-1 leading-relaxed" style="color:var(--muted)">سيظهر هنا سطح المكتب المعزول مع <span style="color:var(--neon)">صناديق نيون</span> حول العناصر التي يراها الذكاء الاصطناعي، مع مؤشر AI مخصص.</div>
+                <button id="activateBtn" class="mt-3 px-4 py-1.5 rounded-full bg-[#7c3aed] text-white text-[12px] font-medium">التقط أول لقطة</button>
+              </div>
+            </div>
+            <!-- Neon bounding boxes layer -->
+            <div id="bboxLayer" class="absolute inset-0 pointer-events-none"></div>
+            <!-- AI Cursor -->
+            <div id="aiCursor" class="ai-cursor hidden" style="left:50%;top:50%"></div>
+            <div id="rippleLayer" class="absolute inset-0 pointer-events-none"></div>
           </div>
         </div>
-        <div class="mt-4 grid grid-cols-3 gap-3 text-center text-[11px]" style="color:var(--muted)">
-          <div class="rounded-2xl border p-3" style="background:var(--panel);border-color:var(--border)"><div class="text-[18px]">⚡</div><b style="color:var(--text)">Live Pulse</b><br>نبض حي لكل خطوة</div>
-          <div class="rounded-2xl border p-3" style="background:var(--panel);border-color:var(--border)"><div class="text-[18px]">🔍</div><b style="color:var(--text)">Mirror View</b><br>ترى ما يراه الوكيل</div>
-          <div class="rounded-2xl border p-3" style="background:var(--panel);border-color:var(--border)"><div class="text-[18px]">🧠</div><b style="color:var(--text)">Thought cards</b><br>تفكير قابل للطي</div>
+        <!-- Zoom hint -->
+        <div class="absolute bottom-3 end-3 mono text-[10px] px-2 py-1 rounded-full border flex items-center gap-1.5" style="background:rgba(0,0,0,.6);border-color:rgba(255,255,255,.12);color:#fff"><span>◉</span> AI Cursor • Neon Boxes</div>
+      </div>
+
+      <!-- Action Timeline Overlay -->
+      <div id="timeline" class="shrink-0 border-t" style="background:rgba(15,18,25,.92);border-color:var(--border);backdrop-filter:blur(12px)">
+        <div class="h-7 flex items-center gap-2 px-3 text-[11px] font-semibold tracking-widest uppercase" style="color:var(--muted)"><span class="size-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Action Timeline — سجل الإجراءات الزمني<div class="ms-auto flex items-center gap-1.5"><span id="timelineStatus" class="mono normal-case tracking-normal font-normal" style="color:var(--muted)">خامل</span><button id="clearTimeline" class="px-2 py-0.5 rounded-full border text-[10px] hover:bg-white/5" style="border-color:var(--border)">مسح</button></div></div>
+        <div id="timelineTrack" class="timeline-track hidden"></div>
+        <div id="timelineList" class="flex gap-2 p-2 overflow-auto scrollbar-thin">
+          <div class="shrink-0 rounded-xl border border-dashed px-3 py-2 text-[11px] text-center min-w-[180px]" style="border-color:var(--border);color:var(--muted);background:var(--panel2)">لا إجراءات بعد — سيظهر هنا: "يتم النقر على زر الإرسال"...</div>
         </div>
       </div>
-      <div id="messages" class="max-w-[780px] mx-auto px-3 md:px-6 py-4 space-y-4"></div>
-    </div>
 
-    <!-- Status bar -->
-    <div id="statusBar" class="hidden mx-3 mb-2 rounded-2xl border px-3 py-2.5 items-center gap-3" style="background:var(--panel);border-color:var(--border)">
-      <span class="size-2.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_rgba(16,185,129,.6)]"></span>
-      <div class="text-[13px] leading-none">
-        <div id="statusTitle" class="font-medium">يفكر…</div>
-        <div id="statusSub" class="text-[11px] mt-0.5" style="color:var(--muted)">يختار المهارة المناسبة</div>
-      </div>
-      <span id="statusTool" class="hidden ms-2 mono text-[11px] px-2 py-1 rounded-full border" style="background:var(--panel2);border-color:var(--border)"></span>
-      <div class="flex-1"></div>
-      <span id="statusMeta" class="mono text-[11px]" style="color:var(--muted)"></span>
-    </div>
-
-    <!-- Composer -->
-    <div class="p-3 md:p-4 border-t shrink-0" style="border-color:var(--border);background:var(--panel)">
-      <div class="max-w-[780px] mx-auto">
-        <div id="slashMenu" class="hidden mb-2 rounded-2xl border overflow-hidden shadow-xl" style="background:var(--panel);border-color:var(--border)">
-          <div class="px-3 py-2 text-[11px] font-semibold tracking-widest uppercase" style="color:var(--muted)">أوامر سريعة</div>
-          <button class="slash-item w-full text-start px-3 py-2.5 hover:bg-white/5 flex items-center gap-3 text-[13px]" data-insert="/screenshot التقط صورة"><span class="size-7 rounded-lg grid place-items-center border" style="background:var(--panel2);border-color:var(--border)">📸</span><span><b>/screenshot</b> <span style="color:var(--muted)">— التقط صورة</span></span></button>
-          <button class="slash-item w-full text-start px-3 py-2.5 hover:bg-white/5 flex items-center gap-3 text-[13px]" data-insert="/locate Firefox حدد عنصر"><span class="size-7 rounded-lg grid place-items-center border" style="background:var(--panel2);border-color:var(--border)">🎯</span><span><b>/locate</b> <span style="color:var(--muted)">— حدد إحداثيات عنصر</span></span></button>
-          <button class="slash-item w-full text-start px-3 py-2.5 hover:bg-white/5 flex items-center gap-3 text-[13px]" data-insert="/analyze حلّل sales.csv"><span class="size-7 rounded-lg grid place-items-center border" style="background:var(--panel2);border-color:var(--border)">📊</span><span><b>/analyze</b> <span style="color:var(--muted)">— تحليل CSV</span></span></button>
-          <button class="slash-item w-full text-start px-3 py-2.5 hover:bg-white/5 flex items-center gap-3 text-[13px]" data-insert="/computer افتح المتصفح"><span class="size-7 rounded-lg grid place-items-center border" style="background:var(--panel2);border-color:var(--border)">🖥️</span><span><b>/computer</b> <span style="color:var(--muted)">— تحكم بالكمبيوتر</span></span></button>
-        </div>
-        <div class="rounded-[20px] border shadow-[0_8px_32px_rgba(0,0,0,.18)] flex flex-col overflow-hidden" style="background:var(--panel2);border-color:var(--border)">
-          <div class="flex items-end gap-2 p-2">
-            <button id="attachBtn" class="size-9 shrink-0 grid place-items-center rounded-full border hover:bg-white/5 transition" style="border-color:var(--border);color:var(--muted)" title="إرفاق">📎</button>
-            <textarea id="input" rows="1" placeholder="اسأل Nimna — جرّب: حلّل sales.csv أو افتح المتصفح…  ( / للأوامر )" class="flex-1 min-h-[44px] max-h-[140px] resize-none bg-transparent outline-none text-[14px] leading-6 py-2.5 placeholder:text-zinc-500"></textarea>
-            <button id="sendBtn" class="shrink-0 size-9 md:w-auto md:px-5 md:h-9 rounded-full bg-[#7c3aed] hover:bg-[#6d28d9] text-white grid place-items-center md:flex items-center gap-1.5 font-semibold text-[13px] shadow-[0_4px_16px_rgba(124,58,237,.3)] disabled:opacity-50 disabled:cursor-not-allowed transition">
-              <span class="hidden md:inline">إرسال</span><span>▸</span>
-            </button>
-          </div>
-          <div class="flex items-center gap-2 px-3 pb-2.5 text-[11px] flex-wrap" style="color:var(--muted)">
-            <span class="hidden md:inline-flex items-center gap-1"><span class="size-1.5 rounded-full bg-emerald-500"></span> Vision Gateway جاهز</span>
-            <span class="hidden md:inline opacity-30">•</span>
-            <span class="mono hidden md:inline">⇧+Enter سطر جديد</span>
-            <span class="ms-auto flex items-center gap-1"> <span id="charCount" class="mono">0</span> حرف</span>
-            <span class="opacity-30">•</span>
-            <span id="sessionHint" class="mono">بدون جلسة</span>
-          </div>
-        </div>
-        <div class="mt-2 flex items-center justify-center gap-2 text-[11px]" style="color:var(--muted)">
-          <span>يعمل عبر</span><span class="px-1.5 py-0.5 rounded border mono" style="background:var(--panel);border-color:var(--border)">Gemini • NVIDIA • Mock</span><span>— الملفات في workspace</span>
-        </div>
+      <!-- Terminal Logs Drawer -->
+      <div id="terminal" class="shrink-0 border-t flex flex-col" style="background:#04060a;border-color:var(--border);max-height:180px">
+        <div class="h-7 shrink-0 flex items-center gap-2 px-3 text-[11px] font-medium border-b" style="border-color:var(--border);background:#080a0f"><span class="mono bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 px-1.5 py-0.5 rounded text-[10px]">CLI</span> Terminal Logs — سجل الأوامر والاستخراج (Scraping)<span class="ms-auto flex items-center gap-1"><span class="size-1.5 rounded-full bg-emerald-500 animate-pulse"></span><span class="mono" style="color:var(--muted)">شفافية كاملة</span><button id="toggleTerminal" class="ms-2 size-6 grid place-items-center rounded-full hover:bg-white/10">−</button></span></div>
+        <div id="terminalBody" class="flex-1 overflow-auto p-3 mono text-[11px] leading-relaxed whitespace-pre-wrap" style="color:#9ef0c8">$ nimna ready — في انتظار أوامر shell_execute / python...</div>
       </div>
     </div>
   </main>
-
-  <!-- Right -->
-  <aside id="rightPanel" class="hidden lg:flex flex-col border-s min-h-0 overflow-hidden" style="background:var(--panel);border-color:var(--border)">
-    <!-- Tabs -->
-    <div class="h-[44px] shrink-0 flex items-center gap-1 p-1 border-b" style="border-color:var(--border);background:var(--panel2)">
-      <button data-tab="mirror" class="tab-btn flex-1 h-8 rounded-full text-[12px] font-semibold bg-white text-zinc-900 shadow">🖥️ المعاينة</button>
-      <button data-tab="files" class="tab-btn flex-1 h-8 rounded-full text-[12px] font-medium hover:bg-white/5" style="color:var(--muted)">📁 الملفات</button>
-      <button data-tab="artifacts" class="tab-btn flex-1 h-8 rounded-full text-[12px] font-medium hover:bg-white/5" style="color:var(--muted)">📊 النتائج</button>
-      <button data-tab="audit" class="tab-btn flex-1 h-8 rounded-full text-[12px] font-medium hover:bg-white/5" style="color:var(--muted)">🧾 السجل</button>
-    </div>
-
-    <!-- Mirror -->
-    <div id="tab-mirror" class="flex-1 overflow-auto p-3 space-y-3">
-      <div class="rounded-2xl border overflow-hidden shadow-sm" style="border-color:var(--border);background:var(--panel2)">
-        <div class="h-9 flex items-center gap-2 px-3 border-b" style="border-color:var(--border);background:var(--panel)">
-          <div class="flex items-center gap-1.5">
-            <span class="size-3 rounded-full bg-[#ff5f57] border border-black/10"></span>
-            <span class="size-3 rounded-full bg-[#febc2e] border border-black/10"></span>
-            <span class="size-3 rounded-full bg-[#28c840] border border-black/10"></span>
-          </div>
-          <div class="flex-1 mx-2 flex items-center gap-2 mono text-[11px] px-2.5 py-1 rounded-full border" style="background:var(--panel2);border-color:var(--border);color:var(--muted)">
-            <span>◉</span><span id="mirrorUrl" class="truncate">http://localhost:6901 • noVNC</span><span id="mirrorLive" class="ms-auto flex items-center gap-1 text-emerald-600"><span class="size-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Mirror</span>
-          </div>
-          <button id="mirrorFullscreen" class="size-7 grid place-items-center rounded-full hover:bg-white/10" style="color:var(--muted)" title="ملء الشاشة">⛶</button>
-        </div>
-        <div id="mirrorWrap" class="relative bg-black overflow-hidden" style="aspect-ratio:1280/800;max-height:260px">
-          <img id="mirrorImg" alt="desktop" class="w-full h-full object-contain hidden">
-          <iframe id="mirrorFrame" class="w-full h-full border-0 hidden" src="about:blank" title="noVNC"></iframe>
-          <div id="mirrorPlaceholder" class="absolute inset-0 grid place-items-center p-6 text-center">
-            <div>
-              <div class="size-14 mx-auto rounded-2xl grid place-items-center text-[26px] border shadow-sm" style="background:var(--panel);border-color:var(--border)">🖥️</div>
-              <div class="mt-3 font-semibold text-[13px]">لا توجد لقطة بعد</div>
-              <div class="text-[11px] mt-1 leading-relaxed" style="color:var(--muted)">سيظهر هنا ما يراه الوكيل لحظة بلحظة.<br>جرّب <code class="mono px-1 py-0.5 rounded border text-[10px]" style="background:var(--panel2);border-color:var(--border)">take_screenshot</code> أو فعّل الحاوية.</div>
-              <button id="enableComputer" class="mt-3 px-3 py-1.5 rounded-full bg-[#7c3aed] text-white text-[12px] font-medium">تفعيل وضع الكمبيوتر</button>
-            </div>
-          </div>
-          <div id="mirrorOverlay" class="absolute inset-0 pointer-events-none"></div>
-          <!-- grid toggle -->
-          <div class="absolute bottom-2 inset-x-2 flex items-center gap-2">
-            <span class="mono text-[10px] px-2 py-1 rounded-full border backdrop-blur" style="background:rgba(0,0,0,.55);border-color:rgba(255,255,255,.12);color:#fff">1280×800</span>
-            <span id="mirrorCoords" class="mono text-[10px] px-2 py-1 rounded-full border backdrop-blur hidden" style="background:rgba(0,0,0,.55);border-color:rgba(255,255,255,.12);color:#fff"></span>
-            <div class="flex-1"></div>
-            <button id="toggleGrid" class="mono text-[10px] px-2 py-1 rounded-full border backdrop-blur hover:bg-white/10" style="background:rgba(0,0,0,.55);border-color:rgba(255,255,255,.12);color:#fff">شبكة</button>
-          </div>
-        </div>
-        <div class="p-2 flex gap-2">
-          <button id="btnScreenshot" class="flex-1 py-2 rounded-full bg-white text-zinc-900 text-[12px] font-semibold hover:bg-zinc-100 transition">📸 لقطة</button>
-          <button id="btnOpenVNC" class="flex-1 py-2 rounded-full border text-[12px] font-medium hover:bg-white/5 transition" style="border-color:var(--border)">🌐 فتح noVNC</button>
-          <button id="btnClearDot" class="px-3 py-2 rounded-full border text-[12px] hover:bg-white/5" style="border-color:var(--border)">إخفاء النقطة</button>
-        </div>
-      </div>
-      <div class="rounded-2xl border p-3 text-[11px] leading-relaxed" style="border-color:var(--border);background:var(--panel2);color:var(--muted)">
-        <b style="color:var(--text)">كيف تعمل الموافقة البصرية؟</b><br>عندما يريد الوكيل النقر أو الكتابة، ستظهر <span class="inline-flex items-center gap-1"><span class="size-2 rounded-full bg-[#ff3b30] border border-white"></span> نقطة حمراء</span> على الإحداثيات مع زر <b>موافقة/رفض</b> — راجع المكان ثم وافق.
-      </div>
-      <div id="computerHint" class="hidden rounded-2xl border p-3 text-[11px] leading-relaxed" style="border-color:rgba(245,158,11,.22);background:rgba(245,158,11,.08);color:var(--muted)">
-        <b style="color:#d97706">🟡 وضع المحاكاة</b><br>شغّل الحاوية للحصول على سطح مكتب حقيقي:<br><code class="mono block mt-1 p-2 rounded-lg border text-[11px]" style="background:var(--panel);border-color:var(--border)">docker compose --profile computer up -d desktop</code>
-      </div>
-    </div>
-
-    <div id="tab-files" class="hidden flex-1 overflow-auto p-3 space-y-3">
-      <div class="rounded-2xl border overflow-hidden" style="border-color:var(--border);background:var(--panel2)">
-        <div class="h-9 flex items-center gap-2 px-3 border-b text-[12px] font-semibold" style="border-color:var(--border);background:var(--panel)"><span>📁</span> workspace <span id="explorerPath" class="mono text-[11px] font-normal ms-auto" style="color:var(--muted)">/</span><button id="explorerRefresh" class="size-7 grid place-items-center rounded-full hover:bg-white/5" style="color:var(--muted)">↻</button></div>
-        <div id="explorerList" class="max-h-[320px] overflow-auto divide-y" style="border-color:var(--border)"></div>
-        <div class="p-2 flex gap-2 border-t" style="border-color:var(--border)">
-          <button id="newFileBtn" class="flex-1 py-1.5 rounded-full border text-[11px] font-medium hover:bg-white/5" style="border-color:var(--border)">＋ ملف</button>
-          <button id="uploadBtn" class="flex-1 py-1.5 rounded-full bg-white text-zinc-900 text-[11px] font-semibold">رفع</button>
-        </div>
-      </div>
-      <div id="filePreview" class="hidden rounded-2xl border overflow-hidden" style="border-color:var(--border);background:var(--panel)">
-        <div class="h-8 flex items-center gap-2 px-3 border-b text-[11px] font-mono" style="border-color:var(--border);background:var(--panel2)"><span id="previewName" class="truncate">preview</span><button id="closePreview" class="ms-auto size-6 grid place-items-center rounded-full hover:bg-white/10">✕</button></div>
-        <div id="previewBody" class="max-h-[320px] overflow-auto p-3 text-[12px] mono leading-relaxed"></div>
-      </div>
-    </div>
-
-    <div id="tab-artifacts" class="hidden flex-1 overflow-auto p-3 space-y-3">
-      <div id="richOutputs" class="space-y-3">
-        <div class="rounded-2xl border border-dashed p-6 text-center" style="border-color:var(--border);color:var(--muted)">
-          <div class="text-[22px]">📊</div><div class="text-[12px] mt-1 font-medium" style="color:var(--text)">لا نتائج غنية بعد</div><div class="text-[11px] mt-1">ستظهر الجداول والرسوم والتقارير هنا مع معاينة حية</div>
-        </div>
-      </div>
-      <div class="rounded-2xl border p-3" style="border-color:var(--border);background:var(--panel2)">
-        <div class="text-[11px] font-semibold tracking-widest uppercase mb-2" style="color:var(--muted)">الرسوم</div>
-        <canvas id="artChart" height="160"></canvas>
-      </div>
-    </div>
-
-    <div id="tab-audit" class="hidden flex-1 overflow-auto p-3">
-      <div id="auditList" class="space-y-2 text-[11px]"></div>
-    </div>
-  </aside>
 </div>
 
-<!-- Approval Sheet -->
+<!-- Approval Sheet (visual) -->
 <div id="approvalSheet" class="hidden fixed inset-0 z-50">
-  <div id="approvalBackdrop" class="absolute inset-0 bg-black/60 backdrop-blur-sm"></div>
-  <div class="absolute inset-x-0 bottom-0 md:inset-0 md:grid md:place-items-center p-3 md:p-6 pointer-events-none">
-    <div class="pointer-events-auto w-full max-w-[720px] rounded-[20px] border shadow-[0_20px_60px_rgba(0,0,0,.4)] overflow-hidden animate-[fadeIn_.25s_ease]" style="background:var(--panel);border-color:var(--border)">
-      <div class="h-1 w-full" style="background:linear-gradient(90deg,#f59e0b,#ff3b30)"></div>
-      <div class="p-4 md:p-5">
-        <div class="flex items-start gap-3">
-          <div class="size-10 rounded-2xl grid place-items-center text-[18px] shrink-0" style="background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.22)">⚠️</div>
-          <div class="flex-1 min-w-0">
-            <div class="font-bold text-[14px]">الوكيل يطلب موافقتك</div>
-            <div class="text-[12px] mt-0.5" style="color:var(--muted)"><span id="approvalSkill" class="font-medium" style="color:var(--text)"></span> • <span id="approvalTool" class="mono px-1.5 py-0.5 rounded border text-[11px]" style="background:var(--panel2);border-color:var(--border)"></span></div>
-          </div>
-          <button id="closeApproval" class="size-8 grid place-items-center rounded-full hover:bg-white/10" style="color:var(--muted)">✕</button>
-        </div>
-        <div id="approvalImpact" class="mt-3 rounded-2xl border p-3 text-[12px] leading-relaxed" style="background:var(--panel2);border-color:var(--border)"></div>
-        <div class="mt-3 grid md:grid-cols-[1.1fr_.9fr] gap-3">
-          <pre id="approvalArgs" class="rounded-xl border p-3 overflow-auto max-h-[180px] mono text-[11px] leading-relaxed" style="background:#0a0a0b;color:#e5e7eb;border-color:var(--border)"></pre>
-          <div class="rounded-xl border overflow-hidden" style="border-color:var(--border);background:var(--panel2)">
-            <div class="h-7 flex items-center px-2.5 text-[11px] font-medium border-b" style="border-color:var(--border);background:var(--panel)">معاينة بصرية</div>
-            <div id="approvalPreview" class="relative aspect-[16/10] bg-black grid place-items-center overflow-hidden">
-              <span class="text-[11px]" style="color:var(--muted)">بدون معاينة</span>
-            </div>
-          </div>
-        </div>
-        <div class="mt-4 flex flex-wrap gap-2">
-          <button id="approveBtn" class="flex-1 md:flex-none px-6 py-2.5 rounded-full bg-[#7c3aed] hover:bg-[#6d28d9] text-white text-[13px] font-semibold shadow-[0_8px_20px_rgba(124,58,237,.3)]">موافقة</button>
-          <button id="alwaysBtn" class="px-5 py-2.5 rounded-full border text-[13px] font-medium hover:bg-white/5" style="border-color:var(--border)">موافقة دائمة</button>
-          <button id="denyBtn" class="px-5 py-2.5 rounded-full bg-[#ff3b30] hover:bg-[#e5342a] text-white text-[13px] font-semibold">رفض</button>
-          <span class="ms-auto hidden md:inline-flex items-center gap-1 mono text-[11px] px-2 py-1 rounded-full border" style="background:var(--panel2);border-color:var(--border);color:var(--muted)">↵ Enter للموافقة • Esc للرفض</span>
+  <div id="approvalBg" class="absolute inset-0 bg-black/60 backdrop-blur"></div>
+  <div class="absolute inset-0 grid place-items-center p-4">
+    <div class="w-full max-w-[640px] rounded-2xl border overflow-hidden shadow-[0_20px_60px_rgba(0,0,0,.6)]" style="background:var(--panel);border-color:var(--border)">
+      <div class="h-1" style="background:linear-gradient(90deg,#f59e0b,#ff3b30)"></div>
+      <div class="p-4">
+        <div class="font-bold text-[13px]">الوكيل يطلب موافقتك</div>
+        <div class="text-[11px]" style="color:var(--muted)"><span id="apprTool" class="mono px-1.5 py-0.5 rounded border" style="background:var(--panel2);border-color:var(--border)">—</span> <span id="apprSkill"></span></div>
+        <div id="apprImpact" class="mt-3 rounded-xl border p-3 text-[12px] leading-relaxed" style="background:var(--panel2);border-color:var(--border)"></div>
+        <pre id="apprArgs" class="mt-3 rounded-xl border p-3 mono text-[11px] overflow-auto max-h-[140px]" style="background:#05070a;border-color:var(--border);color:#cbd5e1"></pre>
+        <div class="mt-3 flex gap-2">
+          <button id="apprOk" class="flex-1 py-2 rounded-full bg-[#7c3aed] text-white text-[12px] font-semibold">موافقة</button>
+          <button id="apprAlways" class="px-4 py-2 rounded-full border text-[12px]" style="border-color:var(--border)">دائمة</button>
+          <button id="apprNo" class="px-4 py-2 rounded-full bg-[#ff3b30] text-white text-[12px]">رفض</button>
         </div>
       </div>
     </div>
@@ -392,449 +196,207 @@ code{font-family:'JetBrains Mono',monospace}
 </div>
 
 <!-- Command Palette -->
-<div id="cmdPalette" class="hidden fixed inset-0 z-50">
-  <div id="cmdBackdrop" class="absolute inset-0 bg-black/50 backdrop-blur-sm"></div>
-  <div class="absolute inset-x-0 top-[18vh] mx-auto w-[min(640px,92vw)] rounded-[20px] border shadow-[0_20px_60px_rgba(0,0,0,.4)] overflow-hidden" style="background:var(--panel);border-color:var(--border)">
-    <div class="flex items-center gap-3 px-4 h-12 border-b" style="border-color:var(--border)">
-      <span style="color:var(--muted)">⌘</span>
-      <input id="cmdInput" placeholder="ابحث عن أمر، مهارة، أو اكتب سؤالك…" class="flex-1 bg-transparent outline-none text-[14px] placeholder:text-zinc-500">
-      <span class="mono text-[11px] px-1.5 py-1 rounded border" style="background:var(--panel2);border-color:var(--border);color:var(--muted)">ESC</span>
-    </div>
-    <div id="cmdList" class="max-h-[360px] overflow-auto p-2 space-y-1"></div>
+<div id="cmdPal" class="hidden fixed inset-0 z-50">
+  <div id="cmdBg" class="absolute inset-0 bg-black/50 backdrop-blur"></div>
+  <div class="absolute top-[18vh] inset-x-0 mx-auto w-[min(640px,92vw)] rounded-2xl border overflow-hidden shadow-[0_20px_60px_rgba(0,0,0,.5)]" style="background:var(--panel);border-color:var(--border)">
+    <input id="cmdInput" placeholder="ابحث — Tasks / Memory / Projects / Files ..." class="w-full h-12 px-4 bg-transparent outline-none text-[13px] border-b" style="border-color:var(--border)">
+    <div id="cmdList" class="max-h-[320px] overflow-auto p-2 space-y-1"></div>
   </div>
 </div>
 
-<!-- Mobile drawers backdrop -->
-<div id="drawerBackdrop" class="hidden fixed inset-0 z-30 bg-black/40 backdrop-blur-sm lg:hidden"></div>
-
 <script>
-const $ = s=>document.querySelector(s);
-const $$ = s=>[...document.querySelectorAll(s)];
-let sessionId = localStorage.getItem('nimna.session') || null;
-let ws=null, wsLive=false, pendingApproval=null;
-let latestB64=null;
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+let sessionId=localStorage.getItem('nimna.session')||null, ws=null, pending=null, latestB64=null;
+const escapeHtml=s=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=()=>new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
 
-// helpers
-const escapeHtml = s=> s.replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const fmtTime = ()=> new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
-function toast(msg, type='info'){
-  const el=document.createElement('div');
-  el.className='fixed bottom-4 start-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-full border shadow-xl text-[13px] font-medium flex items-center gap-2';
-  el.style.background='var(--panel)'; el.style.borderColor='var(--border)'; el.style.color='var(--text)';
-  el.innerHTML=`<span class="size-2 rounded-full ${type==='error'?'bg-red-500':type==='success'?'bg-emerald-500':'bg-violet-500'}"></span><span>${escapeHtml(msg)}</span>`;
-  document.body.appendChild(el);
-  setTimeout(()=>{el.style.transition='all .3s';el.style.opacity='0';el.style.transform='translate(-50%,8px)';setTimeout(()=>el.remove(),300)},2600);
+function setWS(on){$('#wsDot').className='size-2 rounded-full '+(on?'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,.6)]':'bg-zinc-500');$('#wsTxt').textContent=on?'Live':'HTTP';}
+function updateSess(){if($('#sessLbl'))$('#sessLbl').textContent=sessionId?sessionId.slice(0,8):'—';}
+function addThought(t,d,c='#8b95a8'){
+  const box=$('#thoughtLog'); if(!box) return;
+  $('#thoughtBox')?.classList.remove('hidden');
+  if($('#thoughtStep')) $('#thoughtStep').textContent=t.slice(0,18);
+  const el=document.createElement('div'); el.className='flex gap-2 p-2 rounded-xl border text-[11px]'; el.style.background='var(--panel2)'; el.style.borderColor='var(--border)';
+  el.innerHTML=`<span class="size-1.5 rounded-full mt-1.5 shrink-0" style="background:${c}"></span><div class="flex-1 min-w-0"><div class="font-medium">${escapeHtml(t)}</div><div style="color:var(--muted)">${escapeHtml(d).slice(0,120)}</div></div><span class="mono text-[10px]" style="color:var(--muted)">${fmt()}</span>`;
+  box.prepend(el); while(box.children.length>8) box.lastChild.remove();
 }
-function setWS(state){
-  wsLive=state;
-  $('#wsDot').className = 'size-2 rounded-full ' + (state?'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,.6)] animate-pulse':'bg-zinc-500');
-  $('#wsText').textContent = state?'Live':'HTTP';
-  $('#wsBadge').style.borderColor = state?'rgba(16,185,129,.3)':'var(--border)';
+function addTimeline(icon, title, subtitle, color='emerald'){
+  const list=$('#timelineList'); if(list.textContent.includes('لا إجراءات')) list.innerHTML='';
+  $('#timelineTrack').classList.remove('hidden'); $('#timelineStatus').textContent='حي — '+title;
+  const col=color==='emerald'?'rgba(0,255,163,.14)':color==='violet'?'rgba(124,58,237,.14)':'rgba(245,158,11,.14)';
+  const border=color==='emerald'?'rgba(0,255,163,.3)':'rgba(124,58,237,.3)';
+  const el=document.createElement('div'); el.className='shrink-0 rounded-xl border px-3 py-2 min-w-[200px] flex gap-2 items-start';
+  el.style.background=col; el.style.borderColor=border;
+  el.innerHTML=`<span class="size-6 rounded-full grid place-items-center shrink-0 text-[12px] bg-white text-zinc-900 font-bold">${icon}</span><div class="flex-1 min-w-0"><div class="text-[11px] font-semibold leading-none">${escapeHtml(title)}</div><div class="text-[10px] mt-1 leading-relaxed" style="color:var(--muted)">${escapeHtml(subtitle).slice(0,90)}</div></div><span class="mono text-[10px]" style="color:var(--muted)">${fmt()}</span>`;
+  list.prepend(el);
 }
-function updateSessionLabel(){
-  $('#sessionLabel').textContent = sessionId? sessionId.slice(0,8):'بدون جلسة';
-  $('#sessionHint').textContent = sessionId? 'جلسة '+sessionId.slice(0,6):'بدون جلسة';
+function addTerminal(cmd, out, err){
+  const body=$('#terminalBody');
+  const line=document.createElement('div'); line.className='border-b pb-2 mb-2'; line.style.borderColor='rgba(255,255,255,.06)';
+  line.innerHTML=`<div class="flex items-center gap-2"><span style="color:#00ffa3">$</span><span class="mono">${escapeHtml(cmd).slice(0,120)}</span><span class="ms-auto mono text-[10px] px-1.5 py-0.5 rounded border" style="border-color:var(--border);color:var(--muted)">${fmt()}</span></div>${out?`<div class="mt-1 mono whitespace-pre-wrap" style="color:#cbd5e1">${escapeHtml(out).slice(0,800)}</div>`:''}${err?`<div class="mono whitespace-pre-wrap" style="color:#fca5a5">${escapeHtml(err).slice(0,400)}</div>`:''}`;
+  body.prepend(line); body.scrollTop=0;
 }
-function showStatus(title, sub, tool){
-  const bar=$('#statusBar'); bar.classList.remove('hidden'); bar.classList.add('flex');
-  $('#statusTitle').textContent=title; $('#statusSub').textContent=sub||''; 
-  const pill=$('#statusTool'); if(tool){pill.textContent=tool; pill.classList.remove('hidden')} else pill.classList.add('hidden');
-  $('#statusMeta').textContent=fmtTime();
+function showBbox(x,y,label,alt=false){
+  const layer=$('#bboxLayer'); layer.innerHTML='';
+  // main neon box 120x36 centered on x,y
+  const box=document.createElement('div'); box.className='neon-box'+(alt?' alt':''); box.dataset.label=label;
+  const left=(x/1280*100), top=(y/800*100);
+  box.style.left=`calc(${left}% - 60px)`; box.style.top=`calc(${top}% - 18px)`; box.style.width='120px'; box.style.height='36px';
+  layer.appendChild(box);
+  // secondary scanning box
+  const scan=document.createElement('div'); scan.className='neon-box alt'; scan.dataset.label='تحليل بصري';
+  scan.style.left='8%'; scan.style.top='12%'; scan.style.width='32%'; scan.style.height='22%'; scan.style.opacity='.6';
+  layer.appendChild(scan);
 }
-function hideStatus(){ $('#statusBar').classList.add('hidden'); }
-function addThought(title, desc, color='var(--border)', active=false){
-  const log=$('#thoughtLog'); if(log.textContent.includes('سيظهر')) log.innerHTML='';
-  const el=document.createElement('div');
-  el.className='flex gap-3 p-2.5 rounded-xl border';
-  el.style.background='var(--panel2)'; el.style.borderColor=color==='var(--accent)'?'rgba(0,212,148,.22)':color==='var(--danger)'?'rgba(239,68,68,.2)':'var(--border)';
-  el.innerHTML=`<span class="size-1.5 rounded-full mt-1.5 shrink-0" style="background:${color}"></span><div class="flex-1 min-w-0"><div class="text-[12px] font-semibold leading-none">${escapeHtml(title)}</div><div class="text-[11px] mt-1 leading-relaxed" style="color:var(--muted)">${escapeHtml(desc).slice(0,160)}</div></div><span class="mono text-[10px] shrink-0" style="color:var(--muted)">${fmtTime()}</span>`;
-  if(active) el.style.boxShadow='0 0 0 1px rgba(0,212,148,.18)';
-  log.prepend(el); while(log.children.length>10) log.lastChild.remove();
+function moveCursor(x,y,click=false){
+  const cur=$('#aiCursor'); cur.classList.remove('hidden');
+  cur.style.left=(x/1280*100)+'%'; cur.style.top=(y/800*100)+'%';
+  if(click){
+    cur.classList.add('clicking'); setTimeout(()=>cur.classList.remove('clicking'),280);
+    const rip=document.createElement('div'); rip.className='click-ripple'; rip.style.left=(x/1280*100)+'%'; rip.style.top=(y/800*100)+'%';
+    $('#rippleLayer').appendChild(rip); setTimeout(()=>rip.remove(),700);
+  }
 }
-function showDot(x,y){
-  const ov=$('#mirrorOverlay'); ov.innerHTML='';
-  const d=document.createElement('div'); d.className='dot-red'; d.style.left=(x/1280*100)+'%'; d.style.top=(y/800*100)+'%'; d.title=`${x},${y}`;
-  ov.appendChild(d);
-  $('#mirrorCoords').textContent=`${x}, ${y}`; $('#mirrorCoords').classList.remove('hidden');
-  $('#mirrorWrap').style.boxShadow='0 0 0 2px rgba(245,158,11,.6)';
-  setTimeout(()=> $('#mirrorWrap').style.boxShadow='',1200);
-}
-function hideDot(){ $('#mirrorOverlay').innerHTML=''; $('#mirrorCoords').classList.add('hidden')}
-function updateMirror(b64){
-  if(!b64) return;
-  latestB64=b64;
-  const img=$('#mirrorImg'), frame=$('#mirrorFrame'), ph=$('#mirrorPlaceholder');
-  img.src='data:image/png;base64,'+b64; img.classList.remove('hidden'); frame.classList.add('hidden'); ph.classList.add('hidden');
-  $('#mirrorLive').innerHTML='<span class="size-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Live';
+function updateScreen(b64){
+  if(!b64) return; latestB64=b64;
+  const img=$('#screenImg'), ph=$('#screenPlaceholder');
+  img.src='data:image/png;base64,'+b64; img.classList.remove('hidden'); ph.classList.add('hidden');
 }
 function renderMarkdown(md){
-  try{
-    marked.setOptions({gfm:true,breaks:true,highlight:(code,lang)=>{
-      try{return `<code class="language-${lang}">${escapeHtml(code)}</code>`}catch(e){return escapeHtml(code)}
-    }});
-    let html=marked.parse(md||'');
-    html=DOMPurify.sanitize(html);
-    // add copy buttons to pre
-    html=html.replace(/<pre><code class="language-(\w+)">/g,'<div class="relative group/code"><button onclick="navigator.clipboard.writeText(this.nextElementSibling.innerText);this.textContent=\'✓ تم النسخ\';setTimeout(()=>this.textContent=\'نسخ\',1200)" class="absolute end-2 top-2 mono text-[10px] px-2 py-1 rounded-full border opacity-0 group-hover/code:opacity-100 transition" style="background:var(--panel);border-color:var(--border)">نسخ</button><pre><code class="language-$1">');
-    html=html.replace(/<\/code><\/pre>/g,'</code></pre></div>');
-    return html;
-  }catch(e){ return `<pre class="mono text-[12px] whitespace-pre-wrap">${escapeHtml(md||'')}</pre>`}
+  try{ marked.setOptions({gfm:true,breaks:true}); let h=marked.parse(md||''); return DOMPurify.sanitize(h);}catch(e){return `<pre class="mono text-[11px] whitespace-pre-wrap">${escapeHtml(md||'')}</pre>`}
 }
-function addMessage(role, text, opts={}){
-  const empty=$('#emptyState'); if(empty) empty.style.display='none';
-  const wrap=document.createElement('div');
+function addMsg(role, text, extra=''){
+  const empty=$('#emptyChat'); if(empty) empty.style.display='none';
+  const wrap=document.createElement('div'); wrap.className='flex gap-2';
   const isUser=role==='user';
-  wrap.className='group/message flex gap-3 max-w-[780px] mx-auto px-3 md:px-6';
-  const avatar=isUser? `<div class="size-8 rounded-full grid place-items-center shrink-0 text-white text-[12px] font-bold" style="background:#2563eb">أنت</div>` : `<div class="size-8 rounded-full grid place-items-center shrink-0 text-white" style="background:linear-gradient(135deg,#7c3aed,#00d492)">✦</div>`;
-  const bubbleClass=isUser? 'bg-[#2563eb] text-white rounded-[18px] rounded-br-[6px]' : 'border rounded-[18px] rounded-bl-[6px]';
-  const bubbleStyle=isUser? '' : 'background:var(--panel);border-color:var(--border)';
-  let html=`
-    ${avatar}
-    <div class="flex-1 min-w-0">
-      <div class="flex items-center gap-2 mb-1">
-        <span class="text-[12px] font-semibold">${isUser?'أنت':'Nimna'}</span>
-        <span class="mono text-[11px]" style="color:var(--muted)">${fmtTime()}</span>
-        ${opts.skill? `<span class="mono text-[10px] px-1.5 py-0.5 rounded-full border" style="background:var(--panel2);border-color:var(--border);color:var(--muted)">${escapeHtml(opts.skill)}</span>`:''}
-        <button class="copy-msg ms-auto opacity-0 group-hover/message:opacity-100 size-7 grid place-items-center rounded-full hover:bg-white/10 text-[11px]" title="نسخ" style="color:var(--muted)">⎘</button>
-      </div>
-      <div class="px-4 py-3 ${bubbleClass} ${isUser?'':'prose'}" style="${bubbleStyle}">${isUser? `<div class="whitespace-pre-wrap text-[14px] leading-7">${escapeHtml(text)}</div>` : renderMarkdown(text)}</div>
-      ${opts.extra? `<div class="mt-2">${opts.extra}</div>`:''}
-      ${opts.image? `<img src="${opts.image}" alt="screenshot" class="mt-3 rounded-xl border max-w-full cursor-zoom-in" style="border-color:var(--border)" onclick="window.open(this.src,'_blank')">`:''}
-    </div>`;
-  wrap.innerHTML=html;
-  wrap.querySelector('.copy-msg')?.addEventListener('click',()=>{navigator.clipboard.writeText(text); toast('تم نسخ الرسالة','success')});
-  $('#messages').appendChild(wrap);
-  $('#log').scrollTop=$('#log').scrollHeight;
-  return wrap;
-}
-function renderTimeline(calls){
-  if(!calls||!calls.length) return '';
-  return `<div class="rounded-2xl border overflow-hidden" style="border-color:var(--border);background:var(--panel)">
-    <div class="h-8 flex items-center gap-2 px-3 border-b text-[11px] font-semibold tracking-widest uppercase" style="border-color:var(--border);background:var(--panel2);color:var(--muted)"><span class="size-1.5 rounded-full bg-emerald-500 animate-pulse"></span> سلسلة التنفيذ • ${calls.length} أداة</div>
-    <div class="p-2 space-y-1.5">${calls.map((c,i)=>`
-      <div class="flex gap-3 p-2.5 rounded-xl border ${c.ok?'':'border-red-500/30 bg-red-500/5'}" style="background:${c.ok?'var(--panel2)':'rgba(239,68,68,.06)'};border-color:${c.ok?'var(--border)':'rgba(239,68,68,.22)'}">
-        <div class="size-7 rounded-full grid place-items-center shrink-0 text-[12px] border" style="background:${c.ok?'rgba(0,212,148,.12)':'rgba(239,68,68,.12)'};border-color:${c.ok?'rgba(0,212,148,.22)':'rgba(239,68,68,.22)'}">${c.ok?'✓':'✗'}</div>
-        <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-1.5 flex-wrap"><b class="mono text-[12px]">${escapeHtml(c.name)}</b><span class="mono text-[10px] px-1.5 py-0.5 rounded-full border" style="background:var(--panel);border-color:var(--border);color:var(--muted)">${c.duration_ms||0}ms</span>${c.approved===false?'<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500 text-white">مرفوض</span>':''}</div>
-          <div class="mono text-[11px] mt-1 truncate" style="color:var(--muted)">${escapeHtml(JSON.stringify(c.arguments||{}).slice(0,120))}</div>
-          ${c.result_preview? `<div class="mono text-[11px] mt-1 p-2 rounded-lg border truncate" style="background:var(--panel);border-color:var(--border);color:var(--muted)">${escapeHtml(c.result_preview.slice(0,160))}</div>`:''}
-        </div>
-        <span class="mono text-[11px] shrink-0" style="color:var(--muted)">#${i+1}</span>
-      </div>`).join('')}</div></div>`;
+  const avatar=isUser?`<div class="size-7 rounded-full grid place-items-center shrink-0 text-white text-[11px] font-bold" style="background:#2563eb">أنت</div>`:`<div class="size-7 rounded-full grid place-items-center shrink-0 text-white" style="background:linear-gradient(135deg,#7c3aed,#00ffa3)">✦</div>`;
+  wrap.innerHTML=`${avatar}<div class="flex-1 min-w-0"><div class="text-[11px] font-semibold flex items-center gap-1">${isUser?'أنت':'Nimna'}<span class="mono font-normal" style="color:var(--muted)">${fmt()}</span></div><div class="${isUser?'mt-1 px-3 py-2 rounded-2xl rounded-br-[6px] bg-[#2563eb] text-white text-[13px] leading-6 whitespace-pre-wrap':'mt-1 px-3 py-2 rounded-2xl rounded-bl-[6px] border prose text-[13px] leading-7'}" style="${isUser?'':'background:var(--panel);border-color:var(--border)'}">${isUser?escapeHtml(text):renderMarkdown(text)}</div>${extra?`<div class="mt-2">${extra}</div>`:''}</div>`;
+  $('#messages').appendChild(wrap); $('#chatLog').scrollTop=$('#chatLog').scrollHeight; return wrap;
 }
 function renderResult(res){
-  if(res.session_id){ sessionId=res.session_id; localStorage.setItem('nimna.session',sessionId); updateSessionLabel();}
-  hideStatus();
-  // thought log
-  if(res.skills_used?.length) addThought('تم اختيار المهارات', res.skills_used.join(', ')+(res.selection_reason?' — '+res.selection_reason.slice(0,80):''), '#7c3aed');
+  if(res.session_id){sessionId=res.session_id;localStorage.setItem('nimna.session',sessionId);updateSess();}
+  if(res.skills_used?.length) addThought('تم اختيار المهارة', res.skills_used.join(', '), '#7c3aed');
   if(res.tool_calls?.length){
     for(const c of res.tool_calls){
-      const col=c.ok?'#00d492':'#ef4444';
-      const emoji=c.name==='take_screenshot'?'📸':c.name==='mouse_click'?'🖱️':c.name==='type_text'?'⌨️':c.name==='shell_execute'?'💻':c.name==='get_element_coordinates'?'🎯':'🔧';
-      addThought(`${emoji} ${c.name}`, JSON.stringify(c.arguments||{}).slice(0,90)+(c.ok?' — نجح':' — فشل'), col, !c.ok);
-      if(c.name==='mouse_click' && c.arguments?.x!=null) showDot(c.arguments.x,c.arguments.y);
-      if(c.name==='get_element_coordinates' && c.arguments) addThought('🎯 تحديد عنصر', c.arguments.element_name+' → '+(c.ok?'تم':'فشل'), '#00d492');
-    }
-  }
-  // approval
-  if(res.status==='awaiting_approval' && res.pending){
-    pendingApproval=res.pending;
-    showApproval(res);
-    return;
-  }
-  if(pendingApproval) hideApproval();
-  // build extra
-  let extraHtml='';
-  if(res.plan?.length){
-    extraHtml+=`<div class="rounded-2xl border overflow-hidden" style="border-color:var(--border);background:var(--panel)"><div class="h-8 flex items-center gap-2 px-3 border-b text-[11px] font-semibold" style="border-color:var(--border);background:var(--panel2)"><span>🧭</span> الخطة المقترحة <span class="ms-auto mono text-[11px]" style="color:var(--muted)">${res.steps||0} خطوة</span></div><div class="p-2 space-y-1">${res.plan.map((s,i)=>`<div class="flex gap-2 p-2 rounded-xl text-[12px] leading-relaxed" style="background:var(--panel2)"><span class="size-6 rounded-full grid place-items-center shrink-0 text-[11px] font-bold bg-violet-600 text-white">${i+1}</span><span>${escapeHtml(s)}</span></div>`).join('')}</div></div>`;
-  }
-  if(res.tool_calls?.length) extraHtml+=renderTimeline(res.tool_calls);
-  if(res.selection_reason){
-    extraHtml+=`<div class="rounded-2xl border p-3 text-[12px] leading-relaxed" style="border-color:var(--border);background:var(--panel2);color:var(--muted)"><b style="color:var(--text)">سبب اختيار المهارات:</b><br>${escapeHtml(res.selection_reason)}</div>`;
-  }
-  const text=res.reply || res.error || '(لا يوجد رد)';
-  const isError=res.status==='error';
-  const wrap=addMessage(isError?'assistant': 'assistant', text, {extra: extraHtml? `<div class="mt-3 space-y-3">${extraHtml}<details class="rounded-xl border overflow-hidden" style="border-color:var(--border);background:var(--panel2)"><summary class="px-3 py-2 text-[11px] font-medium cursor-pointer hover:bg-white/5" style="color:var(--muted)">تفاصيل التشغيل • ${res.steps||0} خطوة • ${res.usage?.total_tokens? res.usage.total_tokens+' token':'بدون بيانات'}</summary><pre class="p-3 mono text-[11px] whitespace-pre-wrap overflow-auto max-h-[260px] border-t" style="border-color:var(--border);background:var(--panel)">${escapeHtml(JSON.stringify(res,null,2))}</pre></details></div>`:''});
-  // image handling
-  if(res.tool_calls?.some(c=>c.name==='take_screenshot'&&c.ok)){
-    fetch('/api/computer/screenshot').then(r=>r.json()).then(j=>{ if(j.image_b64){ const img=document.createElement('img'); img.src='data:image/png;base64,'+j.image_b64; img.className='mt-3 rounded-xl border max-w-full'; img.style.borderColor='var(--border)'; wrap.querySelector('.prose')?.appendChild(img); updateMirror(j.image_b64);} }).catch(()=>{});
-  }
-  if(res.tool_calls?.some(c=>c.name==='get_element_coordinates'&&c.ok)){
-    // fetch latest locate
-    fetch('/api/workspace/files?path=.screenshots&limit=5').then(r=>r.json()).then(j=>{
-      const loc=j.entries?.find(e=>e.name.startsWith('locate-')); if(loc){ /* could show */ }
-    }).catch(()=>{});
-  }
-  // rich
-  if(text.includes('|') && text.includes('---')){
-    const rich=document.createElement('div');
-    rich.className='rounded-2xl border p-3 text-[11px]';
-    rich.style.background='var(--panel)'; rich.style.borderColor='var(--border)'; rich.style.color='var(--muted)';
-    rich.innerHTML=`📊 تم إنشاء تقرير — راجع <span class="mono">workspace/reports/</span> أو تبويب الملفات`;
-    $('#richOutputs').prepend(rich);
-  }
-  // try chart if tool_calls has calculate_statistics
-  try{
-    const stats=res.tool_calls?.find(c=>c.name==='calculate_statistics'&&c.ok);
-    if(stats && window.Chart){
-      const ctx=document.getElementById('artChart');
-      if(ctx){
-        // dummy demo chart
-        new Chart(ctx,{type:'bar',data:{labels:['Q1','Q2','Q3','Q4'],datasets:[{label:'المبيعات',data:[12,19,8,15],backgroundColor:'rgba(124,58,237,.6)',borderColor:'#7c3aed',borderWidth:1}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.06)'}},y:{grid:{color:'rgba(255,255,255,.06)'}}}}});
+      const ok=c.ok;
+      if(c.name==='take_screenshot'){
+        addTimeline('📸','يتم الآن التقاط الشاشة','تحليل بصري + شبكة نيون', ok?'emerald':'amber');
+        if(ok) fetch('/api/computer/screenshot').then(r=>r.json()).then(j=>{if(j.image_b64) updateScreen(j.image_b64); showBbox(640,400,'فحص الشاشة',false)}).catch(()=>{});
+      } else if(c.name==='get_element_coordinates'){
+        const x=c.arguments?.x||c.arguments?.element_name, y=c.arguments?.y;
+        addTimeline('🎯','يتم تحديد العنصر','OCR + شبكة — '+ (c.arguments?.element_name||''), ok?'emerald':'amber');
+        if(ok && c.arguments) { /* will be handled via actual tool result */ }
+        // try to show bbox from result if available via audit? Use args
+        if(c.arguments?.element_name) showBbox(640,400,c.arguments.element_name,true);
+      } else if(c.name==='mouse_click'){
+        addTimeline('🖱️','يتم الآن النقر على زر الإرسال',`(${c.arguments?.x},${c.arguments?.y}) • ${c.arguments?.purpose||''}`, ok?'emerald':'amber');
+        if(c.arguments) moveCursor(c.arguments.x,c.arguments.y,true);
+        showBbox(c.arguments.x,c.arguments.y,c.arguments.purpose?.slice(0,16)||'Click');
+      } else if(c.name==='type_text'){
+        addTimeline('⌨️','يتم إدخال النص',`"${(c.arguments?.text||'').slice(0,30)}"`, ok?'emerald':'amber');
+      } else if(c.name==='shell_execute'){
+        addTimeline('💻','يتم تنفيذ الأمر','CLI — '+ (c.arguments?.command||'').slice(0,40), ok?'violet':'amber');
+        // terminal logs will be added after we parse result preview
+        if(c.result_preview) addTerminal(c.arguments?.command||'shell', c.result_preview.slice(0,500), '');
+      } else {
+        addTimeline('🔧',c.name, JSON.stringify(c.arguments||{}).slice(0,50), ok?'emerald':'amber');
       }
     }
-  }catch(e){}
-  refreshExplorer(); refreshComputer(); refreshAudit();
+  }
+  if(res.status==='awaiting_approval' && res.pending){
+    pending=res.pending; showApproval(res); return;
+  }
+  if(pending) hideApproval();
+  const text=res.reply||res.error||'(لا رد)';
+  let extra='';
+  if(res.plan?.length) extra+=`<div class="rounded-xl border p-2 text-[11px] leading-relaxed" style="background:var(--panel2);border-color:var(--border)"><b>الخطة:</b><br>${res.plan.map((s,i)=>`${i+1}. ${escapeHtml(s)}`).join('<br>')}</div>`;
+  if(res.tool_calls?.length) extra+=`<div class="mt-2 mono text-[10px] p-2 rounded-xl border" style="background:var(--panel2);border-color:var(--border);color:var(--muted)">${res.tool_calls.map(c=>`${c.ok?'✓':'✗'} ${c.name} • ${c.duration_ms}ms`).join(' • ')}</div>`;
+  addMsg('assistant', text, extra);
+  // handle get_element result to show precise bbox if tool returned x,y in audit
+  const locate=res.tool_calls?.find(c=>c.name==='get_element_coordinates' && c.ok);
+  if(locate){
+    try{ const args=locate.arguments; /* we need actual result x,y from tool result preview parsing */ }catch(e){}
+  }
 }
 function showApproval(res){
-  const p=res.pending;
-  $('#approvalSkill').textContent=(res.skills_used||[]).join(', ')||'—';
-  $('#approvalTool').textContent=p.tool_name;
-  const args=p.tool_call.arguments||{};
-  let impact='';
-  if(['write_file','write_report','delete_file'].includes(p.tool_name)){
-    impact=`<b>📄 سيكتب/يحذف:</b><br><code class="mono text-[11px] px-1.5 py-1 rounded border mt-1 inline-block" style="background:var(--panel);border-color:var(--border)">${escapeHtml(args.path||args.filename||'(غير محدد)')}</code>`;
-  } else if(p.tool_name==='mouse_click'){
-    impact=`<b>🖱️ نقرة بصرية:</b> (${args.x}, ${args.y}) — ${escapeHtml(args.purpose||'')}<br><span class="text-[11px]" style="color:var(--muted)">ستظهر نقطة حمراء على المعاينة — راجعها قبل الموافقة.</span>`;
-    showDot(args.x,args.y);
-    $('#approvalPreview').innerHTML=`<div class="absolute inset-0 grid place-items-center"><div class="size-3 rounded-full bg-[#ff3b30] border-2 border-white shadow-[0_0_0_8px_rgba(255,59,48,.18)]" style="position:absolute;left:${args.x/1280*100}%;top:${args.y/800*100}%;transform:translate(-50%,-50%)"></div><span class="mono text-[10px] px-2 py-1 rounded-full" style="background:rgba(0,0,0,.6);color:#fff;border:1px solid rgba(255,255,255,.15)">${args.x}, ${args.y}</span></div><img src="data:image/png;base64,${latestB64||''}" class="w-full h-full object-contain opacity-60 ${latestB64?'':'hidden'}">`;
-  } else if(p.tool_name==='type_text'){
-    impact=`<b>⌨️ كتابة:</b> “${escapeHtml((args.text||'').slice(0,120))}” ${args.submit?' + Enter':''}<br><span style="color:var(--muted)">${escapeHtml(args.purpose||'')}</span>`;
-  } else if(p.tool_name==='shell_execute'){
-    impact=`<b>💻 أمر:</b> <code class="mono text-[11px]">${escapeHtml(args.command||'')}</code><br><span style="color:var(--muted)">${escapeHtml(args.purpose||'')}</span><br><span class="text-[10px] px-1.5 py-0.5 rounded-full border mt-1 inline-block" style="background:rgba(0,212,148,.08);border-color:rgba(0,212,148,.2);color:#059669">داخل الحاوية المعزولة فقط • ulimit 30s/512M</span>`;
-  } else if(p.tool_name==='get_element_coordinates'){
-    impact=`<b>🎯 تحديد عنصر:</b> ${escapeHtml(args.element_name||'')} — سيستخدم OCR + شبكة لتحديد الإحداثيات بدقة.`;
-  } else {
-    impact=escapeHtml(p.description||'');
-  }
-  $('#approvalImpact').innerHTML=impact;
-  $('#approvalArgs').textContent=JSON.stringify(args,null,2);
-  if(p.tool_name!=='mouse_click') $('#approvalPreview').innerHTML= latestB64? `<img src="data:image/png;base64,${latestB64}" class="w-full h-full object-contain">` : `<span class="text-[11px]" style="color:var(--muted)">لا معاينة</span>`;
+  const p=res.pending; $('#apprTool').textContent=p.tool_name; $('#apprSkill').textContent=(res.skills_used||[]).join(', ');
+  const args=p.tool_call.arguments||{}; let impact='';
+  if(p.tool_name==='mouse_click'){ impact=`🖱️ نقرة في (${args.x},${args.y}) — ${escapeHtml(args.purpose||'')}`; moveCursor(args.x,args.y,false); showBbox(args.x,args.y,'موافقة مطلوبة');}
+  else if(p.tool_name==='shell_execute'){ impact=`💻 أمر: <code class="mono">${escapeHtml(args.command||'')}</code><br><span style="color:var(--muted)">${escapeHtml(args.purpose||'')}</span>`;}
+  else if(p.tool_name==='type_text'){ impact=`⌨️ كتابة: "${escapeHtml((args.text||'').slice(0,80))}"`;}
+  else impact=escapeHtml(p.description||'');
+  $('#apprImpact').innerHTML=impact; $('#apprArgs').textContent=JSON.stringify(args,null,2);
   $('#approvalSheet').classList.remove('hidden');
 }
-function hideApproval(){ $('#approvalSheet').classList.add('hidden'); pendingApproval=null; hideDot();}
-async function resolveApproval(decision){
-  if(!pendingApproval) return;
-  const id=pendingApproval.approval_id;
-  const approved=decision!=='deny', always=decision==='always';
-  $$('#approvalSheet button').forEach(b=> b.disabled=true);
+function hideApproval(){ $('#approvalSheet').classList.add('hidden'); pending=null; }
+async function postChat(msg){
+  addMsg('user', msg); $('#emptyChat')?.style && ($('#emptyChat').style.display='none');
+  // show thinking
+  addThought('يفكر...','اختيار المهارة وتحميل التعليمات', '#7c3aed');
+  $('#timelineTrack').classList.remove('hidden');
   try{
-    const res=await fetch('/api/approvals/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({approved,always})}).then(r=>r.json().then(j=>{if(!r.ok) throw new Error(j.detail||r.statusText); return j;}));
-    hideApproval(); renderResult(res);
-  }catch(e){ toast(e.message,'error'); $$('#approvalSheet button').forEach(b=> b.disabled=false); }
-}
-async function postChat(message){
-  const btn=$('#sendBtn'); btn.disabled=true;
-  addMessage('user', message);
-  const spinId='spin-'+Date.now();
-  const spin=document.createElement('div');
-  spin.id=spinId;
-  spin.className='max-w-[780px] mx-auto px-3 md:px-6';
-  spin.innerHTML=`<div class="flex gap-3"><div class="size-8 rounded-full grid place-items-center shrink-0" style="background:linear-gradient(135deg,#7c3aed,#00d492)">✦</div><div class="flex-1 rounded-[18px] border p-4" style="background:var(--panel);border-color:var(--border)"><div class="thinking-line rounded-full mb-3"></div><div class="flex items-center gap-2 text-[12px]" style="color:var(--muted)"><span class="size-2 rounded-full bg-emerald-500 animate-pulse"></span> يفكّر… يختار المهارة ويحمّل التعليمات</div><div class="mt-3 flex gap-1.5"><span class="h-2 w-16 rounded-full shimmer" style="background:var(--panel2)"></span><span class="h-2 w-10 rounded-full shimmer" style="background:var(--panel2)"></span><span class="h-2 w-20 rounded-full shimmer" style="background:var(--panel2)"></span></div></div></div>`;
-  $('#messages').appendChild(spin); $('#log').scrollTop=$('#log').scrollHeight;
-  showStatus('يفكر…','يختار المهارة المناسبة','planner');
-  try{
-    if(ws && ws.readyState===1){
-      ws.send(JSON.stringify({message, session_id: sessionId}));
-      spin.remove(); return;
-    }
-    const res=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message, session_id: sessionId})}).then(async r=>{
-      const j=await r.json(); if(!r.ok) throw new Error(j.detail||r.statusText); return j;
-    });
-    spin.remove(); renderResult(res);
-  }catch(e){ spin.remove(); hideStatus(); addMessage('assistant','خطأ: '+e.message,{extra:`<div class="mt-2 mono text-[11px] p-2 rounded-xl" style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);color:#ef4444">${escapeHtml(e.message)}</div>`});}
-  finally{ btn.disabled=false; }
+    if(ws && ws.readyState===1){ ws.send(JSON.stringify({message:msg, session_id:sessionId})); return;}
+    const res=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg, session_id:sessionId})}).then(async r=>{const j=await r.json(); if(!r.ok) throw new Error(j.detail||r.statusText); return j;});
+    renderResult(res);
+  }catch(e){ addMsg('assistant','خطأ: '+e.message); }
 }
 function connectWS(){
   try{
     const proto=location.protocol==='https:'?'wss:':'ws:';
     const url=proto+'//'+location.host+'/ws/'+(sessionId||'default');
     ws=new WebSocket(url);
-    ws.onopen=()=> setWS(true);
-    ws.onclose=()=>{ setWS(false); setTimeout(connectWS,2500); };
-    ws.onerror=()=> setWS(false);
-    ws.onmessage=(ev)=>{
+    ws.onopen=()=>setWS(true); ws.onclose=()=>{setWS(false); setTimeout(connectWS,2500)}; ws.onerror=()=>setWS(false);
+    ws.onmessage=e=>{
       try{
-        const data=JSON.parse(ev.data);
-        if(data.type==='result' && data.result) renderResult(data.result);
-        else if(data.type==='status') showStatus(data.message||'يفكر…','',data.tool);
-        else if(data.type==='hello') console.log('ws hello',data);
-      }catch(e){ console.log('ws',ev.data)}
+        const d=JSON.parse(e.data);
+        if(d.type==='ping'){ ws.send(JSON.stringify({type:'pong'})); return;}
+        if(d.type==='result') renderResult(d.result);
+        else if(d.type==='status') addThought(d.message||'يفكر...','', '#00ffa3');
+      }catch(err){ console.log(e.data)}
     };
-  }catch(e){ setWS(false); }
-}
-async function refreshComputer(){
-  try{
-    const s=await fetch('/api/computer/status').then(r=>r.json());
-    $('#computerHint').classList.toggle('hidden', !s.skill_available || s.desktop_reachable);
-    $('#mirrorUrl').textContent = s.vnc_url||'http://localhost:6901';
-    if(s.latest_screenshot?.path){
-      try{ const j=await fetch('/api/computer/screenshot').then(r=>r.json()); if(j.image_b64) updateMirror(j.image_b64);}catch(e){}
-    }
-  }catch(e){}
-}
-async function refreshExplorer(){
-  try{
-    const j=await fetch('/api/workspace/files?path=.&limit=40').then(r=>r.json());
-    const list=$('#explorerList'); list.innerHTML='';
-    if(!j.entries?.length){ list.innerHTML='<div class="p-4 text-center text-[11px]" style="color:var(--muted)">لا ملفات</div>'; return;}
-    for(const e of j.entries){
-      const row=document.createElement('div');
-      row.className='flex items-center gap-2 px-3 py-2 hover:bg-white/[0.04] cursor-pointer text-[12px]';
-      row.innerHTML=`<span class="text-[14px]">${e.is_dir?'📁': e.name.endsWith('.png')||e.name.endsWith('.jpg')?'🖼️': e.name.endsWith('.csv')?'▦': e.name.endsWith('.md')?'📝':'📄'}</span><span class="flex-1 truncate mono text-[12px]">${escapeHtml(e.name)}</span><span class="mono text-[10px] shrink-0" style="color:var(--muted)">${e.is_dir?'': e.size>1024? Math.round(e.size/1024)+'KB': e.size+'B'}</span>`;
-      row.onclick=()=>{
-        if(e.is_dir) return;
-        // preview
-        if(e.name.match(/\.(png|jpg|jpeg|gif|webp)$/)){
-          fetch('/api/computer/screenshot').catch(()=>{});
-          // try to show via image preview
-          $('#filePreview').classList.remove('hidden');
-          $('#previewName').textContent=e.path;
-          $('#previewBody').innerHTML=`<img src="/api/workspace/files?path=${encodeURIComponent(e.path)}" class="max-w-full rounded-xl border" style="border-color:var(--border)" onerror="this.outerHTML='<div class=\\'text-[11px]\\' style=\\'color:var(--muted)\\'>لا يمكن المعاينة</div>'">`;
-        } else {
-          fetch(`/api/workspace/files?path=${encodeURIComponent(e.path)}`).then(r=>r.text()).then(t=>{
-            $('#filePreview').classList.remove('hidden');
-            $('#previewName').textContent=e.path;
-            $('#previewBody').innerHTML=`<pre class="whitespace-pre-wrap break-all">${escapeHtml(t.slice(0,6000))}</pre>`;
-          }).catch(()=> toast('تعذر فتح الملف','error'));
-        }
-      };
-      list.appendChild(row);
-    }
-    $('#explorerPath').textContent='/'+(j.path||'');
-  }catch(e){ $('#explorerList').innerHTML='<div class="p-3 text-[11px] text-red-500">فشل التحميل</div>';}
-}
-async function refreshAudit(){
-  if(!sessionId) return;
-  try{
-    const j=await fetch(`/api/sessions/${sessionId}/audit?limit=30`).then(r=>r.json());
-    const list=$('#auditList'); list.innerHTML='';
-    for(const ev of (j.events||[]).slice().reverse()){
-      const row=document.createElement('div');
-      row.className='flex gap-2 p-2.5 rounded-xl border text-[11px] leading-relaxed';
-      row.style.background='var(--panel2)'; row.style.borderColor='var(--border)';
-      row.innerHTML=`<span class="mono shrink-0" style="color:var(--muted)">${(ev.ts||'').slice(11,19)||''}</span><span class="font-medium">${escapeHtml(ev.event)}</span><span class="flex-1 truncate mono" style="color:var(--muted)">${escapeHtml(JSON.stringify(ev.payload||{}).slice(0,120))}</span>`;
-      list.appendChild(row);
-    }
-  }catch(e){}
+  }catch(e){ setWS(false)}
 }
 async function boot(){
-  updateSessionLabel();
+  updateSess();
   try{
     const h=await fetch('/api/health').then(r=>r.json());
-    $('#providerLabel').textContent=`${h.provider} • ${h.model||''}`;
-    $('#modelLabel').textContent=h.verify?'verify on':'verify off';
-    $('#skillCount').textContent=h.skills;
-    $('#toolCount').textContent=h.tools;
-    $('#limitsPill').textContent=`خطوات ${h.limits.max_steps} • أدوات ${h.limits.max_tool_calls} • ${h.limits.max_runtime_seconds}ث`;
-    if(h.provider==='mock') toast('يعمل بمزود وهمي — ضع GEMINI_API_KEY للحصول على نتائج حقيقية','info');
+    $('#providerLbl').textContent=h.provider+' • '+(h.model||'');
+    $('#modelLbl').textContent=h.verify?'verify on':'verify off';
+    $('#limitsLbl').textContent=`${h.limits.max_steps} خطوات • ${h.limits.max_tool_calls} أدوات`;
     const s=await fetch('/api/skills').then(r=>r.json());
-    $('#skillsList').innerHTML = s.skills.map(k=>`
-      <div class="group rounded-2xl border p-3 hover:border-violet-500/20 hover:bg-violet-500/[0.04] transition" style="border-color:var(--border);background:var(--panel2)">
-        <div class="flex items-start gap-2">
-          <div class="size-8 rounded-xl grid place-items-center shrink-0 text-[13px] border" style="background:var(--panel);border-color:var(--border)">${k.name==='computer_control'?'🖥️':k.name==='csv_analysis'?'▦':k.name==='web_research'?'◉':'🧩'}</div>
-          <div class="flex-1 min-w-0">
-            <div class="flex items-center gap-1.5 flex-wrap"><b class="text-[12px]">${escapeHtml(k.display_name||k.name)}</b><span class="mono text-[10px] px-1.5 py-0.5 rounded-full border" style="background:var(--panel);border-color:var(--border);color:var(--muted)">v${k.version}</span><span class="text-[10px] px-1.5 py-0.5 rounded-full border ${k.risk_level==='restricted'?'bg-red-500/10 border-red-500/20 text-red-600':k.risk_level==='confirm'?'bg-amber-500/10 border-amber-500/20 text-amber-600':'bg-emerald-500/10 border-emerald-500/20 text-emerald-600'}">${k.risk_level||'safe'}</span></div>
-            <div class="text-[11px] mt-1 leading-relaxed line-clamp-2" style="color:var(--muted)">${escapeHtml(k.description||'')}</div>
-            <div class="flex flex-wrap gap-1 mt-1.5">${(k.allowed_tools||[]).slice(0,6).map(t=>`<span class="mono text-[10px] px-1.5 py-0.5 rounded-full border" style="background:var(--panel);border-color:var(--border);color:var(--muted)">${t}</span>`).join('')}${(k.allowed_tools||[]).length>6?`<span class="mono text-[10px] px-1 py-0.5 rounded-full" style="background:var(--panel);color:var(--muted)">+${k.allowed_tools.length-6}</span>`:''}</div>
-          </div>
-        </div>
-      </div>`).join('') || '<div class="text-[11px]" style="color:var(--muted)">لا مهارات</div>';
-    const t=await fetch('/api/tools').then(r=>r.json());
-    $('#toolsCloud').innerHTML = t.tools.map(x=>`<span class="mono text-[10px] px-2 py-1 rounded-full border ${String(x.risk).includes('confirm')?'border-amber-500/20 bg-amber-500/10 text-amber-600': String(x.risk)==='safe'?'border-emerald-500/20 bg-emerald-500/10 text-emerald-600':'border-zinc-500/20 bg-white/5'}" title="${escapeHtml(x.description||'')}" style="border-color:${String(x.risk).includes('confirm')?'rgba(245,158,11,.2)':'var(--border)'}">${x.name}</span>`).join('');
-    // sessions
-    const sess=await fetch('/api/sessions').then(r=>r.json()).catch(()=>({sessions:[]}));
-    const list=$('#sessionsList');
-    if(sess.sessions?.length){
-      list.innerHTML=sess.sessions.slice(0,8).map(s=>`<button class="session-item w-full text-start flex items-center gap-2 px-2.5 py-2 rounded-xl border hover:bg-white/5 text-[12px] ${s.session_id===sessionId?'border-violet-500/30 bg-violet-500/10':''}" data-sid="${s.session_id}" style="border-color:${s.session_id===sessionId?'rgba(124,58,237,.22)':'var(--border)'};background:${s.session_id===sessionId?'rgba(124,58,237,.08)':'var(--panel2)'}"><span class="size-2 rounded-full ${s.session_id===sessionId?'bg-violet-500':'bg-zinc-500'} shrink-0"></span><span class="flex-1 truncate mono">${s.session_id.slice(0,10)}</span><span class="mono text-[10px] shrink-0" style="color:var(--muted)">${s.message_count||0} رسائل</span></button>`).join('');
-      list.querySelectorAll('.session-item').forEach(b=> b.addEventListener('click', async ()=>{
-        sessionId=b.dataset.sid; localStorage.setItem('nimna.session',sessionId); updateSessionLabel(); $('#messages').innerHTML=''; $('#emptyState').style.display='none';
-        const m=await fetch('/api/sessions/'+sessionId+'/messages').then(r=>r.json()); for(const msg of m.messages) addMessage(msg.role, msg.content);
-        if(ws) ws.close(); connectWS(); refreshAudit();
-      }));
-    } else {
-      list.innerHTML='<div class="text-[11px] p-2 rounded-xl border border-dashed text-center" style="border-color:var(--border);color:var(--muted);background:var(--panel2)">لا جلسات سابقة</div>';
-    }
+    $('#skillCnt').textContent=s.skills.length;
+    $('#toolCnt').textContent=(await fetch('/api/tools').then(r=>r.json())).tools.length;
+    $('#skillsList').innerHTML=s.skills.map(k=>`<div class="rounded-xl border p-2.5 flex gap-2" style="background:var(--panel2);border-color:var(--border)"><span class="size-7 rounded-lg grid place-items-center shrink-0 border text-[12px]" style="background:var(--panel);border-color:var(--border)">${k.name==='computer_control'?'🖥️':k.name==='code_execution'?'💻':k.name==='web_research'?'◉':'🧩'}</span><div class="flex-1 min-w-0"><div class="flex items-center gap-1"><b class="text-[11px]">${escapeHtml(k.display_name||k.name)}</b><span class="mono text-[9px] px-1 py-0.5 rounded border" style="background:var(--panel);border-color:var(--border);color:var(--muted)">v${k.version}</span><span class="text-[9px] px-1 py-0.5 rounded-full border ${k.risk_level==='restricted'?'bg-red-500/10 border-red-500/20 text-red-400':'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'}">${k.risk_level}</span></div><div class="text-[10px] leading-relaxed line-clamp-2" style="color:var(--muted)">${escapeHtml(k.description||'').slice(0,80)}</div></div></div>`).join('');
+    $('#toolsList').innerHTML=(await fetch('/api/tools').then(r=>r.json())).tools.map(t=>`<span class="mono text-[9px] px-1.5 py-1 rounded-full border" style="background:var(--panel2);border-color:var(--border);color:var(--muted)">${t.name}</span>`).join('');
     if(sessionId){
       const m=await fetch('/api/sessions/'+sessionId+'/messages').then(r=>r.json()).catch(()=>({messages:[]}));
-      if(m.messages?.length){ $('#emptyState').style.display='none'; for(const msg of m.messages) addMessage(msg.role, msg.content); }
+      if(m.messages?.length){ $('#emptyChat').style.display='none'; for(const msg of m.messages) addMsg(msg.role, msg.content); }
     }
-    refreshComputer(); refreshExplorer(); connectWS();
-    setInterval(refreshComputer,10000);
-  }catch(e){ toast('تعذر الاتصال: '+e.message,'error');}
+    connectWS();
+  }catch(e){ console.error(e)}
 }
-
-// events
-const input=$('#input');
-function autoGrow(){ input.style.height='auto'; input.style.height=Math.min(input.scrollHeight,140)+'px';}
-input.addEventListener('input',()=>{ autoGrow(); $('#charCount').textContent=input.value.length; if(input.value.startsWith('/')) $('#slashMenu').classList.remove('hidden'); else $('#slashMenu').classList.add('hidden');});
-input.addEventListener('keydown',e=>{
-  if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); $('#sendBtn').click(); }
-  if(e.key==='Escape') $('#slashMenu').classList.add('hidden');
-});
-$$('.slash-item').forEach(b=> b.addEventListener('click',()=>{ input.value=b.dataset.insert; input.focus(); $('#slashMenu').classList.add('hidden'); autoGrow();}));
-$$('.prompt-chip, [data-prompt]').forEach(b=>{ if(b.dataset.prompt) b.addEventListener('click',()=>{ input.value=b.dataset.prompt; input.focus(); autoGrow(); $('#emptyState').style.display='none';})});
-$('#sendBtn').addEventListener('click',()=>{ const v=input.value.trim(); if(!v) return; input.value=''; autoGrow(); $('#charCount').textContent='0'; $('#slashMenu').classList.add('hidden'); postChat(v);});
-$('#attachBtn').addEventListener('click',()=> toast('الصور تُرسل تلقائيًا عند استخدام take_screenshot — اكتب "التقط صورة"','info'));
-$('#newSessionBtn').addEventListener('click',()=>{ sessionId=null; localStorage.removeItem('nimna.session'); updateSessionLabel(); $('#messages').innerHTML=''; $('#emptyState').style.display='block'; if(ws) ws.close(); connectWS(); toast('بدأت جلسة جديدة','success')});
-$('#quickNew').addEventListener('click',()=> input.focus());
-$('#clearChat').addEventListener('click',()=>{ $('#messages').innerHTML=''; $('#emptyState').style.display='block'; toast('تم مسح العرض فقط — السجل محفوظ','info')});
-$('#copyTranscript').addEventListener('click',()=>{ const t=[...document.querySelectorAll('#messages .prose, #messages .whitespace-pre-wrap')].map(e=>e.innerText).join('\n\n---\n\n'); navigator.clipboard.writeText(t||''); toast('تم نسخ المحادثة','success')});
-$('#refreshSessions').addEventListener('click',boot);
-$('#toggleLeft').addEventListener('click',()=>{ $('#leftPanel').classList.toggle('hidden'); $('#leftPanel').classList.toggle('flex'); $('#drawerBackdrop').classList.toggle('hidden');});
-$('#toggleRight').addEventListener('click',()=>{ $('#rightPanel').classList.toggle('hidden'); $('#rightPanel').classList.toggle('flex'); $('#drawerBackdrop').classList.toggle('hidden');});
-$('#drawerBackdrop').addEventListener('click',()=>{ $('#leftPanel').classList.add('hidden'); $('#leftPanel').classList.remove('flex'); $('#rightPanel').classList.add('hidden'); $('#rightPanel').classList.remove('flex'); $('#drawerBackdrop').classList.add('hidden');});
-$$('.tab-btn').forEach(b=> b.addEventListener('click',()=>{
-  $$('.tab-btn').forEach(x=>{x.classList.remove('bg-white','text-zinc-900','shadow'); x.classList.add('hover:bg-white/5'); x.style.color='var(--muted)'}); 
-  b.classList.add('bg-white','text-zinc-900','shadow'); b.style.color='';
-  const tab=b.dataset.tab; ['mirror','files','artifacts','audit'].forEach(t=> $('#tab-'+t).classList.toggle('hidden', t!==tab));
-}));
-$('#themeBtn').addEventListener('click',()=>{
-  const isLight=document.documentElement.classList.toggle('light');
-  document.body.classList.toggle('light', isLight);
-  $('#themeBtn').textContent=isLight?'☀':'☾';
-  localStorage.setItem('nimna.theme', isLight?'light':'dark');
-});
-if(localStorage.getItem('nimna.theme')==='light'){ document.documentElement.classList.add('light'); document.body.classList.add('light'); $('#themeBtn').textContent='☀';}
-$('#btnScreenshot').addEventListener('click',()=> postChat('التقط صورة للشاشة الآن'));
-$('#btnOpenVNC').addEventListener('click', async ()=>{
-  const s=await fetch('/api/computer/status').then(r=>r.json()).catch(()=>({vnc_url:'http://localhost:6901'}));
-  const url=s.vnc_url||'http://localhost:6901';
-  $('#mirrorFrame').src=url; $('#mirrorFrame').classList.remove('hidden'); $('#mirrorImg').classList.add('hidden'); $('#mirrorPlaceholder').classList.add('hidden');
-  window.open(url,'_blank');
-});
-$('#mirrorFullscreen').addEventListener('click',()=>{ const el=$('#mirrorWrap'); if(document.fullscreenElement) document.exitFullscreen(); else el.requestFullscreen();});
-$('#btnClearDot').addEventListener('click',hideDot);
-$('#enableComputer').addEventListener('click',()=> toast('شغّل: docker compose --profile computer up -d desktop ثم انتظر 10 ثوانٍ','info'));
-$('#explorerRefresh').addEventListener('click',refreshExplorer);
-$('#closePreview').addEventListener('click',()=> $('#filePreview').classList.add('hidden'));
-$('#closeApproval').addEventListener('click',hideApproval);
-$('#approvalBackdrop').addEventListener('click',hideApproval);
-$('#approveBtn').addEventListener('click',()=> resolveApproval('approve'));
-$('#alwaysBtn').addEventListener('click',()=> resolveApproval('always'));
-$('#denyBtn').addEventListener('click',()=> resolveApproval('deny'));
-document.addEventListener('keydown',e=>{
-  if((e.metaKey||e.ctrlKey)&& e.key.toLowerCase()==='k'){ e.preventDefault(); $('#cmdPalette').classList.remove('hidden'); $('#cmdInput').focus();}
-  if(e.key==='Escape'){ hideApproval(); $('#cmdPalette').classList.add('hidden'); $('#slashMenu').classList.add('hidden');}
-  if(e.key==='Enter' && !$('#approvalSheet').classList.contains('hidden') && (e.metaKey||e.ctrlKey)) resolveApproval('approve');
-});
-$('#cmdBtn').addEventListener('click',()=>{ $('#cmdPalette').classList.remove('hidden'); $('#cmdInput').focus();});
-$('#cmdBackdrop').addEventListener('click',()=> $('#cmdPalette').classList.add('hidden'));
-const cmds=[
-  {k:'new',l:'جلسة جديدة',a:()=>{$('#newSessionBtn').click(); $('#cmdPalette').classList.add('hidden')}},
-  {k:'screenshot',l:'التقط صورة للشاشة',a:()=>{postChat('التقط صورة للشاشة'); $('#cmdPalette').classList.add('hidden')}},
-  {k:'files',l:'اعرض الملفات',a:()=>{$$('.tab-btn')[1].click(); $('#cmdPalette').classList.add('hidden')}},
-  {k:'mirror',l:'افتح المعاينة المباشرة',a:()=>{$$('.tab-btn')[0].click(); $('#cmdPalette').classList.add('hidden')}},
-  {k:'theme',l:'تبديل المظهر',a:()=>{$('#themeBtn').click(); $('#cmdPalette').classList.add('hidden')}},
-  {k:'analyze',l:'حلّل sales.csv',a:()=>{postChat('حلّل sales.csv وأنشئ تقريرًا جديدًا'); $('#cmdPalette').classList.add('hidden')}},
-];
-function renderCmd(q=''){
-  const list=$('#cmdList'); const f=cmds.filter(c=>!q||c.l.includes(q)||c.k.includes(q.toLowerCase()));
-  list.innerHTML=f.map(c=>`<button class="cmd-item w-full text-start px-3 py-2.5 rounded-xl hover:bg-white/5 flex items-center gap-3" data-k="${c.k}"><span class="size-8 rounded-xl grid place-items-center border text-[13px]" style="background:var(--panel2);border-color:var(--border)">⌘</span><span class="text-[13px] font-medium">${c.l}</span><span class="ms-auto mono text-[11px]" style="color:var(--muted)">${c.k}</span></button>`).join('')||'<div class="p-6 text-center text-[12px]" style="color:var(--muted)">لا نتائج</div>';
-  list.querySelectorAll('.cmd-item').forEach(b=> b.addEventListener('click',()=> cmds.find(x=>x.k===b.dataset.k).a()));
-}
-$('#cmdInput').addEventListener('input',e=> renderCmd(e.target.value));
-renderCmd();
+ // events
+$('#sendBtn').addEventListener('click',()=>{const v=$('#chatInput').value.trim(); if(!v) return; $('#chatInput').value=''; postChat(v);});
+$('#chatInput').addEventListener('keydown',e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); $('#sendBtn').click();}});
+$('#chatInput').addEventListener('input',()=>{ $('#charCnt').textContent=$('#chatInput').value.length;});
+$$('.promptBtn').forEach(b=>b.addEventListener('click',()=>{ $('#chatInput').value=b.dataset.prompt; $('#chatInput').focus();}));
+$('#btnScreenshot').addEventListener('click',()=>postChat('التقط صورة للشاشة الآن مع تحديد الشبكة'));
+$('#activateBtn').addEventListener('click',()=>postChat('التقط صورة للشاشة الآن'));
+$('#btnGrid').addEventListener('click',()=>{ const l=$('#bboxLayer'); l.classList.toggle('hidden');});
+$('#btnFullscreen').addEventListener('click',()=>{ const el=$('#screenWrap'); if(document.fullscreenElement) document.exitFullscreen(); else el.requestFullscreen();});
+$('#toggleTerminal').addEventListener('click',()=>{ const b=$('#terminalBody'); b.classList.toggle('hidden'); $('#toggleTerminal').textContent=b.classList.contains('hidden')?'+':'−';});
+$('#clearTimeline').addEventListener('click',()=>{ $('#timelineList').innerHTML='<div class="shrink-0 rounded-xl border border-dashed px-3 py-2 text-[11px] text-center min-w-[180px]" style="border-color:var(--border);color:var(--muted);background:var(--panel2)">تم المسح</div>'; $('#timelineTrack').classList.add('hidden');});
+$('#newBtn').addEventListener('click',()=>{ sessionId=null; localStorage.removeItem('nimna.session'); updateSess(); $('#messages').innerHTML=''; $('#emptyChat').style.display='block'; if(ws) ws.close(); connectWS();});
+$('#approvalBg').addEventListener('click',hideApproval);
+$('#apprOk').addEventListener('click',async()=>{ if(!pending) return; const id=pending.approval_id; $('#apprOk').disabled=true; try{const res=await fetch('/api/approvals/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({approved:true,always:false})}).then(async r=>{const j=await r.json(); if(!r.ok) throw new Error(j.detail); return j;}); hideApproval(); renderResult(res);}catch(e){alert(e.message); $('#apprOk').disabled=false;}});
+$('#apprNo').addEventListener('click',async()=>{ if(!pending) return; const id=pending.approval_id; try{const res=await fetch('/api/approvals/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({approved:false})}).then(async r=>{const j=await r.json(); if(!r.ok) throw new Error(j.detail); return j;}); hideApproval(); renderResult(res);}catch(e){alert(e.message);}});
+$('#apprAlways').addEventListener('click',async()=>{ if(!pending) return; const id=pending.approval_id; try{const res=await fetch('/api/approvals/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({approved:true,always:true})}).then(async r=>{const j=await r.json(); if(!r.ok) throw new Error(j.detail); return j;}); hideApproval(); renderResult(res);}catch(e){alert(e.message);}});
+document.addEventListener('keydown',e=>{ if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){ e.preventDefault(); $('#cmdPal').classList.remove('hidden'); $('#cmdInput').focus();} if(e.key==='Escape'){ $('#approvalSheet').classList.add('hidden'); $('#cmdPal').classList.add('hidden');}});
+$('#cmdBtn').addEventListener('click',()=>{ $('#cmdPal').classList.remove('hidden'); $('#cmdInput').focus();}); $('#cmdBg').addEventListener('click',()=>$('#cmdPal').classList.add('hidden'));
+const cmds=[{k:'screenshot',l:'التقط صورة',a:()=>postChat('التقط صورة')},{k:'tasks',l:'المهام',a:()=>{}},{k:'memory',l:'الذاكرة',a:()=>{}},{k:'projects',l:'المشاريع',a:()=>{}},{k:'files',l:'الملفات',a:()=>{}}];
+function renderCmd(q=''){ const f=cmds.filter(c=>!q||c.l.includes(q)); $('#cmdList').innerHTML=f.map(c=>`<button class="w-full text-start px-3 py-2 rounded-xl hover:bg-white/5 flex items-center gap-2" data-k="${c.k}"><span class="size-7 rounded-lg grid place-items-center border" style="background:var(--panel2);border-color:var(--border)">⌘</span>${c.l}</button>`).join('');}
+$('#cmdInput')?.addEventListener('input',e=>renderCmd(e.target.value)); renderCmd();
+$$('.nav-link').forEach(a=>a.addEventListener('click',e=>{e.preventDefault(); $$('.nav-link').forEach(x=>{x.className='nav-link flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-white/5'; x.style.color='var(--muted)'}); a.className='nav-link flex items-center gap-2.5 px-2.5 py-2 rounded-xl bg-white text-zinc-900 font-medium'; a.style.color='';}));
 boot();
 </script>
 </body>
