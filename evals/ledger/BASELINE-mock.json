@@ -1,8 +1,8 @@
 {
   "version": 1,
   "mode": "mock",
-  "repo_version": "f313b3c",
-  "generated_at": "2026-09-23T18:50:16+00:00",
+  "repo_version": "f13ba6a",
+  "generated_at": "2026-09-23T19:05:01+00:00",
   "rows": [
     {
       "task_id": "arabic-01-market-brief",
@@ -31,7 +31,7 @@
       ],
       "requires": [],
       "metrics": {
-        "wall_ms": 9,
+        "wall_ms": 10,
         "tool_calls": 0,
         "failed_tool_calls": 0,
         "failed_shell_commands": 0,
@@ -43,9 +43,9 @@
         "verified": false,
         "delta_reverified": 0
       },
-      "run_id": "d536c5e7cb9c4713",
-      "ts": "2026-09-23T18:50:15+00:00",
-      "repo_version": "f313b3c",
+      "run_id": "a277051b2cfc435f",
+      "ts": "2026-09-23T19:05:00+00:00",
+      "repo_version": "f13ba6a",
       "previous_score": null
     },
     {
@@ -87,9 +87,9 @@
         "verified": false,
         "delta_reverified": 0
       },
-      "run_id": "6aa233f4ffc64d21",
-      "ts": "2026-09-23T18:50:15+00:00",
-      "repo_version": "f313b3c",
+      "run_id": "b23c600a04b045b8",
+      "ts": "2026-09-23T19:05:00+00:00",
+      "repo_version": "f13ba6a",
       "previous_score": null
     },
     {
@@ -147,7 +147,7 @@
         "shell_tool"
       ],
       "metrics": {
-        "wall_ms": 37,
+        "wall_ms": 34,
         "tool_calls": 2,
         "failed_tool_calls": 0,
         "failed_shell_commands": 0,
@@ -163,7 +163,7 @@
         "before_root_hash": "sha256:cb0a7629ae1af35f4af425cbfd917db45cb537a7ef4ef33033083aabe9922d59",
         "after_root_hash": "sha256:c9425def3b7f995f85f354b9d92d2c94fb408d42a3f536fc7dd418e7ddacf507",
         "delta_changes": 1,
-        "audit_hash": "2d215bd8c3eacdd64ece600a16466c1de3daa6140461bc9c6582c246d1a33951"
+        "audit_hash": "a19e85287032419fd5e9ec4b5faa847e748a27ebebdfb6b6be853cd28a557724"
       },
       "verification": {
         "version": 1,
@@ -237,14 +237,14 @@
       },
       "recovery": {
         "state": "COMPLETED",
-        "checkpoint_id": "ckpt_7675edf47de04c6fb0059a02",
+        "checkpoint_id": "ckpt_6c572ce2227d43cb9864ec63",
         "state_version": 1,
-        "evidence_head": "2d215bd8c3eacdd64ece600a16466c1de3daa6140461bc9c6582c246d1a33951",
+        "evidence_head": "a19e85287032419fd5e9ec4b5faa847e748a27ebebdfb6b6be853cd28a557724",
         "observation_fingerprint": "sha256:c9425def3b7f995f85f354b9d92d2c94fb408d42a3f536fc7dd418e7ddacf507"
       },
-      "run_id": "8150f797a64942b2",
-      "ts": "2026-09-23T18:50:15+00:00",
-      "repo_version": "f313b3c",
+      "run_id": "37f841e529a34836",
+      "ts": "2026-09-23T19:05:00+00:00",
+      "repo_version": "f13ba6a",
       "previous_score": null
     },
     {
@@ -279,7 +279,7 @@
       ],
       "requires": [],
       "metrics": {
-        "wall_ms": 8,
+        "wall_ms": 9,
         "tool_calls": 0,
         "failed_tool_calls": 0,
         "failed_shell_commands": 0,
@@ -291,9 +291,9 @@
         "verified": true,
         "delta_reverified": 0
       },
-      "run_id": "1daa29910cfe43d1",
-      "ts": "2026-09-23T18:50:16+00:00",
-      "repo_version": "f313b3c",
+      "run_id": "9c56c08a51244b00",
+      "ts": "2026-09-23T19:05:00+00:00",
+      "repo_version": "f13ba6a",
       "previous_score": null
     },
     {
@@ -328,7 +328,7 @@
       ],
       "requires": [],
       "metrics": {
-        "wall_ms": 8,
+        "wall_ms": 9,
         "tool_calls": 0,
         "failed_tool_calls": 0,
         "failed_shell_commands": 0,
@@ -340,9 +340,9 @@
         "verified": false,
         "delta_reverified": 0
       },
-      "run_id": "fd7a9cff82fa43f7",
-      "ts": "2026-09-23T18:50:16+00:00",
-      "repo_version": "f313b3c",
+      "run_id": "06577c5dee4246e0",
+      "ts": "2026-09-23T19:05:01+00:00",
+      "repo_version": "f13ba6a",
       "previous_score": null
     },
     {
@@ -372,7 +372,7 @@
       ],
       "requires": [],
       "metrics": {
-        "wall_ms": 8,
+        "wall_ms": 12,
         "tool_calls": 0,
         "failed_tool_calls": 0,
         "failed_shell_commands": 0,
@@ -384,9 +384,9 @@
         "verified": true,
         "delta_reverified": 0
       },
-      "run_id": "628b75a24fa2427a",
-      "ts": "2026-09-23T18:50:16+00:00",
-      "repo_version": "f313b3c",
+      "run_id": "a0837d6fb2e1470f",
+      "ts": "2026-09-23T19:05:01+00:00",
+      "repo_version": "f13ba6a",
       "previous_score": null
     },
     {
@@ -440,7 +440,7 @@
         "shell_tool"
       ],
       "metrics": {
-        "wall_ms": 56,
+        "wall_ms": 78,
         "tool_calls": 3,
         "failed_tool_calls": 0,
         "failed_shell_commands": 1,
@@ -456,7 +456,7 @@
         "before_root_hash": "sha256:fb681ae9c7746729d8b6781ab5c433f41cf120ba3d670428a295ad7a7e7c54c6",
         "after_root_hash": "sha256:02f57fc9b5e6143157db10b4111d23258ea8a4ba2b90f98dcc52c8b5a25bb8d7",
         "delta_changes": 1,
-        "audit_hash": "5240c6cbf88c9bdc2d7e7af6f705b724afec1825df604a491c2f23ec448dd869"
+        "audit_hash": "f29738ed850f2c81ab98855f59671d5a1f06981aa55b7d5a795aaee1c0fda5a0"
       },
       "verification": {
         "version": 1,
@@ -513,7 +513,7 @@
         "observed": 1,
         "verified": 1,
         "checkpointed": 1,
-        "evidence_tail": "85e402fd9510925b",
+        "evidence_tail": "aa51e884142e739d",
         "chain_verified": true
       },
       "registry": {
@@ -525,19 +525,19 @@
         "denied": 0,
         "revoked": 0,
         "schema_failures": 0,
-        "evidence_tail": "85e402fd9510925b",
+        "evidence_tail": "aa51e884142e739d",
         "chain_verified": true
       },
       "recovery": {
         "state": "COMPLETED",
-        "checkpoint_id": "ckpt_9cfcc9602a6b47e5a76dbb39",
+        "checkpoint_id": "ckpt_3b23b79e7fc048f8b8e3167a",
         "state_version": 1,
-        "evidence_head": "5240c6cbf88c9bdc2d7e7af6f705b724afec1825df604a491c2f23ec448dd869",
+        "evidence_head": "f29738ed850f2c81ab98855f59671d5a1f06981aa55b7d5a795aaee1c0fda5a0",
         "observation_fingerprint": "sha256:02f57fc9b5e6143157db10b4111d23258ea8a4ba2b90f98dcc52c8b5a25bb8d7"
       },
-      "run_id": "a31ee508f77a4c8c",
-      "ts": "2026-09-23T18:50:16+00:00",
-      "repo_version": "f313b3c",
+      "run_id": "bba0622ecd574355",
+      "ts": "2026-09-23T19:05:01+00:00",
+      "repo_version": "f13ba6a",
       "previous_score": null
     },
     {
@@ -584,9 +584,9 @@
         "verified": false,
         "delta_reverified": 0
       },
-      "run_id": "471074d9d91d4c06",
-      "ts": "2026-09-23T18:50:16+00:00",
-      "repo_version": "f313b3c",
+      "run_id": "fe989b80326a4d95",
+      "ts": "2026-09-23T19:05:01+00:00",
+      "repo_version": "f13ba6a",
       "previous_score": null
     },
     {
@@ -616,7 +616,7 @@
       ],
       "requires": [],
       "metrics": {
-        "wall_ms": 8,
+        "wall_ms": 7,
         "tool_calls": 0,
         "failed_tool_calls": 0,
         "failed_shell_commands": 0,
@@ -628,9 +628,9 @@
         "verified": false,
         "delta_reverified": 0
       },
-      "run_id": "377e63a445f04c14",
-      "ts": "2026-09-23T18:50:16+00:00",
-      "repo_version": "f313b3c",
+      "run_id": "84e186b9716448ae",
+      "ts": "2026-09-23T19:05:01+00:00",
+      "repo_version": "f13ba6a",
       "previous_score": null
     },
     {
@@ -652,9 +652,9 @@
         "network"
       ],
       "metrics": {},
-      "run_id": "6545d3f1d6b94e24",
-      "ts": "2026-09-23T18:50:16+00:00",
-      "repo_version": "f313b3c",
+      "run_id": "bbe40a69537e4582",
+      "ts": "2026-09-23T19:05:01+00:00",
+      "repo_version": "f13ba6a",
       "previous_score": null
     },
     {
@@ -676,9 +676,9 @@
         "network"
       ],
       "metrics": {},
-      "run_id": "2202d965e19f4877",
-      "ts": "2026-09-23T18:50:16+00:00",
-      "repo_version": "f313b3c",
+      "run_id": "012a7c8ec7e845cb",
+      "ts": "2026-09-23T19:05:01+00:00",
+      "repo_version": "f13ba6a",
       "previous_score": null
     }
   ],
@@ -697,7 +697,7 @@
     "shell_executions": 3,
     "evidence_completeness": 100.0,
     "recovered_tasks": 1,
-    "mean_wall_ms": 16.4,
+    "mean_wall_ms": 19.2,
     "delta_reverified": 2,
     "verifier_pass": 2,
     "verifier_fail": 0,

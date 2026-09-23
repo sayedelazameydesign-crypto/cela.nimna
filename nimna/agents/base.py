@@ -64,11 +64,15 @@ class BaseSwarmAgent:
         *,
         workspace: Any = None,
         session_id: str = "swarm",
+        execution_gateway: Any = None,
     ):
         self.provider = provider
         self.settings = settings
         self.memory = memory
         self.tools = tools
+        # P1-T7.1 binding: None (default) = declared legacy compatibility;
+        # when bound, the strict three-way routing below applies.
+        self.execution_gateway = execution_gateway
         self.workspace = workspace or settings.workspace_dir
         self.session_id = session_id
 
@@ -156,8 +160,33 @@ class BaseSwarmAgent:
                     messages.append(Message.tool_result(call, f'{{"error": {msg!r}}}'))
                     tool_calls_log.append({"name": call.name, "ok": False, "error": msg})
                     continue
-                # run
-                result, ok, dur = self.tools.execute(call.name, call.arguments, self._context(run_id), max_chars=self.settings.tool_result_max_chars)
+                # run — T7.1 strict routing (mirrors Agent._run_tool):
+                # gateway-registered → fabric · explicitly compat-listed →
+                # legacy · otherwise REFUSED (fail-closed: no handler).
+                gateway = getattr(self, "execution_gateway", None)
+                if gateway is not None and gateway.has(call.name):
+                    import json as _json
+                    started = time.perf_counter()
+                    outcome = gateway.invoke_for_agent(
+                        call.name, call.arguments,
+                        actor=f"swarm:{self.name}", session_id=run_id, mission_id=run_id,
+                        resource=str(call.arguments.get("resource") or "workspace"),
+                        requested_operation=call.name,
+                    )
+                    payload = {"status": outcome.execution_status, "ok": outcome.ok,
+                               "reason": outcome.reason[:200],
+                               "result": outcome.result if outcome.handler_called else None,
+                               "evidence_digest": (outcome.record or {}).get("hash", "")}
+                    result = _json.dumps(payload, ensure_ascii=False, default=str)[: self.settings.tool_result_max_chars]
+                    ok, dur = outcome.ok, int((time.perf_counter() - started) * 1000)
+                elif gateway is not None and call.name not in getattr(gateway, "compat_tools", frozenset()):
+                    err = (f"tool '{call.name}' is not registered in the bound execution "
+                           "gateway (fail-closed binding)")
+                    messages.append(Message.tool_result(call, f'{{"error":"{err}"}}'))
+                    tool_calls_log.append({"name": call.name, "ok": False, "error": err})
+                    continue
+                else:
+                    result, ok, dur = self.tools.execute(call.name, call.arguments, self._context(run_id), max_chars=self.settings.tool_result_max_chars)
                 messages.append(Message.tool_result(call, result))
                 tool_calls_log.append({"name": call.name, "ok": ok, "dur": dur, "preview": result[:300]})
                 # self-healing hook (overridden in CodeAgent)

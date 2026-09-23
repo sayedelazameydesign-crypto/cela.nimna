@@ -550,6 +550,26 @@ Evidence لا claim، Recovery bounded) ونضيف طبقة واحدة جديد�
   honesty + no-bypass البنيوي + ربط الـ agent الحقيقي + المسار القديم) =
   **262 passed**.
 
+### P1-T7.1 — Binding Migration → **المسار الواحد أصبح مُفروضاً** ✅
+
+> **✅ الحالة: نُفِّذت** (قرار B من تدقيق READ-ONLY) — الفجوة بين الـ Fabric
+> والـ Agent Core أُغلقت: الربط لم يعد اختيارياً للأدوات المسجَّلة، وما عداها
+> إما توافق **مُصرَّح** أو **رفض fail-closed**.
+
+- **التوجيه الثلاثي** (Agent + Swarm معاً): gateway مقيَّد + أداة مسجَّلة ⇒ Fabric
+  كامل؛ + في `compat_tools` (إعلان صريح فارغ افتراضياً) ⇒ legacy + حدث
+  `gateway_compat`؛ + غير ذلك ⇒ `NOT_IN_GATEWAY` **قبل أي معالج** + حدث
+  `gateway_refused`. فشل الـ Gateway نفسه ⇒ `GATEWAY_ERROR` — **لا fallback
+  إلى legacy أبداً** (وإلا أخفض اختبارات الهجرة).
+- `invoke_for_agent` مدخل موحَّد؛ الـ grant الافتراضي يتبع طالب التنفيذ؛
+  `BaseSwarmAgent` اكتسب `execution_gateway=` وتوصيل تلقائي من الوالد عبر
+  `planner_swarm`؛ `bootstrap.build_agent` يمرر البوابة.
+- **الطفرات 4/4:** fallback عند الرفض (1 failed) — fallback عند الفشل (1) —
+  إزالة رفض الـ Swarm (3) — تجاهل الربط كلياً (5).
+- الاختبارات: `tests/test_binding_migration.py` (8: sabotage للوكيل والـ Swarm)
+  = **270 passed**؛ Arena v9 بلا انحراف. التفاصيل الكاملة:
+  `docs/T7.1-BINDING-AUDIT.md`.
+
 ### P1-T3 — Git آمن
 - `git_tool.py`: `git_status/git_diff/git_add/git_commit/git_log` فقط — registry-level deny لأي subcommand آخر (لا push/remote/reset/clean)، هوية commit من env مُعلن، رسالة commit تُسجل في audit.
 - **Evidence:** اختبار deny شامل + اختبار دورة commit محلية داخل workspace + صف مصفوفة.

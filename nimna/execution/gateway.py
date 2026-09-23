@@ -137,7 +137,8 @@ class ExecutionGateway:
                  policy: Policy, authorizer: Authorizer, workspace_root: Path,
                  checkpoint_store: CheckpointStore,
                  evidence: Optional[EvidenceChain] = None,
-                 actor: str = "agent") -> None:
+                 actor: str = "agent",
+                 compat_tools: tuple[str, ...] = ()) -> None:
         self._registry = registry              # private: no public handler access
         self._catalog = catalog
         self._policy = policy
@@ -147,6 +148,10 @@ class ExecutionGateway:
         self._checkpoints = checkpoint_store
         self.evidence = evidence if evidence is not None else EvidenceChain()
         self.actor = actor
+        # EXPLICIT compatibility classification (T7.1): legacy-named tools that
+        # may keep running on the old path WHILE this gateway is bound. Empty by
+        # default ⇒ a bound gateway refuses every unregistered tool (fail-closed).
+        self.compat_tools = frozenset(compat_tools)
         self._policy_stats: dict[str, int] = {}
         self._mission_seq = 0
         self._recovery: dict[str, RecoveryManager] = {}
@@ -166,6 +171,34 @@ class ExecutionGateway:
             entry.pop("handler", None)         # redacted: no executable reference
             public.append(entry)
         return public
+
+    def invoke_for_agent(self, tool_id: str, request: Mapping[str, Any], *,
+                         actor: str, session_id: str = "", mission_id: str = "",
+                         verify_spec: tuple[dict[str, Any], ...] = (),
+                         resource: str = "workspace",
+                         requested_operation: str = "",
+                         grant: Optional[AuthorizationGrant] = None,
+                         granted_capabilities: Optional[tuple[str, ...]] = None):
+        """The binding entry both Agent and swarm agents share: builds the
+        InvocationContext (grants default to the operator binding; granted
+        capabilities default to the union of registered tools) and crosses."""
+        if granted_capabilities is None:
+            granted_capabilities = tuple(sorted({
+                cap for entry in self.list_tools()
+                for cap in (entry.get("capabilities") or [])
+            }))
+        if grant is None:
+            # the operator binding supplies consent; the grant follows the
+            # REQUESTER so actor mismatches cannot silently occur
+            grant = AuthorizationGrant(actor=actor, tool_id=tool_id,
+                                       policy_version=self._policy.version)
+        context = InvocationContext(
+            actor=actor, session_id=session_id, mission_id=mission_id,
+            granted_capabilities=tuple(granted_capabilities), authorization=grant,
+            requested_operation=requested_operation or tool_id,
+            resource=resource, verify_spec=tuple(verify_spec),
+        )
+        return self.invoke(tool_id, request, context)
 
     @property
     def policy_identity(self) -> dict[str, str]:

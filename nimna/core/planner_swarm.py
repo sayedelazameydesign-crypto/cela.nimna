@@ -205,6 +205,7 @@ class PlannerSwarm:
                     tools=parent_agent.tools,
                     workspace=parent_agent.workspace,
                     session_id=session_id,
+                    execution_gateway=getattr(parent_agent, "execution_gateway", None),
                 )
                 # annotate for orchestrator visibility
                 t.status = "running"

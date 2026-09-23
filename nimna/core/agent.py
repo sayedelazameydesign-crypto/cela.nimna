@@ -586,46 +586,68 @@ class Agent:
         else:
             state.consecutive_failures += 1
 
+    @staticmethod
+    def _compact_tool_result(payload: dict, limit: int) -> str:
+        # json is shadowed inside _run_tool (late `import base64, json`), so the
+        # gateway branches serialize through this module-level helper.
+        return json.dumps(payload, ensure_ascii=False, default=str)[:limit]
+
     def _invoke_via_gateway(self, state: RunState, tool: Tool, call: ToolCall,
                             ctx: ToolContext):
         """P1-T7 — the single governed path: Registry → Capability → Policy →
         Authorization → Executor → Observe → Verify → Checkpoint → Evidence."""
-        from ..execution.gateway import InvocationContext
-        from ..execution.policy import AuthorizationGrant
         gateway = self.execution_gateway
-        granted = tuple(sorted({cap for entry in gateway.list_tools()
-                                for cap in (entry.get("capabilities") or [])}))
-        grant = ctx.extras.get("authorization_grant")
-        if grant is None:
-            # the operator bound this gateway — that binding is the consent;
-            # narrow it per-call via ctx.extras["authorization_grant"].
-            grant = AuthorizationGrant(actor=gateway.actor, tool_id=tool.name,
-                                       policy_version=gateway.policy_identity["policy_version"])
-        context = InvocationContext(
-            actor=gateway.actor, session_id=state.session_id, mission_id=state.run_id,
-            granted_capabilities=granted, authorization=grant,
-            requested_operation=tool.name,
-            resource=str(call.arguments.get("resource") or "workspace"),
-            verify_spec=tuple(ctx.extras.get("verify_spec") or ()),
-        )
         started = time.perf_counter()
-        outcome = gateway.invoke(tool.name, call.arguments, context)
+        outcome = gateway.invoke_for_agent(
+            tool.name, call.arguments,
+            actor=gateway.actor, session_id=state.session_id, mission_id=state.run_id,
+            grant=ctx.extras.get("authorization_grant"),          # None ⇒ operator binding
+            verify_spec=tuple(ctx.extras.get("verify_spec") or ()),
+            resource=str(call.arguments.get("resource") or "workspace"),
+            requested_operation=tool.name,
+        )
         payload = {"status": outcome.execution_status, "ok": outcome.ok,
                    "reason": outcome.reason[:200],
                    "result": outcome.result if outcome.handler_called else None,
                    "evidence_digest": (outcome.record or {}).get("hash", "")}
-        result = json.dumps(payload, ensure_ascii=False, default=str)[: self.settings.tool_result_max_chars]
+        result = self._compact_tool_result(payload, self.settings.tool_result_max_chars)
         return result, outcome.ok, int((time.perf_counter() - started) * 1000)
 
     def _run_tool(self, state: RunState, tool: Tool, call: ToolCall, ctx: ToolContext,
                   approved: Optional[bool]) -> None:
         self._audit(state, "tool_call", {"tool": tool.name, "arguments": call.arguments})
-        if getattr(self, "execution_gateway", None) is not None and self.execution_gateway.has(tool.name):
-            result, ok, duration_ms = self._invoke_via_gateway(state, tool, call, ctx)
-        else:
+        gateway = getattr(self, "execution_gateway", None)
+        if gateway is None:
+            # declared compatibility: no gateway bound ⇒ legacy path (T7.1)
             result, ok, duration_ms = self.tools.execute(
                 tool.name, call.arguments, ctx, max_chars=self.settings.tool_result_max_chars
             )
+        elif gateway.has(tool.name):
+            try:
+                result, ok, duration_ms = self._invoke_via_gateway(state, tool, call, ctx)
+            except Exception as exc:  # noqa: BLE001 — fail-closed: never legacy-fallback
+                self._audit(state, "gateway_error",
+                            {"tool": tool.name, "error": exc.__class__.__name__})
+                result = self._compact_tool_result(
+                    {"status": "GATEWAY_ERROR", "ok": False,
+                     "reason": f"{exc.__class__.__name__}: {str(exc)[:120]}"}, 10_000)
+                ok, duration_ms = False, 0
+        elif tool.name in getattr(gateway, "compat_tools", frozenset()):
+            # EXPLICIT compatibility list on the gateway — audited, never silent
+            self._audit(state, "gateway_compat", {"tool": tool.name})
+            result, ok, duration_ms = self.tools.execute(
+                tool.name, call.arguments, ctx, max_chars=self.settings.tool_result_max_chars
+            )
+        else:
+            # invariant (T7.1): bound gateway + unregistered tool ⇒ NO handler
+            self._audit(state, "gateway_refused",
+                        {"tool": tool.name,
+                         "reason": "not registered in the bound gateway (fail-closed binding)"})
+            result = self._compact_tool_result(
+                {"status": "NOT_IN_GATEWAY", "ok": False,
+                 "reason": (f"{tool.name}: this agent is gateway-bound and the tool "
+                            "is not registered in the gateway registry (fail-closed)")}, 10_000)
+            ok, duration_ms = False, 0
         state.messages.append(Message.tool_result(call, result))
         state.tool_calls.append(ToolCallRecord(name=tool.name, arguments=call.arguments, ok=ok,
                                                duration_ms=duration_ms, approved=approved,
