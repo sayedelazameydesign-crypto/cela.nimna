@@ -314,6 +314,14 @@ docker compose --profile local-sandbox up --build   # يشغل nimna-sandbox م�
   - لا تعتبر `subprocess` عزلًا أمنيًا
   - الـ `mock` والاختبارات لا يثبتان نجاح الاتصال بمزود حقيقي — يجب اختبار Gemini/NVIDIA فعليًا قبل الإنتاج
 
+```text
+لا تستخدم --profile local-sandbox على جهاز يحتوي بيانات حساسة
+لا تشغّل الخدمة كـ root
+لا تضع مفاتيح API داخل صورة Docker
+لا تعتبر subprocess عزلًا أمنيًا
+الـ mock والاختبارات لا يثبتان نجاح الاتصال بمزود حقيقي
+```
+
 ---
 
 ## الترخيص والأمان
