@@ -1,0 +1,21 @@
+# Arena task — arabic_long: structured Arabic educational plan.
+id: arabic-02-lesson-plan
+title: "خطة درس برمجة للمبتدئين"
+category: arabic_long
+prompt: >-
+  اكتب خطة درس مدتها 60 دقيقة لتعليم أساسيات بايثون للمبتدئين،
+  موزعة على أنشطة بأوقات محددة، واحفظها في lessons/plan.md.
+requires: []
+allowed_tools: ["write_file", "load_skill"]
+max_steps: 8
+max_tool_calls: 10
+timeout_s: 180
+expected_artifacts:
+  - path: lessons/plan.md
+    contains: ""
+must_include: []
+must_not_include: []
+judge_rubric: |-
+  1) التوزيع الزمني يغطي 60 دقيقة فعلاً.
+  2) أنشطة متدرجة الصعوبة مناسبة للمبتدئين.
+  3) عربية سليمة وبنية Markdown واضحة.

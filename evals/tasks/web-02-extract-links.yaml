@@ -1,0 +1,21 @@
+# Arena task — web: structured extraction (needs network; SKIPPED offline).
+id: web-02-extract-links
+title: "Extract documentation links"
+category: web
+prompt: >-
+  اجلب https://docs.python.org/3/library/sqlite3.html واستخرج روابط
+  الأقسام الرئيسية إلى ملف web/sqlite_links.md كقائمة Markdown.
+requires: ["network"]
+allowed_tools: ["fetch_url", "write_file", "load_skill"]
+max_steps: 10
+max_tool_calls: 15
+timeout_s: 180
+expected_artifacts:
+  - path: web/sqlite_links.md
+    contains: ""
+must_include: []
+must_not_include: []
+judge_rubric: |-
+  1) الملف قائمة Markdown من روابط.
+  2) الروابط داخل صفحة sqlite3_docs فقط.
+  3) لا روابط مكررة.

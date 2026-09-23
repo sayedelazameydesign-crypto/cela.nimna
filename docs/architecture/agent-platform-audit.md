@@ -275,6 +275,10 @@ Evidence لا claim، Recovery bounded) ونضيف طبقة واحدة جديد�
 > و`verify_capabilities.py` → PASS.
 
 ### P0.5-T1 — بنية المجموعة والعدّاء
+
+> **✅ الحالة: نُفِّذت.** الدليل: `evals/tasks/` (10 مهام) + `scripts/run_arena_suite.py` +
+> `evals/ledger/BASELINE-mock.md` (baseline موثَّق: 8 ran / 2 skipped / 0 error / mean 43.8) +
+> `tests/test_arena_suite.py` (13 اختباراً + فحص طفرة) + صفّا G15/Capability في المصفوفتين.
 - أنشئ `evals/tasks/*.yaml` (10 مهام: id, category, prompt, allowed_tools, max_steps, expected_artifacts, judge_rubric).
 - أنشئ `scripts/run_arena_suite.py` (stdlib + يعيد استخدام evaluate_arena.py للبوابات الثابتة): يشغّل `Agent` بمزود mock على كل مهمة، يجمع outcome، يصدر Markdown/JSON، حالات MOCKED/SKIPPED/ERROR بلافتات (نفس عقد الأمانة).
 - `evals/ledger/` SQLite: run_id, task_id, mode, model, score, verdict, ts, repo_version.

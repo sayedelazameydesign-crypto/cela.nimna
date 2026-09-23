@@ -34,6 +34,7 @@
 | Signed release / SBOM / SLSA | planned | — | release workflow must add artifacts | `release` |
 | Arabic evaluation suite | planned | — | capability row reserved, no PASS claim | `evaluation` |
 | PR diff evaluation gate (Arena) | implemented | `scripts/evaluate_arena.py`, `.github/workflows/arena_diff_eval.yml` | `tests/test_evaluate_arena.py`; remote Arena API is opt-in (`SKIPPED` without key); LLM-as-a-Judge is opt-in via `OPENAI_API_KEY` on any OpenAI-compatible endpoint (`SKIPPED` without key, `ERROR` banner on failure, verdict advisory) | `evaluation/ci` |
+| Arena task suite runner (P0.5) | implemented | `evals/tasks/` (10 tasks), `scripts/run_arena_suite.py` | `tests/test_arena_suite.py`; mock mode only — verdicts are `MOCKED` with a banner, live scoring + LLM judge arrive in P5 | `evaluation` |
 
 ## Status vocabulary
 

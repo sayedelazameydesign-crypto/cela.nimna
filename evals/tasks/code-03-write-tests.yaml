@@ -1,0 +1,30 @@
+# Arena task — coding: write unit tests for a seeded module.
+id: code-03-write-tests
+title: "Write pytest tests for calc.py"
+category: coding
+prompt: >-
+  اقرأ الملف app/calc.py ثم اكتب اختبارات pytest في tests/test_calc.py
+  تغطي الدالتين add وmul بحالتين عادتين وحالة صفر على الأقل.
+requires: []
+allowed_tools: ["read_file", "write_file", "list_files", "run_python", "load_skill"]
+max_steps: 12
+max_tool_calls: 20
+timeout_s: 180
+seed_files:
+  - path: app/calc.py
+    content: |
+      def add(a, b):
+          return a + b
+
+
+      def mul(a, b):
+          return a * b
+expected_artifacts:
+  - path: tests/test_calc.py
+    contains: "def test_"
+must_include: ["test"]
+must_not_include: []
+judge_rubric: |-
+  1) tests/test_calc.py موجود ويستخدم pytest.
+  2) يغطي add وmul مع حالة صفر.
+  3) الاختبارات تمر فعلاً لو شغّلتها.

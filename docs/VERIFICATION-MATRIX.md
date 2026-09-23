@@ -20,6 +20,7 @@
 | G12 Production sandbox | Docker/microVM security review | deployment | PARTIAL until external sandbox | `SECURITY.md` |
 | G13 Release integrity | manifest + lock + SBOM + provenance | CI/release | PLANNED | release workflow |
 | G14 PR diff evaluation | `python scripts/evaluate_arena.py --diff_file changes.diff` | offline (static) / remote Arena opt-in / LLM judge opt-in | PASS (report) · benchmark SKIPPED unless `ARENA_API_URL`+`ARENA_API_KEY` · judge SKIPPED unless `OPENAI_API_KEY` (verdict advisory; `MOCKED`/`ERROR` get a top banner) | workflow `arena_diff_eval.yml`, `tests/test_evaluate_arena.py`, PR comment + artifact |
+| G15 Arena task suite (agent benchmark) | `python scripts/run_arena_suite.py --mode mock` | offline (MockProvider) / live opt-in | report + ledger rows · verdicts `MOCKED` (banner, never PASS) · `SKIPPED` for missing capabilities (network/shell) · regression flag vs ledger | `evals/tasks/` (10), `evals/ledger/BASELINE-mock.md`, `tests/test_arena_suite.py` |
 
 ## Interpretation
 

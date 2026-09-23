@@ -1,0 +1,330 @@
+{
+  "version": 1,
+  "mode": "mock",
+  "repo_version": "f5cc23a",
+  "generated_at": "2026-09-23T17:09:57+00:00",
+  "rows": [
+    {
+      "task_id": "arabic-01-market-brief",
+      "category": "arabic_long",
+      "title": "موجز سوقي عربي من ملاحظات داخلية",
+      "mode": "mock",
+      "verdict": "MOCKED",
+      "score": 0.0,
+      "checks_passed": 0,
+      "checks_total": 1,
+      "checks": [
+        {
+          "name": "artifact:briefs/market_brief.md",
+          "ok": false,
+          "detail": "missing"
+        }
+      ],
+      "secret_hits": [],
+      "model": "mock",
+      "status_detail": "mock provider run — deterministic checks only",
+      "tools_called": [],
+      "skills_used": [
+        "computer_control",
+        "skill_author",
+        "web_research"
+      ],
+      "requires": [],
+      "run_id": "79264cd5edbd435f",
+      "ts": "2026-09-23T17:09:57+00:00",
+      "repo_version": "f5cc23a",
+      "previous_score": null
+    },
+    {
+      "task_id": "arabic-02-lesson-plan",
+      "category": "arabic_long",
+      "title": "خطة درس برمجة للمبتدئين",
+      "mode": "mock",
+      "verdict": "MOCKED",
+      "score": 0.0,
+      "checks_passed": 0,
+      "checks_total": 1,
+      "checks": [
+        {
+          "name": "artifact:lessons/plan.md",
+          "ok": false,
+          "detail": "missing"
+        }
+      ],
+      "secret_hits": [],
+      "model": "mock",
+      "status_detail": "mock provider run — deterministic checks only",
+      "tools_called": [],
+      "skills_used": [
+        "computer_control",
+        "skill_author",
+        "web_research"
+      ],
+      "requires": [],
+      "run_id": "59d7990f5caa4035",
+      "ts": "2026-09-23T17:09:57+00:00",
+      "repo_version": "f5cc23a",
+      "previous_score": null
+    },
+    {
+      "task_id": "code-01-fizzbuzz-module",
+      "category": "coding",
+      "title": "Create a fizzbuzz module",
+      "mode": "mock",
+      "verdict": "MOCKED",
+      "score": 50.0,
+      "checks_passed": 1,
+      "checks_total": 2,
+      "checks": [
+        {
+          "name": "artifact:src/fizzbuzz.py",
+          "ok": false,
+          "detail": "missing"
+        },
+        {
+          "name": "reply contains 'fizzbuzz'",
+          "ok": true,
+          "detail": "ok"
+        }
+      ],
+      "secret_hits": [],
+      "model": "mock",
+      "status_detail": "mock provider run — deterministic checks only",
+      "tools_called": [],
+      "skills_used": [
+        "report_writer",
+        "skill_author"
+      ],
+      "requires": [],
+      "run_id": "82922647a0814907",
+      "ts": "2026-09-23T17:09:57+00:00",
+      "repo_version": "f5cc23a",
+      "previous_score": null
+    },
+    {
+      "task_id": "code-02-fix-buggy-mean",
+      "category": "coding",
+      "title": "Fix the division bug in mean.py",
+      "mode": "mock",
+      "verdict": "MOCKED",
+      "score": 100.0,
+      "checks_passed": 2,
+      "checks_total": 2,
+      "checks": [
+        {
+          "name": "artifact:scripts_src/mean.py",
+          "ok": true,
+          "detail": "contains ok"
+        },
+        {
+          "name": "reply contains 'mean'",
+          "ok": true,
+          "detail": "ok"
+        }
+      ],
+      "secret_hits": [],
+      "model": "mock",
+      "status_detail": "mock provider run — deterministic checks only",
+      "tools_called": [],
+      "skills_used": [
+        "python_executor",
+        "csv_analysis",
+        "file_analysis"
+      ],
+      "requires": [],
+      "run_id": "92d147c4aa0747a9",
+      "ts": "2026-09-23T17:09:57+00:00",
+      "repo_version": "f5cc23a",
+      "previous_score": null
+    },
+    {
+      "task_id": "code-03-write-tests",
+      "category": "coding",
+      "title": "Write pytest tests for calc.py",
+      "mode": "mock",
+      "verdict": "MOCKED",
+      "score": 50.0,
+      "checks_passed": 1,
+      "checks_total": 2,
+      "checks": [
+        {
+          "name": "artifact:tests/test_calc.py",
+          "ok": false,
+          "detail": "missing"
+        },
+        {
+          "name": "reply contains 'test'",
+          "ok": true,
+          "detail": "ok"
+        }
+      ],
+      "secret_hits": [],
+      "model": "mock",
+      "status_detail": "mock provider run — deterministic checks only",
+      "tools_called": [],
+      "skills_used": [
+        "computer_control",
+        "file_analysis",
+        "csv_analysis"
+      ],
+      "requires": [],
+      "run_id": "d642d793d72f4eae",
+      "ts": "2026-09-23T17:09:57+00:00",
+      "repo_version": "f5cc23a",
+      "previous_score": null
+    },
+    {
+      "task_id": "code-04-refactor-split",
+      "category": "coding",
+      "title": "Split process_order into small functions",
+      "mode": "mock",
+      "verdict": "MOCKED",
+      "score": 100.0,
+      "checks_passed": 1,
+      "checks_total": 1,
+      "checks": [
+        {
+          "name": "artifact:orders/process_order.py",
+          "ok": true,
+          "detail": "contains ok"
+        }
+      ],
+      "secret_hits": [],
+      "model": "mock",
+      "status_detail": "mock provider run — deterministic checks only",
+      "tools_called": [],
+      "skills_used": [
+        "csv_analysis",
+        "file_analysis",
+        "computer_control"
+      ],
+      "requires": [],
+      "run_id": "5b0d39a44b2c4217",
+      "ts": "2026-09-23T17:09:57+00:00",
+      "repo_version": "f5cc23a",
+      "previous_score": null
+    },
+    {
+      "task_id": "data-01-csv-summary",
+      "category": "data",
+      "title": "Summarize sales.csv totals per region",
+      "mode": "mock",
+      "verdict": "MOCKED",
+      "score": 50.0,
+      "checks_passed": 1,
+      "checks_total": 2,
+      "checks": [
+        {
+          "name": "artifact:reports/sales_summary.md",
+          "ok": false,
+          "detail": "missing"
+        },
+        {
+          "name": "reply contains 'sales'",
+          "ok": true,
+          "detail": "ok"
+        }
+      ],
+      "secret_hits": [],
+      "model": "mock",
+      "status_detail": "mock provider run — deterministic checks only",
+      "tools_called": [],
+      "skills_used": [
+        "csv_analysis",
+        "report_writer",
+        "skill_author"
+      ],
+      "requires": [],
+      "run_id": "55ad3bfc061a48af",
+      "ts": "2026-09-23T17:09:57+00:00",
+      "repo_version": "f5cc23a",
+      "previous_score": null
+    },
+    {
+      "task_id": "data-02-json-transform",
+      "category": "data",
+      "title": "Sort orders by amount",
+      "mode": "mock",
+      "verdict": "MOCKED",
+      "score": 0.0,
+      "checks_passed": 0,
+      "checks_total": 1,
+      "checks": [
+        {
+          "name": "artifact:data/orders_sorted.json",
+          "ok": false,
+          "detail": "missing"
+        }
+      ],
+      "secret_hits": [],
+      "model": "mock",
+      "status_detail": "mock provider run — deterministic checks only",
+      "tools_called": [],
+      "skills_used": [
+        "computer_control",
+        "web_research",
+        "file_analysis"
+      ],
+      "requires": [],
+      "run_id": "e1af43f73c584f20",
+      "ts": "2026-09-23T17:09:57+00:00",
+      "repo_version": "f5cc23a",
+      "previous_score": null
+    },
+    {
+      "task_id": "web-01-summarize-article",
+      "category": "web",
+      "title": "Summarize a web article in Arabic",
+      "mode": "mock",
+      "verdict": "SKIPPED",
+      "score": null,
+      "checks_passed": null,
+      "checks_total": null,
+      "checks": [],
+      "secret_hits": [],
+      "model": null,
+      "status_detail": "missing capabilities: network",
+      "tools_called": [],
+      "skills_used": [],
+      "requires": [
+        "network"
+      ],
+      "run_id": "1058025e27f44f39",
+      "ts": "2026-09-23T17:09:57+00:00",
+      "repo_version": "f5cc23a",
+      "previous_score": null
+    },
+    {
+      "task_id": "web-02-extract-links",
+      "category": "web",
+      "title": "Extract documentation links",
+      "mode": "mock",
+      "verdict": "SKIPPED",
+      "score": null,
+      "checks_passed": null,
+      "checks_total": null,
+      "checks": [],
+      "secret_hits": [],
+      "model": null,
+      "status_detail": "missing capabilities: network",
+      "tools_called": [],
+      "skills_used": [],
+      "requires": [
+        "network"
+      ],
+      "run_id": "0003b08728ea4330",
+      "ts": "2026-09-23T17:09:57+00:00",
+      "repo_version": "f5cc23a",
+      "previous_score": null
+    }
+  ],
+  "summary": {
+    "tasks": 10,
+    "ran": 8,
+    "skipped": 2,
+    "error": 0,
+    "mean_score": 43.8,
+    "secret_hits": 0
+  },
+  "regressions": []
+}

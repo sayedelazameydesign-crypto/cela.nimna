@@ -1,0 +1,27 @@
+# Arena task — arabic_long: long-form Arabic deliverable from seeded data.
+id: arabic-01-market-brief
+title: "موجز سوقي عربي من ملاحظات داخلية"
+category: arabic_long
+prompt: >-
+  بناءً على الملاحظات في notes/obs.txt اكتب موجزاً سوقياً بالعربية
+  (مقدمة + 3 محاور + خلاصة وتوصية) واحفظه في briefs/market_brief.md.
+requires: []
+allowed_tools: ["read_file", "write_file", "list_files", "load_skill"]
+max_steps: 12
+max_tool_calls: 16
+timeout_s: 240
+seed_files:
+  - path: notes/obs.txt
+    content: |
+      - نمو طلب على قواعد المتجهات في الشرق الأوسط 30% سنوياً.
+      - المنافسون الرئيسيون يركزون على التسعير للمطورين الأفراد.
+      - شكاوى العملاء تتركز في غياب أدوات المراقبة العربية.
+expected_artifacts:
+  - path: briefs/market_brief.md
+    contains: ""
+must_include: []
+must_not_include: []
+judge_rubric: |-
+  1) البنية: مقدمة + 3 محاور + خلاصة وتوصية.
+  2) عربية سليمة وواضحة.
+  3) كل محور يستند إلى سطر من الملاحظات لا رأياً مجانياً.

@@ -1,0 +1,30 @@
+# Arena task — data: compute a deterministic CSV summary.
+id: data-01-csv-summary
+title: "Summarize sales.csv totals per region"
+category: data
+prompt: >-
+  اقرأ data/sales.csv واكتب تقرير reports/sales_summary.md فيه إجمالي
+  المبيعات لكل منطقة والإجمالي الكلي بأرقام صحيحة.
+requires: []
+allowed_tools: ["read_file", "write_file", "run_python", "list_files", "load_skill"]
+max_steps: 12
+max_tool_calls: 20
+timeout_s: 180
+seed_files:
+  - path: data/sales.csv
+    content: |
+      region,amount
+      east,100
+      west,250
+      east,50
+      south,75
+      west,25
+expected_artifacts:
+  - path: reports/sales_summary.md
+    contains: ""
+must_include: ["sales"]
+must_not_include: []
+judge_rubric: |-
+  1) east=150 وwest=275 وsouth=75 والكلي=500.
+  2) التقرير Markdown في المسار المطلوب.
+  3) لا أرقام مخترعة خارج الملف.

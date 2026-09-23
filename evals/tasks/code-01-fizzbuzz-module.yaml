@@ -1,0 +1,22 @@
+# Arena task — coding: create a small module with a deterministic API.
+id: code-01-fizzbuzz-module
+title: "Create a fizzbuzz module"
+category: coding
+prompt: >-
+  أنشئ ملفاً جديداً باسم fizzbuzz.py داخل مجلد src يحتوي دالة
+  fizzbuzz(n) تُعيد قائمة النتائج من 1 إلى n مع قواعد Fizz وBuzz،
+  ثم اطبع أول 15 نتيجة.
+requires: []
+allowed_tools: ["write_file", "run_python", "list_files", "load_skill"]
+max_steps: 12
+max_tool_calls: 20
+timeout_s: 180
+expected_artifacts:
+  - path: src/fizzbuzz.py
+    contains: "def fizzbuzz"
+must_include: ["fizzbuzz"]
+must_not_include: []
+judge_rubric: |-
+  1) الملف src/fizzbuzz.py موجود وفيه الدالة المطلوبة بتوقيع صحيح.
+  2) منطق Fizz/Buzz صحيح عند n=15 (3->Fizz, 5->Buzz, 15->FizzBuzz).
+  3) لا أكواد ينفذها الاستيراد مباشرة دون حماية __main__ إن كان الطباعة مطلوبة.
