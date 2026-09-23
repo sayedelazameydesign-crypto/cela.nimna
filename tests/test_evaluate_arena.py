@@ -106,20 +106,39 @@ def test_benchmark_is_skipped_without_api_and_never_claims_pass():
     assert "`main`" in markdown and "`abc123`" in markdown
 
 
+BANNER_PREFIX = "> ⚠️"
+
+
+def _first_line(markdown: str, predicate) -> int:
+    for number, line in enumerate(markdown.splitlines()):
+        if predicate(line):
+            return number
+    raise AssertionError("no line matched")
+
+
+def _assert_banner_precedes_every_table(markdown: str, banner_text: str) -> None:
+    """Structural check: the warning must come before the first Markdown table row.
+
+    Deliberately independent of header wording (e.g. "| المقياس") so a later
+    cosmetic change to the report template cannot break or bypass this test.
+    """
+    banner = _first_line(markdown, lambda line: line.startswith(BANNER_PREFIX) and banner_text in line)
+    first_table_row = _first_line(markdown, lambda line: line.startswith("|"))
+    assert banner < first_table_row, f"banner at line {banner} but first table row at line {first_table_row}"
+
+
 def test_mock_mode_is_labelled_mocked_with_top_banner():
     report = ev.build_report(SAMPLE_DIFF, env={"ARENA_EVAL_MODE": "mock"})
     assert report["benchmark"]["status"] == "MOCKED"
     assert report["benchmark"]["mode"] == "mock"
     markdown = ev.render_markdown(report)
-    banner_at = markdown.index("> ⚠️ **MOCKED RUN")
-    table_at = markdown.index("| المقياس")
-    assert banner_at < table_at  # the warning precedes every metric
+    _assert_banner_precedes_every_table(markdown, "MOCKED RUN")
     assert "ليست نتيجة تقييم حقيقية" in markdown
 
 
 def test_real_and_skipped_runs_have_no_warning_banner():
     skipped = ev.render_markdown(ev.build_report(SAMPLE_DIFF, env={}))
-    assert "> ⚠️" not in skipped
+    assert not any(line.startswith(BANNER_PREFIX) for line in skipped.splitlines())
 
 
 def test_empty_diff_reports_no_changes():
@@ -231,7 +250,7 @@ def test_remote_benchmark_failure_is_reported_as_error_not_pass(monkeypatch):
     assert report["benchmark"]["status"] == "ERROR"
     assert "secret-key-value-123" not in json.dumps(report)
     markdown = ev.render_markdown(report)
-    assert markdown.index("> ⚠️ **Arena API ERROR") < markdown.index("| المقياس")
+    _assert_banner_precedes_every_table(markdown, "Arena API ERROR")
     assert "secret-key-value-123" not in markdown
 
 
