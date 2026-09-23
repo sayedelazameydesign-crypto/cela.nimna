@@ -15,7 +15,12 @@ What it enforces (each maps to a MUST in the revision):
 * ``Content-Type: application/json``, else ``415``.
 * ``MCP-Protocol-Version`` present and equal to the body's ``_meta`` value.
 * ``Mcp-Method`` present and equal to the body's ``method``.
-* ``Mcp-Name`` present iff the method is name-bearing, and equal to the body.
+* ``Mcp-Name`` present iff the method is name-bearing, and equal to the body —
+  after decoding the ``=?base64?...?=`` sentinel, which is how a non-ASCII tool
+  name (Arabic, for instance) legally travels in a header. Decoded here with
+  ``base64`` alone: this server deliberately does not import the client's own
+  helpers, so the two implementations have to agree on the wire rather than by
+  construction.
 * ``Mcp-Param-{Name}`` headers agree with the annotated argument, when a tool
   declares ``x-mcp-header``.
 * Any header/body disagreement answers ``400`` with ``-32020``.
@@ -26,6 +31,8 @@ on sessions cannot pass against it.
 """
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import threading
 from dataclasses import dataclass, field
@@ -38,6 +45,33 @@ CODE_HEADER_MISMATCH = -32020
 CODE_UNSUPPORTED_PROTOCOL_VERSION = -32022
 CODE_METHOD_NOT_FOUND = -32601
 CODE_INVALID_PARAMS = -32602
+
+_B64_PREFIX = "=?base64?"
+_B64_SUFFIX = "?="
+
+
+class HeaderDecodeError(ValueError):
+    """A header value carries the sentinel but is not well-formed."""
+
+
+def _decoded_header(headers: Any, name: str) -> Optional[str]:
+    """Read a header the way a conforming server must.
+
+    Header values that cannot be a plain HTTP field value travel in the
+    ``=?base64?...?=`` sentinel. Comparing the raw header against the body would
+    reject every non-ASCII tool name, so the decode happens here — and a
+    malformed payload is rejected rather than compared as literal text.
+    """
+    value = headers.get(name)
+    if value is None:
+        return None
+    if not (value.startswith(_B64_PREFIX) and value.endswith(_B64_SUFFIX)):
+        return value
+    payload = value[len(_B64_PREFIX) : len(value) - len(_B64_SUFFIX)]
+    try:
+        return base64.b64decode(payload.encode("ascii"), validate=True).decode("utf-8")
+    except (binascii.Error, ValueError, UnicodeDecodeError) as exc:
+        raise HeaderDecodeError(f"{name} carries malformed base64: {exc}") from exc
 
 #: Methods that carry ``params.name`` and therefore require ``Mcp-Name``.
 NAME_BEARING = frozenset({"tools/call", "resources/read", "prompts/get"})
@@ -67,11 +101,16 @@ class MockMCPState:
     fail_tools_call: Optional[dict[str, Any]] = None
     #: Answers every POST with this HTTP status and an empty body.
     blank_status: Optional[int] = None
+    #: Raw response override, applied before header checks so a broken server
+    #: can be simulated faithfully: ``{"status": int, "content_type": str,
+    #: "body": str}``. Used to exercise invalid-response handling.
+    override: Optional[dict[str, Any]] = None
 
     def reset(self) -> None:
         self.calls.clear()
         self.fail_tools_call = None
         self.blank_status = None
+        self.override = None
 
     @property
     def called_methods(self) -> list[str]:
@@ -158,6 +197,17 @@ class _Handler(BaseHTTPRequestHandler):
             self._send_json({"error": "Content-Type must be application/json"}, status=415)
             return
 
+        if state.override is not None:
+            raw = str(state.override.get("body", "")).encode("utf-8")
+            self.send_response(int(state.override.get("status", 200)))
+            self.send_header(
+                "Content-Type", str(state.override.get("content_type", "application/json"))
+            )
+            self.send_header("Content-Length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+            return
+
         request_id = body.get("id")
         method = body.get("method")
         params = body.get("params") if isinstance(body.get("params"), dict) else {}
@@ -193,7 +243,14 @@ class _Handler(BaseHTTPRequestHandler):
             )
             return
 
-        method_header = headers.get("mcp-method")
+        try:
+            method_header = _decoded_header(headers, "mcp-method")
+            name_header = _decoded_header(headers, "mcp-name")
+        except HeaderDecodeError as exc:
+            self._send_json(
+                _jsonrpc_error(request_id, CODE_HEADER_MISMATCH, str(exc)), status=400
+            )
+            return
         if not method_header:
             self._send_json(
                 _jsonrpc_error(request_id, CODE_HEADER_MISMATCH, "Missing Mcp-Method"), status=400
@@ -211,7 +268,6 @@ class _Handler(BaseHTTPRequestHandler):
             return
 
         body_name = params.get("name") or params.get("uri")
-        name_header = headers.get("mcp-name")
         if method in NAME_BEARING:
             if not body_name:
                 self._send_json(
@@ -343,7 +399,10 @@ class _Handler(BaseHTTPRequestHandler):
                 continue
             header_name = f"mcp-param-{annotation}".lower()
             present = name in arguments and arguments[name] is not None
-            received = headers.get(header_name)
+            try:
+                received = _decoded_header(headers, header_name)
+            except HeaderDecodeError as exc:
+                return str(exc)
             if present and received is None:
                 return f"missing required header Mcp-Param-{annotation}"
             if present:
@@ -428,3 +487,54 @@ __all__ = [
     "RecordedRequest",
     "default_tools",
 ]
+
+
+def arabic_tools() -> dict[str, dict[str, Any]]:
+    """Tools with Arabic names, descriptions and parameters.
+
+    Includes the spec's ASCII constraint on header *names*: ``x-mcp-header``
+    values must match the HTTP field-name token syntax, so an Arabic label is
+    invalid even though the parameter it annotates is Arabic. A client must
+    exclude that tool rather than emit a header nobody can validate.
+    """
+    return {
+        "طقس": {
+            "name": "طقس",
+            "description": "يعرض حالة الطقس لمدينة معينة.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "مدينة": {"type": "string", "description": "اسم المدينة"},
+                    "أيام": {"type": "integer", "description": "عدد الأيام", "default": 1},
+                },
+                "required": ["مدينة"],
+            },
+        },
+        "بحث_متقدم": {
+            "name": "بحث_متقدم",
+            "description": "بحث في منطقة محددة بعنوان ASCII للترويسة.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "المنطقة": {"type": "string", "x-mcp-header": "Region"},
+                    "الاستعلام": {"type": "string"},
+                },
+                "required": ["المنطقة", "الاستعلام"],
+            },
+        },
+        "ترويسة_عربية": {
+            "name": "ترويسة_عربية",
+            # Invalid: an Arabic x-mcp-header value is not a legal HTTP field
+            # name, so this tool must be excluded from tools/list.
+            "description": "أداة بترويسة عربية غير صالحة.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "المنطقة": {"type": "string", "x-mcp-header": "المنطقة"},
+                },
+            },
+        },
+    }
+
+
+__all__ += ["arabic_tools"]

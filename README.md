@@ -1,6 +1,6 @@
 # Nimna — وكيل ذكي قابل لإعادة استخدام المهارات (Reusable-Skills Agent)
 
-> **الحالة: Release Candidate Sprint 2 — Vector Memory (Qdrant + fallback, 768-dim) + 26 أداة — 196 اختبارًا**
+> **الحالة: Release Candidate Sprint 2 — Vector Memory (Qdrant + fallback, 768-dim) + 26 أداة — 239 اختبارًا**
 > الاختبارات لا تثبت الأمان المطلق. الحاويات تشترك في **نواة المضيف**؛ أبقِ المضيف وDocker محدثين واستخدم **seccomp/AppArmor/SELinux**. لا تستخدم `subprocess` كعزل أمني، ولا تعتبر `mock` دليل اتصال حقيقي.
 
 وكيل عام يعمل فوق **مفتاح Gemini المجاني** (أو NVIDIA NIM أو أي نموذج OpenAI-compatible) بمكتبة مهارات `SKILL.md` قابلة للتبديل:
@@ -53,7 +53,7 @@ nimna ask "حلّل ملف المبيعات وأنشئ تقريراً"
 nimna chat                               # تفاعلي — الموافقات في الطرفية
 PORT=8001 nimna serve                    # واجهة + REST  http://localhost:8001
 nimna doctor --offline
-pytest -q                                # 196 اختبار بلا مفتاح (mock)
+pytest -q                                # 239 اختبار بلا مفتاح (mock)
 ```
 
 بدون مفتاح: `MODEL_PROVIDER=mock nimna serve` — ترى اختيار المهارات والأدوات حياً والردود فقط وهمية.
@@ -90,7 +90,7 @@ nimna/
 └── cli.py               # nimna ask|chat|skills|tools|serve|approvals|resume|doctor
 skills/                  # 10 مهارات — أضف مجلد = مهارة جديدة
 workspace/               # مساحة عمل مقيدة (كل أدوات الملفات مسجونة داخلها)
-tests/                   # 196 اختبار — بلا شبكة (منها 23 تكامل MCP على socket حقيقي)
+tests/                   # 239 اختبار — بلا شبكة (منها 23 تكامل MCP على socket حقيقي، و25 تقييم عربي، و18 ثابت أمني)
 ```
 
 **دورة طلب واحد** ـ «حلّل المبيعات»:
@@ -341,7 +341,7 @@ docker compose --profile computer up -d desktop    # سطح مكتب معزول 
 
 ```bash
 nimna doctor --offline   # .env, مفاتيح, Docker, صلاحيات, SQLite, مخططات الأدوات
-pytest -q                # 196 اختبار (mock) — بلا شبكة
+pytest -q                # 239 اختبار (mock) — بلا شبكة
 nimna skills validate    # صياغة SKILL.md + restricted
 nimna tools              # 26 أداة مع risk ( +3 vector memory + Browser Use V4)
 curl -s localhost:8001/api/health | jq
@@ -400,10 +400,27 @@ Mission Runtime
 نفسه (مواصفة `2026-07-28` تسمح بأي JSON Schema 2020-12، وإعادة إنتاجه عبر
 Pydantic ستغيّره بصمت).
 
+أسماء الأدوات ليست ASCII بالضرورة: خادم عربي يعلن `طقس`، والاسم البعيد يبقى كما
+هو على السلك (مرمّزاً بـ`=?base64?...?=` عند الحاجة)، بينما يرى النموذج اسماً
+محلياً آمناً (`nimna/mcp/naming.py`)، لأن واجهات استدعاء الدوال ترفض أسماء غير
+ASCII. النطاق يقبل نمطاً عربياً مثل `mcp__*__طقس*` بدون تغيير.
+
 **ما يبقى غير مثبت:** لا يوجد اختبار مقابل خادم MCP طرف ثالث حقيقي؛ اختبار
 التكامل يستخدم خادماً حقيقياً داخل المستودع على socket حقيقي يتحقق من الترويسات
 ويرفض `-32020` عند الاختلاف. لذلك `G18` = `BLOCKED` في `docs/VERIFICATION-MATRIX.md`.
 التفاصيل في [`docs/mcp-gateway.md`](docs/mcp-gateway.md).
+
+### التقييم العربي (حوكمة الأدوات بالعربية — `G21`/`G22`)
+
+`tests/test_arabic_evaluation.py` (25 اختباراً) و`tests/test_mcp_security_invariants.py`
+(18 اختباراً) يغطيان المسارات الثمانية — أداة محلية آمنة، أداة تتطلب موافقة، أداة
+MCP بعيدة، رفض النطاق، رفض السياسة، رفض المستخدم، فشل الاتصال/استجابة غير صالحة،
+وإشعارات مرتبطة بـ`run_id` — بمدخلات ورسائل وسجلات عربية، مع ثوابت أمنية مقفلة
+باختبارات يفشل كل منها عند إزالة الضمان (مُثبت بالطفرة).
+
+**حدّ صريح:** هذا تقييم لمسارات الحوكمة، **لا لجودة النموذج**: كل الحالات تعمل على
+مزوّد وهمي (`MockProvider`) بلا شبكة، فلا شيء فيه يقول كيف يستدل نموذج حقيقي
+بالعربية. التغطية الكاملة في [`docs/arabic-evaluation.md`](docs/arabic-evaluation.md).
 
 Endpoints الجديدة:
 

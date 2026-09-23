@@ -25,7 +25,6 @@ authority. That asymmetry is intentional and stated rather than hidden.
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping, Optional, Sequence
 
@@ -33,7 +32,13 @@ from pydantic import BaseModel, ConfigDict
 
 from ..tools.base import Tool, ToolContext, ToolError, ToolRegistry
 from .contract import ToolDefinition
-from .gateway import MCPGateway, namespaced_tool_name
+from .gateway import MCPGateway
+from .naming import (
+    MCPNameError,
+    encode_tool_name_element,
+    namespaced_tool_name,
+    validate_server_name,
+)
 
 log = logging.getLogger(__name__)
 
@@ -43,11 +48,18 @@ MCP_TAG = "mcp"
 #: Name of the gateway placed in ``ToolContext.extras``.
 GATEWAY_KEY = "mcp_gateway"
 
+#: Name of the approval ledger placed in ``ToolContext.extras``. The agent adds
+#: a remote tool here only after the call cleared scope, policy and approval, so
+#: the handler's ``explicit_consent=True`` is backed by evidence from the run
+#: instead of being asserted by whoever built the context.
+APPROVED_KEY = "mcp_approved_tools"
+
 #: Stop a misbehaving server from flooding the registry (and the prompt).
 DEFAULT_MAX_TOOLS_PER_SERVER = 64
 
-#: The name element of a namespaced tool, e.g. ``mcp__demo__get_weather``.
-_NAME_ELEMENT_RE = re.compile(r"^[a-z0-9][a-z0-9_\-]{0,62}$")
+#: Local name elements are derived, never taken from the server verbatim: the
+#: registry, the capability scope and the model all see an escaped ASCII name,
+#: while the wire keeps the server's own name. See :mod:`nimna.mcp.naming`.
 
 
 class MCPToolError(ToolError):
@@ -149,13 +161,12 @@ def validate_arguments(schema: Any, arguments: Mapping[str, Any]) -> None:
 # --------------------------------------------------------------------------
 
 
-def _require_valid_name_element(value: str, kind: str) -> str:
-    if not _NAME_ELEMENT_RE.match(str(value or "")):
-        raise ValueError(
-            f"MCP {kind} {value!r} cannot be expressed as a tool name element; "
-            f"expected {_NAME_ELEMENT_RE.pattern!r}"
-        )
-    return str(value)
+def local_tool_name(server: str, remote_name: str) -> str:
+    """The registry-visible name for a remote tool.
+
+    Exposed so a caller can compute a scope without building the tool first.
+    """
+    return namespaced_tool_name(server, remote_name)
 
 
 def build_mcp_handler(
@@ -173,7 +184,25 @@ def build_mcp_handler(
                 "MCP gateway is not available in this run; remote tools cannot be called"
             )
         arguments = params.arguments() if hasattr(params, "arguments") else dict(params)
+        # Argument validation runs first: it is local, side-effect free, and a
+        # clearer error for the model than "not approved". Refusing either way
+        # happens before any request is built.
         validate_arguments(schema, arguments)
+
+        approved = ctx.extras.get(APPROVED_KEY)
+        # The ledger holds local names, because that is the name the agent gates
+        # on; the wire name is not checked here.
+        local_name = namespaced_tool_name(server, tool)
+        if not approved or local_name not in approved:
+            # Evidence, not assumption. The agent adds the tool here only after
+            # the call survived scope, policy and the approval gate, so a caller
+            # that invokes this handler directly — bypassing the agent loop —
+            # fails closed instead of running with consent it granted itself.
+            raise MCPToolError(
+                f"remote tool {local_name!r} was invoked without an approval "
+                "recorded for this call; only the agent loop may call a governed "
+                "MCP tool"
+            )
 
         outcome = active.call_tool(
             server,
@@ -216,8 +245,15 @@ def build_tool(
     The tool is always ``confirm`` — see the module docstring for why that is
     the load-bearing part of the double-gate design.
     """
-    _require_valid_name_element(server, "server name")
-    _require_valid_name_element(definition.name, "tool name")
+    # The server name is configuration and stays a short ASCII identifier.
+    # The remote tool name is not: MCP allows any string, so it is escaped into
+    # a local-safe element instead of being rejected. Rejecting it would make
+    # an Arabic-named tool unusable for no security benefit.
+    try:
+        validate_server_name(server)
+        encode_tool_name_element(definition.name)
+    except MCPNameError:
+        raise
 
     description = (definition.description or "").strip()
     if len(description) > description_limit:
@@ -296,19 +332,32 @@ def register_mcp_tools(
     return report
 
 
-def attach_gateway(gateway: Optional[MCPGateway], extras: Optional[dict[str, Any]] = None) -> dict[str, Any]:
-    """Return ``extras`` with the gateway attached, for ``ToolContext.extras``."""
+def attach_gateway(
+    gateway: Optional[MCPGateway],
+    extras: Optional[dict[str, Any]] = None,
+    *,
+    approved: Optional[set[str]] = None,
+) -> dict[str, Any]:
+    """Return ``extras`` with the gateway and the approval ledger attached.
+
+    ``approved`` is a mutable set the agent adds to at the execution point. It
+    is deliberately not derived from the gateway: it records what *the agent*
+    decided, so the handler's consent claim can be checked against it.
+    """
     merged = dict(extras or {})
     if gateway is not None:
         merged[GATEWAY_KEY] = gateway
+        merged.setdefault(APPROVED_KEY, approved if approved is not None else set())
     return merged
 
 
 __all__ = [
+    "APPROVED_KEY",
     "DEFAULT_MAX_TOOLS_PER_SERVER",
     "GATEWAY_KEY",
     "MCP_TAG",
     "MCPToolError",
+    "local_tool_name",
     "MCPToolParams",
     "RegistrationReport",
     "attach_gateway",

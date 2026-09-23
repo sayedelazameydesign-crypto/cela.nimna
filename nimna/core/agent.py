@@ -41,7 +41,8 @@ def _get_swarm_components():
 from ..config import Settings
 from ..evidence import EvidenceJournal
 from ..governance import PolicyDecision, PolicyEngine
-from ..mcp.registry import attach_gateway
+from ..mcp.naming import encode_name_pattern
+from ..mcp.registry import APPROVED_KEY, MCP_TAG, attach_gateway
 from ..memory.store import MemoryStore
 from ..models import BudgetExceededError, CostGuard, GovernedModelProvider, ModelRegistry
 from ..providers.base import Message, ModelProvider, ProviderError, ToolCall
@@ -310,18 +311,28 @@ class Agent:
         A row that matches nothing is a warning, not a silent no-op: a skill
         that grants nothing is usually a mistake, and a remote server that
         failed to register would otherwise look like a skill with no tools.
+
+        The entry is escaped the same way tool names are, so an Arabic pattern
+        such as ``mcp__*__طقس*`` matches the Arabic-named tool it refers to.
+        For ASCII entries this is the identity, so nothing else changes.
         """
-        if "*" in entry or "?" in entry:
+        try:
+            pattern = encode_name_pattern(entry)
+        except ValueError:
+            log.warning("skill %s has an empty allowed_tools entry", skill_name)
+            return []
+
+        if any(char in entry for char in "*?["):
             matched = [
-                name for name in sorted(self.tools.names()) if fnmatch.fnmatchcase(name, entry)
+                name for name in sorted(self.tools.names()) if fnmatch.fnmatchcase(name, pattern)
             ]
             if not matched:
                 log.warning(
                     "skill %s pattern %r matched no registered tool", skill_name, entry
                 )
             return matched
-        if entry in self.tools:
-            return [entry]
+        if pattern in self.tools:
+            return [pattern]
         log.warning("skill %s references unknown tool %s", skill_name, entry)
         return []
 
@@ -484,7 +495,9 @@ class Agent:
         return ToolContext(
             settings=self.settings, workspace=self.workspace, session_id=state.session_id,
             memory=self.memory, skills=self.skills, run_id=state.run_id, on_skill_loaded=on_skill_loaded,
-            extras=attach_gateway(self.mcp_gateway),
+            # The approval ledger is a fresh mutable set per execution pass: a
+            # remote tool is only callable if *this* pass cleared it.
+            extras=attach_gateway(self.mcp_gateway, approved=set()),
         )
 
     def _execute_calls(self, state: RunState, *, start_index: int) -> str:
@@ -535,6 +548,13 @@ class Agent:
                 self.skills.get(skill_name).meta.risk_level == "restricted"
                 for skill_name in state.loaded_skills
             ):
+                risk = "confirm"
+            # A remote tool must never run unapproved, whatever its registration
+            # says. Its handler asserts consent on the gateway's behalf on the
+            # basis that the agent already approved this call, so a remote tool
+            # registered as `safe` would turn that assertion into a bypass.
+            # Enforced here, at the one place that decides to execute.
+            if risk == "safe" and MCP_TAG in tool.tags:
                 risk = "confirm"
             # Governance is checked after scope/validation but before any side
             # effect.  The legacy approval policy remains the user-facing gate.
@@ -620,6 +640,14 @@ class Agent:
     def _run_tool(self, state: RunState, tool: Tool, call: ToolCall, ctx: ToolContext,
                   approved: Optional[bool]) -> None:
         self._audit(state, "tool_call", {"tool": tool.name, "arguments": call.arguments})
+        # Evidence for the remote handler. `_run_tool` is the one funnel every
+        # execution passes through — the approval path and the resume path both
+        # land here — so a remote tool is recorded as cleared exactly when it is
+        # about to run. The handler refuses unless it finds the tool here, which
+        # is what makes its `explicit_consent=True` evidenced rather than
+        # asserted.
+        if MCP_TAG in tool.tags:
+            ctx.extras.setdefault(APPROVED_KEY, set()).add(tool.name)
         result, ok, duration_ms = self.tools.execute(
             tool.name, call.arguments, ctx, max_chars=self.settings.tool_result_max_chars
         )

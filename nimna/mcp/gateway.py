@@ -24,7 +24,6 @@ failures are returned as outcomes rather than raised, matching
 from __future__ import annotations
 
 import os
-import re
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping, Optional, Sequence
@@ -53,12 +52,19 @@ from .transport import (
     StreamableHTTPTransport,
 )
 
-#: Separator for namespaced tool names. Double underscore so that a server name
-#: cannot collide with a hyphenated local tool name.
-NAMESPACE_SEPARATOR = "__"
-NAMESPACE_PREFIX = "mcp"
-
-_NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_\-]{0,62}$")
+#: Local tool naming lives in :mod:`nimna.mcp.naming` and is re-exported here
+#: because this module is the historical import site.
+from .naming import (  # noqa: E402  (import after the module docstring block)
+    MAX_SERVER_NAME,
+    NAMESPACE_PREFIX,
+    NAMESPACE_SEPARATOR,
+    MCPNameError,
+    encode_name_pattern,
+    is_namespaced_tool,
+    namespaced_tool_name,
+    split_namespaced_tool,
+    validate_server_name,
+)
 
 #: Only these transports may be registered. `stdio` would mean launching a
 #: subprocess, and this repository is explicit that a subprocess is not a
@@ -69,22 +75,6 @@ ALLOWED_TRANSPORTS: frozenset[str] = frozenset({"streamable_http"})
 
 class MCPGatewayError(RuntimeError):
     """The gateway cannot be configured as asked."""
-
-
-def namespaced_tool_name(server: str, tool: str) -> str:
-    return f"{NAMESPACE_PREFIX}{NAMESPACE_SEPARATOR}{server}{NAMESPACE_SEPARATOR}{tool}"
-
-
-def split_namespaced_tool(name: str) -> Optional[tuple[str, str]]:
-    """Inverse of :func:`namespaced_tool_name`, or ``None`` if not namespaced."""
-    prefix = f"{NAMESPACE_PREFIX}{NAMESPACE_SEPARATOR}"
-    if not str(name).startswith(prefix):
-        return None
-    remainder = str(name)[len(prefix) :]
-    server, separator, tool = remainder.partition(NAMESPACE_SEPARATOR)
-    if not separator or not server or not tool:
-        return None
-    return server, tool
 
 
 @dataclass(frozen=True)
@@ -109,11 +99,10 @@ class MCPServerConfig:
     timeout: float = 60.0
 
     def __post_init__(self) -> None:
-        if not _NAME_RE.match(str(self.name or "")):
-            raise MCPGatewayError(
-                "server name must be a lowercase identifier matching "
-                f"{_NAME_RE.pattern!r}, got {self.name!r}"
-            )
+        try:
+            validate_server_name(self.name)
+        except MCPNameError as exc:
+            raise MCPGatewayError(str(exc)) from exc
         if not str(self.url or "").strip():
             raise MCPGatewayError(f"server {self.name!r} requires a URL")
         if self.transport not in ALLOWED_TRANSPORTS:
@@ -361,6 +350,9 @@ class MCPGateway:
     def capability_scope(self, server: str) -> frozenset[str]:
         """Namespaced tool names this server may expose, per its scope."""
         state = self._require_server(server)
+        # Local names, not remote ones: a scope is compared against registry
+        # entries, so escaping has to be applied here too or an Arabic tool name
+        # would never match its own scope.
         if state.config.allowed_tools is not None:
             return frozenset(
                 namespaced_tool_name(server, tool) for tool in state.config.allowed_tools
@@ -731,6 +723,10 @@ __all__ = [
     "NAMESPACE_PREFIX",
     "NAMESPACE_SEPARATOR",
     "ToolCallOutcome",
+    "MAX_SERVER_NAME",
+    "MCPNameError",
+    "encode_name_pattern",
+    "is_namespaced_tool",
     "namespaced_tool_name",
     "servers_from_env",
     "split_namespaced_tool",

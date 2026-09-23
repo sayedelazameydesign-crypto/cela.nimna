@@ -136,12 +136,23 @@ MCP_ALLOW_PRIVATE_NETWORKS=false  # يخالف الافتراضي فقط عند 
 السبب: الـhandler يمرّر `explicit_consent=True` إلى `MCPGateway.call_tool`،
 لأن الوصول إلى الـhandler يعني أن بوابة الوكيل وافقت على أداة `confirm`
 بالفعل. لو كان التسجيل بـ`safe` ممكناً، لكان الـhandler يعمل بلا موافقة،
-ولصار `explicit_consent=True` ثغرة تجاوز لا تأكيداً. الفرض هو ما يجعل
-التمرير سليماً:
+ولصار `explicit_consent=True` ثغرة تجاوز لا تأكيداً.
+
+هذا الاستدلال لا يُترك للثقة: **الموافقة مُثبتة لا مُفترضة**. الوكيل يكتب
+الأدوات التي عبرت بوابته في سجلّ الموافقة داخل `ToolContext.extras`
+(`APPROVED_KEY`)، ويكتبه في `_run_tool` — القمع الوحيد الذي يمر منه كل تنفيذ،
+بما فيه مسار الاستئناف — لا عند لحظة القرار. والـhandler **يرفض** إن لم يجد
+الأداة في السجلّ:
 
 1. الوكيل يرى `mcp__demo__get_weather` بـ`confirm` → يعلّق الطلب ويطلب موافقة.
-2. عند الموافقة فقط يُستدعى الـhandler.
-3. الـhandler يمرّر `explicit_consent=True` → لا سؤال ثانٍ، فيصل الطلب للخادم.
+2. عند الموافقة فقط يُستدعى الـhandler، وقد صار الاسم في السجلّ.
+3. الـhandler يتحقق من السجلّ ثم يمرّر `explicit_consent=True` → لا سؤال ثانٍ.
+4. من يستدعي الـhandler مباشرةً خارج حلقة الوكيل — أو يمرّر
+   `explicit_consent` كوسيط — يحصل على رفض، ولا يصل أي طلب إلى الشبكة.
+
+هذا مغطى بـ`test_handler_called_directly_cannot_grant_itself_consent`
+و`test_agent_marks_the_tool_approved_only_at_execution`، وكلاهما يفشل فعلاً عند
+إزالة نصفه المقابل من الكود.
 
 ### المخطط المنشور هو مخطط الخادم
 
@@ -170,6 +181,29 @@ allowed_tools:
 و`Agent._resolve_tool_entry` يطابق النمط مقابل السجل. حدّان صريحان يبقيان:
 `SCOPE` على مستوى الخادم، وإعلان المهارة. مهارة لا تطلب أدوات MCP لا تحصل
 عليها — وهذا مثبت في `test_glob_scope_grants_remote_tools_only_through_a_skill`.
+
+### أسماء الأدوات العربية (Unicode)
+
+المواصفة لا تقيّد اسم الأداة، وخادم عربي قد يعلن `طقس` أو `بحث_متقدم`. لكن
+`mcp__{server}__{tool}` هو ما يراه النموذج، وواجهات استدعاء الدوال تقبل عادةً
+`[A-Za-z0-9_-]{1,64}` فقط. لذلك يفصل `nimna/mcp/naming.py` بين اسمين:
+
+| الاسم | أين | القاعدة |
+|---|---|---|
+| البعيد | `Mcp-Name` والـbody | كما أعلنه الخادم، بلا تعديل؛ ويُرمَّز بـBase64 المرسل `=?base64?...?=` عند الحاجة |
+| المحلي | `ToolRegistry` والنطاق والنموذج | ASCII آمن: `طقس` → `~00c7~00d3`، واسم ASCII يمر كما هو |
+
+الترميز هو base36 بعرض ثابت (4 خانات للإسكيب الواحد) لأن Unicode كله يقع تحت
+`36⁴`، فيبقى الإسكيب ذاتي التحديد بلا فاصل وطويلاً بما يسمح باسم عربي عادي
+داخل حدّ 64 حرفاً؛ الأسماء الأطول تُقصّ وتُختم ببصمة SHA-256 للأصل حتى لا
+يتصادم اسمان. **الترميز لا يُستخدم أبداً لإعادة بناء الاسم عند الاستدعاء** —
+الاسم البعيد مُغلق عليه في `build_tool`، فخطأ في فك الترميز لا يحوّل الاستدعاء
+إلى أداة أخرى. أما `encode_name_pattern` فيحفظ `*` و`?` ليبقى نمط المهارة مثل
+`mcp__*__طقس*` قابلاً للمطابقة.
+
+**اسم الخادم** عكس ذلك: هو إعداد مشغّل، فيبقى ASCII قصيراً
+(`^[a-z0-9][a-z0-9_\-]{0,23}$`) لأن ترميزه يجعل كل نطاق وسطر سجل غير مقروء.
+هذا حدّ مقصود ومختبَر، لا سهو.
 
 ## الإعداد الكامل من البيئة
 
@@ -202,11 +236,22 @@ MCPSERVER_DEMO_AUTH=true
 |---|---|
 | code exists | ✅ `nimna/mcp/` + `nimna/mcp/registry.py` + `skills/mcp_servers/` |
 | scoped boundary | ✅ `headers.py` (اتفاق الترويسة/الـbody) + `gateway.py` (نطاق وسياسة ومصادقة) |
-| deterministic offline test | ✅ 85 اختباراً بلا شبكة |
+| deterministic offline test | ✅ 90 اختباراً بلا شبكة (`test_mcp_gateway.py`) |
 | integration/contract test where external | ✅ 23 اختبار تكامل مقابل خادم على socket حقيقي (`G19`) |
-| policy and failure behavior | ✅ `PolicyEngine` + جدول الفشل أعلاه |
+| policy and failure behavior | ✅ `PolicyEngine` + جدول الفشل أعلاه، ومُثبت بالعربية في `G21` (`docs/arabic-evaluation.md`) |
 | audit/evidence event | ✅ أحداث `mcp.*` عبر `EvidenceJournal` |
-| capability row and verification row | ✅ `G14`–`G20` في `docs/VERIFICATION-MATRIX.md` |
+| capability row and verification row | ✅ `G14`–`G22` في `docs/VERIFICATION-MATRIX.md` |
 
 النتيجة: `implemented` للبوابة والربط. يبقى `G18` (`BLOCKED`) صريحاً حتى
 يُشغَّل smoke مقابل خادم طرف ثالث.
+
+### إجبار `confirm` عند نقطة التنفيذ
+
+التسجيل `confirm` ليس الطبقة الوحيدة: `Agent` يعيد رفع أي أداة تحمل `MCP_TAG`
+إلى `confirm` في اللحظة التي يقرر فيها التنفيذ. السبب أن المعالج يمرّر
+`explicit_consent=True` اعتماداً على أن الموافقة حدثت؛ فلو وصلت أداة بعيدة
+بتصنيف `safe` — تعريف قديم، كتابة مباشرة في السجل، أو ناقل مستقبلي ينسى نشر
+`confirm` — لصار ذلك التأكيد ثغرة. الاختباران
+`test_agent_refuses_a_remote_tool_that_is_registered_safe` و
+`test_remote_tool_registration_is_forced_to_confirm` يقفلان الحالتين، وأُثبت
+أن الأول يفشل فعلاً عند إزالة السطر من `agent.py`.

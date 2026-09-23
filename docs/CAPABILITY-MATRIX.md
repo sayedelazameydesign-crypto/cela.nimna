@@ -27,7 +27,7 @@
 | Browser Use governed tool | available_opt_in | `skills/browser_use/`, builtin tool | disabled by default; live test requires account | `tools/browser` |
 | Local Computer Control | partial | `nimna/tools/builtin/computer.py` | simulated/offline tests | `computer` |
 | Multi-agent swarm | partial | `nimna/core/planner_swarm.py`, `nimna/agents/` | offline path; not production isolation | `orchestrator` |
-| MCP gateway | implemented | `nimna/mcp/` (contract, headers, auth, transport, gateway, registry) + `skills/mcp_servers/` | wired into the agent loop; tools are `confirm` and audited; proven against a real server over a socket. Disabled by default (`MCP_ENABLED=false`); no third-party live server (G18) | `mcp` |
+| MCP gateway | implemented | `nimna/mcp/` (contract, headers, auth, transport, gateway, registry, naming) + `skills/mcp_servers/` | wired into the agent loop; tools are `confirm` and audited; proven against a real server over a socket; Unicode tool names/globs supported and evaluated in Arabic (`docs/arabic-evaluation.md`). Disabled by default (`MCP_ENABLED=false`); no third-party live server (G18) | `mcp` |
 | External connectors | planned | — | no claim until least-privilege adapter exists | `connectors` |
 | Postgres multi-replica source of truth | planned | — | SQLite is current canonical store | `memory/infra` |
 | OpenTelemetry / Prometheus traces | partial | audit + metrics summary | no exporter claim | `observability` |
