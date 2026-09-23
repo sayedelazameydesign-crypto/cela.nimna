@@ -45,6 +45,19 @@ expected_artifacts:
     contains: "FizzBuzz"
 must_include: ["fizzbuzz"]
 must_not_include: []
+verify:
+  - kind: file_exists
+    path: src/output.txt
+  - kind: content_matches
+    path: src/output.txt
+    contains: "FizzBuzz"
+  - kind: exit_code
+    equals: 0
+  - kind: delta
+    path: src/output.txt
+    change: CREATED
+  - kind: delta_sha
+    path: src/output.txt
 judge_rubric: |-
   1) الملف src/fizzbuzz.py موجود وفيه الدالة المطلوبة بتوقيع صحيح.
   2) الوكيل شغّل الملف فعلاً عبر run_command (دليل shell_evidence في الـ audit).

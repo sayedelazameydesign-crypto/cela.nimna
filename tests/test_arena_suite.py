@@ -229,6 +229,37 @@ def test_artifact_is_reverified_through_delta_evidence(tmp_path: Path):
     assert names.get("delta:out/result.txt sha re-verified") is False
 
 
+def test_verifier_runs_on_tasks_with_verify_spec(tmp_path: Path):
+    """P1-T3: tasks with a verify: block get a deterministic verdict over the
+    execution evidence, recorded in the row with fs fingerprints + chain hash."""
+    spec = rs.TaskSpec.from_dict({
+        **MINIMAL_TASK,
+        "verify": [
+            {"kind": "file_exists", "path": "data/x.txt"},
+            {"kind": "content_matches", "path": "data/x.txt", "contains": "42"},
+        ],
+    })
+    report = rs.run_suite([spec], "mock", ledger_path=None)
+    row = report["rows"][0]
+    assert row["verdict"] == "MOCKED"
+    assert row["verification"]["verdict"] == "PASS"
+    assert row["verification"]["summary"]["passed"] == 2
+    assert any(c["name"] == "verifier:PASS" and c["ok"] for c in row["checks"])
+    assert row["score"] == 100.0
+
+
+def test_verifier_fail_is_reflected_in_score(tmp_path: Path):
+    spec = rs.TaskSpec.from_dict({
+        **MINIMAL_TASK,
+        "verify": [{"kind": "file_exists", "path": "data/never-created.txt"}],
+    })
+    report = rs.run_suite([spec], "mock", ledger_path=None)
+    row = report["rows"][0]
+    assert row["verification"]["verdict"] == "FAIL"
+    assert any(c["name"] == "verifier:FAIL" and not c["ok"] for c in row["checks"])
+    assert row["score"] < 100.0
+
+
 def test_seed_path_traversal_becomes_error_row_not_crash():
     spec = rs.TaskSpec.from_dict({**MINIMAL_TASK, "seed_files": [{"path": "../evil.txt", "content": "x"}]})
     row = rs.run_task(spec, "mock")

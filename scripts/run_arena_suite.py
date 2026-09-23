@@ -68,6 +68,8 @@ TASK_KNOWN_KEYS = {
     "expected_artifacts", "must_include", "must_not_include", "judge_rubric",
     # mock-mode scripting: deterministic tool exercises for the pipeline lab
     "mock_skills", "mock_script", "mock_final",
+    # P1-T3: declarative deterministic verification spec (no LLM)
+    "verify",
 }
 VERDICT_ICON = {"PASS": "✅", "FAIL": "❌", "MOCKED": "🧪", "SKIPPED": "⏭️", "ERROR": "⚠️"}
 
@@ -110,6 +112,7 @@ class TaskSpec:
     mock_skills: list[str] = field(default_factory=list)
     mock_script: list[dict[str, Any]] = field(default_factory=list)
     mock_final: str = ""
+    verify: list[dict[str, Any]] = field(default_factory=list)
     source: str = ""
 
     @classmethod
@@ -154,6 +157,13 @@ class TaskSpec:
         bad = set(requires) - known_requires
         if bad:
             raise SuiteError(f"{source}: unknown requires {sorted(bad)} (known: {sorted(known_requires)})")
+        try:
+            from nimna.execution.verification import validate_spec
+            verify_spec = validate_spec(data.get("verify") or [])
+        except ImportError:
+            verify_spec = list(data.get("verify") or [])
+        except (ValueError, TypeError) as exc:
+            raise SuiteError(f"{source}: invalid verify spec: {exc}") from None
         mock_script: list[dict[str, Any]] = []
         for step in (data.get("mock_script") or []):
             if not isinstance(step, dict) or not str(step.get("tool") or "").strip():
@@ -177,6 +187,7 @@ class TaskSpec:
             mock_skills=[str(s) for s in (data.get("mock_skills") or [])],
             mock_script=mock_script,
             mock_final=str(data.get("mock_final") or ""),
+            verify=verify_spec,
             source=source,
         )
 
@@ -387,25 +398,30 @@ def _build_agent(mode: str, spec: TaskSpec, workspace: Path):
     return agent, provider
 
 
-def _last_shell_delta(agent: Any, session_id: str) -> dict[str, Any] | None:
-    """Last non-empty filesystem delta recorded in the SHA-256 audit chain."""
+def _last_shell_evidence(agent: Any, session_id: str) -> dict[str, Any] | None:
+    """Last shell execution evidence from the SHA-256 audit chain: the delta
+    payload, exit evidence, and the chain hash of the evidence event itself."""
     try:
         events = agent.memory.get_audit(session_id, limit=400)
     except Exception:
         return None
     for event in reversed(events):
-        if event.get("event") == "shell_evidence":
-            payload = event.get("payload") or {}
-            changes = payload.get("filesystem_delta") or []
-            if changes:
-                return {
-                    "changes": changes,
-                    "snapshot_before": payload.get("snapshot_before") or "",
-                    "snapshot_after": payload.get("snapshot_after") or "",
-                    "before_root_hash": payload.get("before_root_hash") or "",
-                    "after_root_hash": payload.get("after_root_hash") or "",
-                    "summary": payload.get("delta_summary") or {},
-                }
+        if event.get("event") != "shell_evidence":
+            continue
+        payload = event.get("payload") or {}
+        changes = payload.get("filesystem_delta") or []
+        chain = (payload.get("_evidence") or {}).get("hash") or ""
+        return {
+            "changes": changes,
+            "snapshot_before": payload.get("snapshot_before") or "",
+            "snapshot_after": payload.get("snapshot_after") or "",
+            "before_root_hash": payload.get("before_root_hash") or "",
+            "after_root_hash": payload.get("after_root_hash") or "",
+            "summary": payload.get("delta_summary") or {},
+            "exit_code": payload.get("exit_code"),
+            "timed_out": bool(payload.get("timed_out")),
+            "audit_hash": chain,
+        }
     return None
 
 
@@ -602,12 +618,63 @@ def run_task(spec: TaskSpec, mode: str) -> dict[str, Any]:
         reply = getattr(result, "reply", "") or ""
         row["tools_called"] = [c.name for c in getattr(result, "tool_calls", []) if getattr(c, "name", None)]
         row["skills_used"] = list(getattr(result, "skills_used", []) or [])
-        checks, secret_hits = _run_checks(spec, workspace, reply, fs_delta=_last_shell_delta(agent, f"arena-{spec.id}"))
+        shell_ev = _last_shell_evidence(agent, f"arena-{spec.id}")
+        checks, secret_hits = _run_checks(spec, workspace, reply, fs_delta=shell_ev)
         row["checks"] = checks
         row["secret_hits"] = secret_hits
         row["checks_total"] = len(checks)
         row["checks_passed"] = sum(1 for c in checks if c["ok"])
         row["score"] = round(100.0 * row["checks_passed"] / row["checks_total"], 1) if checks else None
+        # P1-T3: deterministic verifier (not an LLM) over the execution evidence
+        if spec.verify:
+            try:
+                from nimna.execution.verification import DeterministicVerifier
+                if shell_ev:
+                    row["fs_evidence"] = {
+                        "before_root_hash": shell_ev["before_root_hash"],
+                        "after_root_hash": shell_ev["after_root_hash"],
+                        "delta_changes": len(shell_ev["changes"]),
+                        "audit_hash": shell_ev["audit_hash"],
+                    }
+
+                def _exec_fn(command: str, timeout_ms: int):
+                    from nimna.config import Settings as _S
+                    from nimna.tools.builtin.shell import ShellRequest as _Req, execute_shell as _exe
+                    s = _S.from_env(env_file=None)
+                    s.shell_tool_enabled = capabilities.get("shell_tool", False)
+                    s.sandbox_memory_mb = 256
+                    return _exe(_Req(command=command, timeout_ms=max(100, min(int(timeout_ms), 60_000))),
+                                settings=s, workspace_root=workspace, explicit_consent=True)
+
+                verifier = DeterministicVerifier(workspace)
+                report_v = verifier.verify(
+                    spec.verify,
+                    shell_exit_code=shell_ev["exit_code"] if shell_ev else None,
+                    shell_timed_out=shell_ev["timed_out"] if shell_ev else False,
+                    fs_delta=shell_ev,
+                    exec_fn=_exec_fn,
+                )
+                vdata = report_v.to_dict()
+                row["verification"] = vdata
+                checks.append({"name": f"verifier:{vdata['verdict']}",
+                               "ok": vdata["verdict"] == "PASS",
+                               "detail": f"passed {vdata['summary']['passed']}/{vdata['summary']['total']}"
+                                         f" · failed {vdata['summary']['failed']}"
+                                         f" · inconclusive {vdata['summary']['inconclusive']}"})
+                row["checks"] = checks
+                row["checks_total"] = len(checks)
+                row["checks_passed"] = sum(1 for c in checks if c["ok"])
+                row["score"] = round(100.0 * row["checks_passed"] / row["checks_total"], 1) if checks else None
+            except Exception as exc:
+                row["verification"] = {"verdict": "INCONCLUSIVE",
+                                       "error": f"{exc.__class__.__name__}: {str(exc)[:150]}"}
+                checks.append({"name": "verifier:INCONCLUSIVE", "ok": False,
+                               "detail": f"verifier crashed: {exc.__class__.__name__}"})
+                row["checks"] = checks
+                row["checks_total"] = len(checks)
+                row["checks_passed"] = sum(1 for c in checks if c["ok"])
+                row["score"] = round(100.0 * row["checks_passed"] / row["checks_total"], 1) if checks else None
+
         if mode == "mock":
             row["verdict"] = "MOCKED"  # never PASS: the pipeline was exercised, not the quality
             row["status_detail"] = "mock provider run — deterministic checks only"
@@ -688,6 +755,9 @@ def run_suite(tasks: list[TaskSpec], mode: str, *, ledger_path: Path | None = DE
             "recovered_tasks": sum(1 for m in metrics if m["recovered"]),
             "mean_wall_ms": round(sum(walls) / len(walls), 1) if walls else None,
             "delta_reverified": sum(int(m.get("delta_reverified") or 0) for m in metrics),
+            "verifier_pass": sum(1 for r in rows if (r.get("verification") or {}).get("verdict") == "PASS"),
+            "verifier_fail": sum(1 for r in rows if (r.get("verification") or {}).get("verdict") == "FAIL"),
+            "verifier_inconclusive": sum(1 for r in rows if (r.get("verification") or {}).get("verdict") == "INCONCLUSIVE"),
         },
         "regressions": regressions,
     }
@@ -734,6 +804,14 @@ def render_markdown(report: dict[str, Any]) -> str:
             notes.append("failed: " + ", ".join(failed[:4]))
         if row.get("secret_hits"):
             notes.append(f"🚨 {len(row['secret_hits'])} secret-like hit(s)")
+        if row.get("verification"):
+            notes.append(f"verifier {row['verification'].get('verdict')}")
+        fs = row.get("fs_evidence")
+        if fs:
+            notes.append(
+                f"fs: Δ{fs['delta_changes']} {str(fs['before_root_hash'])[7:19]}→{str(fs['after_root_hash'])[7:19]}"
+                f" ev:{str(fs['audit_hash'])[7:23]}"
+            )
         if row.get("previous_score") is not None and row.get("score") is not None:
             delta = round(row["score"] - row["previous_score"], 1)
             notes.append(f"prev {row['previous_score']} ({'+' if delta >= 0 else ''}{delta})")
@@ -760,6 +838,12 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines += [
             f"**Delta evidence:** `{summary['delta_reverified']}` artifact hash(es) re-verified against "
             "execution evidence — Delta + Re-observation = Evidence (P1-T2).",
+            "",
+        ]
+    if any((r.get("verification") or {}).get("verdict") for r in report["rows"]):
+        lines += [
+            f"**Verifier (P1-T3, deterministic — no LLM):** PASS `{summary.get('verifier_pass', 0)}` · "
+            f"FAIL `{summary.get('verifier_fail', 0)}` · INCONCLUSIVE `{summary.get('verifier_inconclusive', 0)}`",
             "",
         ]
     if report["regressions"]:

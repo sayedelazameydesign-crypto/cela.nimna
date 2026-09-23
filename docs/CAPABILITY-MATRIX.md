@@ -37,6 +37,7 @@
 | Arena task suite runner (P0.5) | implemented | `evals/tasks/` (10 tasks), `scripts/run_arena_suite.py` | `tests/test_arena_suite.py`; mock mode only — verdicts are `MOCKED` with a banner, live scoring + LLM judge arrive in P5 | `evaluation` |
 | Shell execution primitive (P1-T1) | implemented | `nimna/tools/builtin/shell.py` (`run_command`), gated by `SHELL_TOOL_ENABLED=false` default | `tests/test_shell_tool.py` (22 adversarial + agent-flow tests; mutation-checked); 7 statuses, evidence in the hash chain, default-deny beyond `shell.execute` | `execution/governance` |
 | Filesystem Observation & Delta (P1-T2) | implemented | `nimna/execution/observation.py` (standalone primitive: `WorkspaceObserver`, `ObservationScope`), wired into `shell.py` | `tests/test_observation.py` (15) + atomicity tests in `test_shell_tool.py` (timeout/failure keep side effects); content-hash based (no mtime), bounded, symlink-safe, re-verifiable (`verify_delta`); 4 mutation checks | `execution` |
+| Deterministic Verification (P1-T3) | implemented | `nimna/execution/verification.py` (`DeterministicVerifier`, 8 check kinds), wired into the Arena suite (`verify:` task key) | `tests/test_verification.py` (18) + suite integration tests; PASS/FAIL/INCONCLUSIVE only — no LLM, empty/missing-evidence specs are INCONCLUSIVE never PASS; 3 mutation checks | `execution` |
 
 ## Status vocabulary
 

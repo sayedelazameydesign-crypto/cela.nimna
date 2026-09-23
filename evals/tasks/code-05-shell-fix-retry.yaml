@@ -48,6 +48,17 @@ expected_artifacts:
     contains: "14"
 must_include: ["result.txt"]
 must_not_include: []
+verify:
+  - kind: file_exists
+    path: scripts_src/result.txt
+  - kind: content_matches
+    path: scripts_src/result.txt
+    equals: "14"
+  - kind: delta
+    path: scripts_src/result.txt
+    change: CREATED
+  - kind: delta_sha
+    path: scripts_src/result.txt
 judge_rubric: |-
   1) أول تشغيل فشل فعلاً (NONZERO_EXIT موثّق في الـ audit).
   2) الإصلاح عالج سبب الفشل (إنشاء المجلد/المسار) لا العرض.

@@ -11,8 +11,10 @@ from .observation import (
     Snapshot,
     WorkspaceObserver,
 )
+from .verification import CheckResult, DeterministicVerifier, SpecError, Verdict, VerificationReport
 
 __all__ = [
     "Change", "ChangeKind", "FileEntry", "FilesystemDelta",
     "ObservationScope", "ScopeError", "Snapshot", "WorkspaceObserver",
+    "CheckResult", "DeterministicVerifier", "SpecError", "Verdict", "VerificationReport",
 ]

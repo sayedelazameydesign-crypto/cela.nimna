@@ -367,6 +367,30 @@ Evidence لا claim، Recovery bounded) ونضيف طبقة واحدة جديد�
 - `search.py`: `grep(pattern, path, max_results=50)` (regex، يستبعد binary) + `glob(pattern, path)`.
 - **Evidence:** اختبارات فشل/نجاح/حدود/jail + صفوف مصفوفة + مهمتا Arena برمجيتان تُحدَّثان للاستفادة.
 
+### P1-T3 — Deterministic Verification → **منفَّذة كـ Primitive مستقلة** ✅
+
+> **✅ الحالة: نُفِّذت** — الحَكَم الحتمي **ليس LLM**، يستهلك الـ evidence ويصدر أحد
+> ثلاثة أحكام فقط: `PASS / FAIL / INCONCLUSIVE` (الـ LLM Judge يأتي **بعده**: Verifier
+> → Evidence → Judge، لا العكس).
+>
+> - **`nimna/execution/verification.py`:** `DeterministicVerifier` +
+>   `validate_spec` (YAML-friendly) + 8 أنواع فحوص: `file_exists` · `file_absent` ·
+>   `content_matches` (contains/equals/regex/sha256) · `exit_code` · `delta`
+>   (مُشاهَد في دلتا P1-T2) · `delta_sha` (إعادة تحقق بإعادة الملاحظة — يعيد استخدام
+>   `verify_delta` من P1-T2) · `json_keys` (JSON صالح + مفاتيح مطلوبة) · `command`
+>   (إعادة تشغيل تحقق مُقيَّدة عبر sandbox الـ shell).
+> - **الأمانة:** spec فارغ = `INCONCLUSIVE` لا PASS؛ دليل ناقص (لا shell/لا دلتا،
+>   مهلة، أمر مرفوض) = `INCONCLUSIVE` لا فشل صامت؛ FAIL يهيمن على INCONCLUSIVE؛
+>   فحص ينهار = INCONCLUSIVE (لا crash يتحول حكماً)؛ المسار الخارج = FAIL لا crash.
+> - **Arena:** المهام تكتسب `verify:` — code-01 الآن **6/6** وcode-05 **5/5** فحوصاً
+>   (verifier PASS في كلتيهما)، والتقرير يظهر سطر الحالة الحتمية +
+>   **fs: Δ{n} before→after ev:{chain-hash}** لكل صف (البصمات وهاش سلسلة الـ evidence
+>   في التقرير نفسه كما طلب المالك — لا اعتماد على نتائج الاختبارات وحدها).
+> - **الحَكَم الطفري 3/3:** تزييف PASS (اختباران يفشلان)، INCONCLUSIVE→PASS (1)،
+>   وتجاهل حكم الـ verifier في بوابة الـ suite (1) — كلها اكتُشفت واستُعيدت.
+> - الاختبارات: `tests/test_verification.py` (18) + اختبارات تكامل العدّاء (2) =
+>   **184 passed**.
+
 ### P1-T3 — Git آمن
 - `git_tool.py`: `git_status/git_diff/git_add/git_commit/git_log` فقط — registry-level deny لأي subcommand آخر (لا push/remote/reset/clean)، هوية commit من env مُعلن، رسالة commit تُسجل في audit.
 - **Evidence:** اختبار deny شامل + اختبار دورة commit محلية داخل workspace + صف مصفوفة.

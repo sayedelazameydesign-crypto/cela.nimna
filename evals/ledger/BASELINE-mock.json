@@ -1,8 +1,8 @@
 {
   "version": 1,
   "mode": "mock",
-  "repo_version": "876eb19",
-  "generated_at": "2026-09-23T17:38:36+00:00",
+  "repo_version": "e6ef918",
+  "generated_at": "2026-09-23T17:53:18+00:00",
   "rows": [
     {
       "task_id": "arabic-01-market-brief",
@@ -31,7 +31,7 @@
       ],
       "requires": [],
       "metrics": {
-        "wall_ms": 14,
+        "wall_ms": 9,
         "tool_calls": 0,
         "failed_tool_calls": 0,
         "failed_shell_commands": 0,
@@ -43,9 +43,9 @@
         "verified": false,
         "delta_reverified": 0
       },
-      "run_id": "8e8fa39b7c5f4275",
-      "ts": "2026-09-23T17:38:36+00:00",
-      "repo_version": "876eb19",
+      "run_id": "457a826961854aff",
+      "ts": "2026-09-23T17:53:17+00:00",
+      "repo_version": "e6ef918",
       "previous_score": null
     },
     {
@@ -87,9 +87,9 @@
         "verified": false,
         "delta_reverified": 0
       },
-      "run_id": "1ee501a7151a4c49",
-      "ts": "2026-09-23T17:38:36+00:00",
-      "repo_version": "876eb19",
+      "run_id": "4d79201088524eff",
+      "ts": "2026-09-23T17:53:17+00:00",
+      "repo_version": "e6ef918",
       "previous_score": null
     },
     {
@@ -99,8 +99,8 @@
       "mode": "mock",
       "verdict": "MOCKED",
       "score": 100.0,
-      "checks_passed": 5,
-      "checks_total": 5,
+      "checks_passed": 6,
+      "checks_total": 6,
       "checks": [
         {
           "name": "artifact:src/fizzbuzz.py",
@@ -126,6 +126,11 @@
           "name": "delta:src/output.txt sha re-verified",
           "ok": true,
           "detail": "hash verified"
+        },
+        {
+          "name": "verifier:PASS",
+          "ok": true,
+          "detail": "passed 5/5 · failed 0 · inconclusive 0"
         }
       ],
       "secret_hits": [],
@@ -154,9 +159,57 @@
         "verified": true,
         "delta_reverified": 1
       },
-      "run_id": "a3ab1827c6de4c87",
-      "ts": "2026-09-23T17:38:36+00:00",
-      "repo_version": "876eb19",
+      "fs_evidence": {
+        "before_root_hash": "sha256:cb0a7629ae1af35f4af425cbfd917db45cb537a7ef4ef33033083aabe9922d59",
+        "after_root_hash": "sha256:c9425def3b7f995f85f354b9d92d2c94fb408d42a3f536fc7dd418e7ddacf507",
+        "delta_changes": 1,
+        "audit_hash": "cd58196569c34ed64f97b28599c0e2677ee8e817cb3a4145e8e77c582592d8f2"
+      },
+      "verification": {
+        "version": 1,
+        "verdict": "PASS",
+        "summary": {
+          "total": 5,
+          "passed": 5,
+          "failed": 0,
+          "inconclusive": 0
+        },
+        "checks": [
+          {
+            "kind": "file_exists",
+            "ok": true,
+            "detail": "file present",
+            "target": "src/output.txt"
+          },
+          {
+            "kind": "content_matches",
+            "ok": true,
+            "detail": "contains 'FizzBuzz' — all matched",
+            "target": "src/output.txt"
+          },
+          {
+            "kind": "exit_code",
+            "ok": true,
+            "detail": "exit 0 (expected 0)",
+            "target": ""
+          },
+          {
+            "kind": "delta",
+            "ok": true,
+            "detail": "observed CREATED",
+            "target": "src/output.txt"
+          },
+          {
+            "kind": "delta_sha",
+            "ok": true,
+            "detail": "hash verified",
+            "target": "src/output.txt"
+          }
+        ]
+      },
+      "run_id": "838246a9e4c04b1a",
+      "ts": "2026-09-23T17:53:17+00:00",
+      "repo_version": "e6ef918",
       "previous_score": null
     },
     {
@@ -191,7 +244,7 @@
       ],
       "requires": [],
       "metrics": {
-        "wall_ms": 8,
+        "wall_ms": 7,
         "tool_calls": 0,
         "failed_tool_calls": 0,
         "failed_shell_commands": 0,
@@ -203,9 +256,9 @@
         "verified": true,
         "delta_reverified": 0
       },
-      "run_id": "593d4d6afe80402d",
-      "ts": "2026-09-23T17:38:36+00:00",
-      "repo_version": "876eb19",
+      "run_id": "4c38ca54e2bb4db0",
+      "ts": "2026-09-23T17:53:17+00:00",
+      "repo_version": "e6ef918",
       "previous_score": null
     },
     {
@@ -252,9 +305,9 @@
         "verified": false,
         "delta_reverified": 0
       },
-      "run_id": "6859764d666f4584",
-      "ts": "2026-09-23T17:38:36+00:00",
-      "repo_version": "876eb19",
+      "run_id": "204cee06cfbf4e14",
+      "ts": "2026-09-23T17:53:17+00:00",
+      "repo_version": "e6ef918",
       "previous_score": null
     },
     {
@@ -296,9 +349,9 @@
         "verified": true,
         "delta_reverified": 0
       },
-      "run_id": "d8634e400fe64979",
-      "ts": "2026-09-23T17:38:36+00:00",
-      "repo_version": "876eb19",
+      "run_id": "1f1567ff89fc4ea7",
+      "ts": "2026-09-23T17:53:18+00:00",
+      "repo_version": "e6ef918",
       "previous_score": null
     },
     {
@@ -308,8 +361,8 @@
       "mode": "mock",
       "verdict": "MOCKED",
       "score": 100.0,
-      "checks_passed": 4,
-      "checks_total": 4,
+      "checks_passed": 5,
+      "checks_total": 5,
       "checks": [
         {
           "name": "artifact:scripts_src/result.txt",
@@ -330,6 +383,11 @@
           "name": "delta:scripts_src/result.txt sha re-verified",
           "ok": true,
           "detail": "hash verified"
+        },
+        {
+          "name": "verifier:PASS",
+          "ok": true,
+          "detail": "passed 4/4 · failed 0 · inconclusive 0"
         }
       ],
       "secret_hits": [],
@@ -347,7 +405,7 @@
         "shell_tool"
       ],
       "metrics": {
-        "wall_ms": 52,
+        "wall_ms": 50,
         "tool_calls": 3,
         "failed_tool_calls": 0,
         "failed_shell_commands": 1,
@@ -359,9 +417,51 @@
         "verified": true,
         "delta_reverified": 1
       },
-      "run_id": "dbcca098219145d8",
-      "ts": "2026-09-23T17:38:36+00:00",
-      "repo_version": "876eb19",
+      "fs_evidence": {
+        "before_root_hash": "sha256:fb681ae9c7746729d8b6781ab5c433f41cf120ba3d670428a295ad7a7e7c54c6",
+        "after_root_hash": "sha256:02f57fc9b5e6143157db10b4111d23258ea8a4ba2b90f98dcc52c8b5a25bb8d7",
+        "delta_changes": 1,
+        "audit_hash": "1ebfd0e6e815f76457b5a8c0edb7a50564c9954991a1ae2f36b85d9a3d8d84f2"
+      },
+      "verification": {
+        "version": 1,
+        "verdict": "PASS",
+        "summary": {
+          "total": 4,
+          "passed": 4,
+          "failed": 0,
+          "inconclusive": 0
+        },
+        "checks": [
+          {
+            "kind": "file_exists",
+            "ok": true,
+            "detail": "file present",
+            "target": "scripts_src/result.txt"
+          },
+          {
+            "kind": "content_matches",
+            "ok": true,
+            "detail": "equals '14' — all matched",
+            "target": "scripts_src/result.txt"
+          },
+          {
+            "kind": "delta",
+            "ok": true,
+            "detail": "observed CREATED",
+            "target": "scripts_src/result.txt"
+          },
+          {
+            "kind": "delta_sha",
+            "ok": true,
+            "detail": "hash verified",
+            "target": "scripts_src/result.txt"
+          }
+        ]
+      },
+      "run_id": "3e0a71cedd32478a",
+      "ts": "2026-09-23T17:53:18+00:00",
+      "repo_version": "e6ef918",
       "previous_score": null
     },
     {
@@ -408,9 +508,9 @@
         "verified": false,
         "delta_reverified": 0
       },
-      "run_id": "3955ed3925d04f03",
-      "ts": "2026-09-23T17:38:36+00:00",
-      "repo_version": "876eb19",
+      "run_id": "5e6fd8c94b9b406a",
+      "ts": "2026-09-23T17:53:18+00:00",
+      "repo_version": "e6ef918",
       "previous_score": null
     },
     {
@@ -440,7 +540,7 @@
       ],
       "requires": [],
       "metrics": {
-        "wall_ms": 10,
+        "wall_ms": 7,
         "tool_calls": 0,
         "failed_tool_calls": 0,
         "failed_shell_commands": 0,
@@ -452,9 +552,9 @@
         "verified": false,
         "delta_reverified": 0
       },
-      "run_id": "cc6f451df43b4f60",
-      "ts": "2026-09-23T17:38:36+00:00",
-      "repo_version": "876eb19",
+      "run_id": "7ebb0069e23e4a3b",
+      "ts": "2026-09-23T17:53:18+00:00",
+      "repo_version": "e6ef918",
       "previous_score": null
     },
     {
@@ -476,9 +576,9 @@
         "network"
       ],
       "metrics": {},
-      "run_id": "0f0d598d70524d6b",
-      "ts": "2026-09-23T17:38:36+00:00",
-      "repo_version": "876eb19",
+      "run_id": "afb1361eff1041c2",
+      "ts": "2026-09-23T17:53:18+00:00",
+      "repo_version": "e6ef918",
       "previous_score": null
     },
     {
@@ -500,9 +600,9 @@
         "network"
       ],
       "metrics": {},
-      "run_id": "a6e5809d009c4010",
-      "ts": "2026-09-23T17:38:36+00:00",
-      "repo_version": "876eb19",
+      "run_id": "8d5e8a771a4c4492",
+      "ts": "2026-09-23T17:53:18+00:00",
+      "repo_version": "e6ef918",
       "previous_score": null
     }
   ],
@@ -521,8 +621,11 @@
     "shell_executions": 3,
     "evidence_completeness": 100.0,
     "recovered_tasks": 1,
-    "mean_wall_ms": 16.2,
-    "delta_reverified": 2
+    "mean_wall_ms": 15.0,
+    "delta_reverified": 2,
+    "verifier_pass": 2,
+    "verifier_fail": 0,
+    "verifier_inconclusive": 0
   },
   "regressions": []
 }

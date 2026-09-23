@@ -42,6 +42,7 @@ python scripts/run_arena_suite.py --mode mock --strict
 | `allowed_tools` | — | توثيقي: الأدوات المتوقعة للمهمة |
 | `requires` | — | `shell_tool` يجعل المهمة `SKIPPED` ما لم يُضبط `SHELL_TOOL_ENABLED` |
 | `mock_skills` / `mock_script` / `mock_final` | — | سيناريو حتمي لوضع mock: اختيار مهارة + استدعاء أدوات فعلي خطوة بخطوة + ردّ نهائي — يمكّن قياس «Agent + Tool» دون مفاتيح (الحكم يبقى `MOCKED`) |
+| `verify` | — | **P1-T3:** مواصفة تحقق حتمية (لا LLM) تُقيَّم على الـ evidence: `file_exists` · `file_absent` · `content_matches` (contains/equals/regex/sha256) · `exit_code` · `delta` · `delta_sha` · `json_keys` · `command`. الأحكام: `PASS/FAIL/INCONCLUSIVE` — spec فارغ أو دليل ناقص = INCONCLUSIVE لا PASS، وتظهر حالة الـ verifier في التقرير والصف |
 
 ## مفردات النتيجة (نفس عقد الأمانة في المستودع)
 
@@ -69,6 +70,13 @@ python scripts/run_arena_suite.py --mode mock --strict
 | `evidence_completeness` | % تنفيذات shell التي حملت Evidence كامل العقد (12 مفتاحاً) |
 | `recovered` | مهمة اصطدمت بفشل ثم أكملت بفحوص 100% (مثل `code-05`) |
 | `mean_wall_ms` | متوسط زمن الجدار للمهام |
+
+**Baseline v4 (P1-T1 Shell + P1-T2 Observation + P1-T3 Verifier، وضع mock، `SHELL_TOOL_ENABLED=1`):**
+9 ran / 2 skipped / 0 error / mean 55.6 · **Verifier (حتمي): PASS 2 · FAIL 0 ·
+INCONCLUSIVE 0** — code-01 **6/6** (وجود الملف + المحتوى + exit 0 + مشاهدة الدلتا +
+إعادة تحقق الهاش + مفتاح JSON لا ينطبق) وcode-05 **5/5**، وكل صف يحمل
+`fs: Δ{n} before→after ev:{chain-hash}` في التقرير نفسه. راجع
+`ledger/BASELINE-mock.md` و`BASELINE-mock.json`.
 
 **Baseline v3 (P1-T1 Shell + P1-T2 Observation، وضع mock، `SHELL_TOOL_ENABLED=1`):**
 9 ran / 2 skipped / 0 error / mean 55.6 / evidence completeness 100% / **2 هاش
