@@ -428,6 +428,44 @@ Evidence لا claim، Recovery bounded) ونضيف طبقة واحدة جديد�
 - الاختبارات: `tests/test_recovery.py` (17) + اختبارا تكامل العدّاء (2) =
   **203 passed**.
 
+### P1-T5 — Tool Registry → **منفَّذة كـ Primitive مستقلة** ✅
+
+> **✅ الحالة: نُفِّذت** — الأدوات تتحول إلى Capabilities قابلة للاكتشاف والضبط
+> والتحقق، وليست dict من الـ callables. **فصل المسؤوليات صارم** — الـ Registry
+> ليس Policy Engine جديداً ولا God Object: الـ Registry يعرف "ما الأدوات
+> الموجودة؟" فقط؛ Capability Resolver وPolicy وAuthorization مُحقونة كـ
+> callables خارجية والافتراضي **deny-all**؛ وObserve/Verify يبقيان داخل evidence
+> المنفّذ نفسه (كما في shell اليوم) لا داخل الـ Registry.
+
+- **`nimna/execution/tool_registry.py`:** `ToolDescriptor` (tool_id مُجاز نقاطياً,
+  version semver, input_schema, output_schema, capabilities, side_effects من
+  مفردات مقفلة, risk_level, availability, handler) · `ToolRegistry`
+  (register/unregister/replace/get/list/tools_requiring) · `LifecycleState`
+  ENABLED/DISABLED/DEPRECATED/REVOKED بجدول انتقالات صريح (REVOKED نهائية —
+  لا إحياء ولا replace فوقها) · `invoke()` المُبوَّبة · `EvidenceChain` مُقيَّدة
+  (1000 حدثاً) بسلسلة SHA-256 تكتشف التزوير.
+- **بوابات الاستدعاء بالترتيب:** registry lookup (NOT_FOUND) → lifecycle
+  (DISABLED/REVOKED لا يُنفَّذان؛ DEPRECATED يُنفَّذ بعلم صادق في الـ evidence) →
+  **input schema** (غير الصالح لا يصل للمعالج أبداً) → **capability** (المطلوب
+  ⊆ المُمنوح) → **policy** (افتراضي deny) → **authorization** (افتراضي deny) →
+  **execute** → **output schema** (الخرق = `ok=False` حتى لو حصلت side effects
+  — `executed=True` صادقة) → evidence (digests فقط — لا وسائط خام ولا أسرار).
+- **صدق الحدود:** استثناء المعالج = `HANDLER_ERROR` (ok=False, executed=True) —
+  لا يتحول إلى PASS أبداً؛ لا سياسة مُوصَّلة = `POLICY_DENIED "default-deny"`؛
+  NOT_FOUND لا تخمين.
+- **Arena:** إعادة تشغيل التحقق `command` في الـ verifier تمر الآن عبر الـ
+  Registry (`sandbox.command`, risk HIGH, capabilities=shell): code-05 اكتسب
+  فحص `command` حقيقياً (verifier داخلياً **5/5** كان 4) والسجل يحمل
+  `reg: {authorized}✓/{denied}✗ ev:{tail}` لكل صف وسطر
+  **Registry: registered/authorized/denied/revoked/schema failures** في الملخص؛
+  الرفض ⇒ `{"status": "DENIED"}` ⇒ INCONCLUSIVE صادق لا PASS مزيف.
+- **الحَكَم الطفري 8/8:** إزالة حماية التكرار (1) — تجاوز capability (1) — تجاوز
+  policy (1) — تجاوز authorization (1) — DISABLED يُنفَّذ (1) — REVOKED يُنفَّذ (1)
+  — input غير صالح يصل للمعالج (1) — خرق output-schema يصير PASS (1): كلها
+  تكسر الاختبارات.
+- الاختبارات: `tests/test_tool_registry.py` (22) + اختبارا تكامل العدّاء (2) =
+  **227 passed**.
+
 ### P1-T3 — Git آمن
 - `git_tool.py`: `git_status/git_diff/git_add/git_commit/git_log` فقط — registry-level deny لأي subcommand آخر (لا push/remote/reset/clean)، هوية commit من env مُعلن، رسالة commit تُسجل في audit.
 - **Evidence:** اختبار deny شامل + اختبار دورة commit محلية داخل workspace + صف مصفوفة.

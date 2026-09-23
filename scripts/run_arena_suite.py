@@ -637,14 +637,58 @@ def run_task(spec: TaskSpec, mode: str) -> dict[str, Any]:
                         "audit_hash": shell_ev["audit_hash"],
                     }
 
+                # P1-T5: command re-runs go through the gated Tool Registry —
+                # schema → capability → policy → authorization → execute → evidence.
+                from nimna.config import Settings as _S
+                from nimna.tools.builtin.shell import ShellRequest as _Req, execute_shell as _exe
+                from nimna.execution.tool_registry import (
+                    AuthorizationDecision, EvidenceChain, InvocationStatus,
+                    PolicyDecision, ToolDescriptor, ToolRegistry, invoke)
+
+                _settings = _S.from_env(env_file=None)
+                _settings.shell_tool_enabled = capabilities.get("shell_tool", False)
+                _settings.sandbox_memory_mb = 256
+                _shell_granted = bool(capabilities.get("shell_tool"))
+                registry = ToolRegistry()
+                registry_evidence = EvidenceChain()
+
+                def _sandbox_command(arguments: dict) -> dict:
+                    res = _exe(_Req(command=arguments["command"],
+                                    timeout_ms=max(100, min(int(arguments["timeout_ms"]), 60_000))),
+                               settings=_settings, workspace_root=workspace, explicit_consent=True)
+                    status = res.status.value if hasattr(res.status, "value") else str(res.status)
+                    return {"status": str(status), "exit_code": int(res.exit_code or 0),
+                            "timed_out": bool(res.timed_out)}
+
+                registry.register(ToolDescriptor(
+                    tool_id="sandbox.command", version="1.0.0",
+                    input_schema={"type": "object",
+                                  "properties": {"command": {"type": "string", "maxLength": 4000},
+                                                 "timeout_ms": {"type": "integer"}},
+                                  "required": ["command"], "additionalProperties": False},
+                    output_schema={"type": "object",
+                                   "properties": {"status": {"type": "string"},
+                                                  "exit_code": {"type": "integer"},
+                                                  "timed_out": {"type": "boolean"}},
+                                   "required": ["status"]},
+                    capabilities=("shell",), side_effects=("process", "filesystem"),
+                    risk_level="HIGH", handler=_sandbox_command))
+
                 def _exec_fn(command: str, timeout_ms: int):
-                    from nimna.config import Settings as _S
-                    from nimna.tools.builtin.shell import ShellRequest as _Req, execute_shell as _exe
-                    s = _S.from_env(env_file=None)
-                    s.shell_tool_enabled = capabilities.get("shell_tool", False)
-                    s.sandbox_memory_mb = 256
-                    return _exe(_Req(command=command, timeout_ms=max(100, min(int(timeout_ms), 60_000))),
-                                settings=s, workspace_root=workspace, explicit_consent=True)
+                    outcome = invoke(registry, "sandbox.command",
+                                     {"command": command, "timeout_ms": int(timeout_ms)},
+                                     granted_capabilities=frozenset({"shell"}) if _shell_granted else frozenset(),
+                                     policy=lambda tool, args: PolicyDecision(
+                                         _shell_granted,
+                                         "suite operator: sandbox-only verification re-run"
+                                         if _shell_granted else "shell_tool disabled"),
+                                     authorizer=lambda tool, args: AuthorizationDecision(
+                                         True, "suite operator explicit consent"),
+                                     evidence=registry_evidence)
+                    if outcome.status is not InvocationStatus.EXECUTED:
+                        # refused ⇒ honest INCONCLUSIVE downstream, never a fake PASS
+                        return {"status": "DENIED"}
+                    return outcome.result
 
                 verifier = DeterministicVerifier(workspace)
                 report_v = verifier.verify(
@@ -656,6 +700,19 @@ def run_task(spec: TaskSpec, mode: str) -> dict[str, Any]:
                 )
                 vdata = report_v.to_dict()
                 row["verification"] = vdata
+                row["registry"] = {
+                    "registered": [tool.tool_id for tool in registry.list()],
+                    "invocations": len(registry_evidence),
+                    "authorized": sum(1 for e in registry_evidence.entries if e["decision"] == "EXECUTED"),
+                    "denied": sum(1 for e in registry_evidence.entries if e["decision"] in {
+                        "NOT_FOUND", "DISABLED", "REVOKED", "CAPABILITY_DENIED",
+                        "POLICY_DENIED", "AUTHORIZATION_DENIED"}),
+                    "revoked": sum(1 for e in registry_evidence.entries if e["decision"] == "REVOKED"),
+                    "schema_failures": sum(1 for e in registry_evidence.entries if e["decision"] in {
+                        "INPUT_INVALID", "OUTPUT_VIOLATION"}),
+                    "evidence_tail": registry_evidence.tail[7:23],
+                    "chain_verified": registry_evidence.verify(),
+                }
                 checks.append({"name": f"verifier:{vdata['verdict']}",
                                "ok": vdata["verdict"] == "PASS",
                                "detail": f"passed {vdata['summary']['passed']}/{vdata['summary']['total']}"
@@ -668,6 +725,11 @@ def run_task(spec: TaskSpec, mode: str) -> dict[str, Any]:
             except Exception as exc:
                 row["verification"] = {"verdict": "INCONCLUSIVE",
                                        "error": f"{exc.__class__.__name__}: {str(exc)[:150]}"}
+                row["registry"] = {"registered": [tool.tool_id for tool in registry.list()],
+                                   "invocations": len(registry_evidence),
+                                   "evidence_tail": registry_evidence.tail[7:23],
+                                   "chain_verified": registry_evidence.verify(),
+                                   "error": f"verifier crashed: {exc.__class__.__name__}"}
                 checks.append({"name": "verifier:INCONCLUSIVE", "ok": False,
                                "detail": f"verifier crashed: {exc.__class__.__name__}"})
                 row["checks"] = checks
@@ -799,6 +861,11 @@ def run_suite(tasks: list[TaskSpec], mode: str, *, ledger_path: Path | None = DE
             "checkpoint_completed": sum(1 for r in rows if (r.get("recovery") or {}).get("state") == "COMPLETED"),
             "checkpoint_failed": sum(1 for r in rows if (r.get("recovery") or {}).get("state") == "FAILED"),
             "checkpoint_diagnosable": sum(1 for r in rows if (r.get("recovery") or {}).get("state") == "CHECKPOINTED"),
+            "registry_registered": sum(len((r.get("registry") or {}).get("registered") or []) for r in rows),
+            "registry_authorized": sum(int((r.get("registry") or {}).get("authorized") or 0) for r in rows),
+            "registry_denied": sum(int((r.get("registry") or {}).get("denied") or 0) for r in rows),
+            "registry_revoked": sum(int((r.get("registry") or {}).get("revoked") or 0) for r in rows),
+            "registry_schema_failures": sum(int((r.get("registry") or {}).get("schema_failures") or 0) for r in rows),
         },
         "regressions": regressions,
     }
@@ -856,6 +923,10 @@ def render_markdown(report: dict[str, Any]) -> str:
         rec = row.get("recovery")
         if rec:
             notes.append(f"ckpt {rec['state']}:{str(rec.get('checkpoint_id', ''))[5:17]}")
+        reg_row = row.get("registry")
+        if reg_row:
+            notes.append(f"reg: {reg_row.get('authorized', 0)}✓/{reg_row.get('denied', 0)}✗"
+                         f" ev:{reg_row.get('evidence_tail', '—')}")
         if row.get("previous_score") is not None and row.get("score") is not None:
             delta = round(row["score"] - row["previous_score"], 1)
             notes.append(f"prev {row['previous_score']} ({'+' if delta >= 0 else ''}{delta})")
@@ -894,6 +965,13 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines += [
             f"**Checkpoint (P1-T4, atomic store):** COMPLETED `{summary.get('checkpoint_completed', 0)}` · "
             f"FAILED `{summary.get('checkpoint_failed', 0)}` · diagnosable CHECKPOINTED `{summary.get('checkpoint_diagnosable', 0)}`",
+            "",
+        ]
+    if any(r.get("registry") for r in report["rows"]):
+        lines += [
+            f"**Registry (P1-T5, gated invocation):** registered `{summary.get('registry_registered', 0)}` · "
+            f"authorized `{summary.get('registry_authorized', 0)}` · denied `{summary.get('registry_denied', 0)}` · "
+            f"revoked `{summary.get('registry_revoked', 0)}` · schema failures `{summary.get('registry_schema_failures', 0)}`",
             "",
         ]
     if report["regressions"]:

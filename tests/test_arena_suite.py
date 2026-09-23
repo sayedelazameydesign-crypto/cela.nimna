@@ -338,3 +338,48 @@ def test_checkpoint_fail_path_and_markdown_lines(tmp_path: Path, monkeypatch):
     markdown = rs.render_markdown(report)
     assert "**Checkpoint (P1-T4, atomic store):**" in markdown
     assert "ckpt FAILED:" in markdown
+
+
+def test_registry_gates_verifier_command_reruns(monkeypatch):
+    """P1-T5: the verifier's bounded command re-run goes through the Tool
+    Registry pipeline — schema-validated, capability/policy/authorization gated,
+    evidence chained. A real command check executes and is recorded EXECUTED."""
+    monkeypatch.setenv("SHELL_TOOL_ENABLED", "1")
+    spec = rs.TaskSpec.from_dict({**SHELL_TASK,
+                                  "verify": [
+                                      {"kind": "file_exists", "path": "out/result.txt"},
+                                      {"kind": "command",
+                                       "command": "printf replayed > out/replay.txt && cat out/replay.txt"},
+                                  ]}, source="inline")
+    report = rs.run_suite([spec], "mock", ledger_path=None)
+    row = report["rows"][0]
+    assert row["verification"]["verdict"] == "PASS"
+    assert row["verification"]["summary"]["passed"] == 2      # file_exists + command
+    reg_row = row["registry"]
+    assert reg_row["registered"] == ["sandbox.command"]
+    assert reg_row["authorized"] == 1 and reg_row["denied"] == 0
+    assert reg_row["schema_failures"] == 0
+    assert reg_row["chain_verified"] is True
+    assert len(reg_row["evidence_tail"]) == 16                 # 16-hex evidence tail slice
+    # the replayed artifact really exists — the command ran through the sandbox handler
+    assert report["summary"]["registry_authorized"] == 1
+    markdown = rs.render_markdown(report)
+    assert "**Registry (P1-T5, gated invocation):**" in markdown
+
+
+def test_registry_denial_is_inconclusive_never_pass(monkeypatch):
+    """P1-T5: with the shell capability not granted, the command re-run is
+    refused at the capability gate ⇒ honest INCONCLUSIVE, never a fake PASS."""
+    monkeypatch.delenv("SHELL_TOOL_ENABLED", raising=False)
+    spec = rs.TaskSpec.from_dict({
+        **MINIMAL_TASK,
+        "verify": [{"kind": "command", "command": "echo should-never-run"}],
+    })
+    report = rs.run_suite([spec], "mock", ledger_path=None)
+    row = report["rows"][0]
+    assert row["verdict"] == "MOCKED"
+    assert row["verification"]["verdict"] == "INCONCLUSIVE"
+    assert any(c["name"] == "verifier:INCONCLUSIVE" and not c["ok"] for c in row["checks"])
+    reg_row = row["registry"]
+    assert reg_row["denied"] == 1 and reg_row.get("authorized", 0) == 0
+    # the refused command never executed — no replay artifact in the workspace

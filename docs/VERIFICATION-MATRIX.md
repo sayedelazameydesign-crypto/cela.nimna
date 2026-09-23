@@ -27,6 +27,8 @@
 
 | G19 Checkpoint / Recovery | `pytest -q tests/test_recovery.py` | offline (temp stores) | atomic persistence (validate → tmp+fsync → os.replace → dir fsync; torn/tampered file ⇒ CorruptedCheckpoint never used) · 7-state machine, illegal transitions raise · 9 ordered resume gates (missing ⇒ refused 'never claimed', kill-switch ⇒ ABORTED, revoked/expired authorization ⇒ refused, evidence mismatch ⇒ refused, fingerprint change ⇒ REQUIRES_REOBSERVATION then confirm, idempotency ledger skips completed+verified) · duplicate resume refused · corrupted ⇒ RECOVERY_ERROR (never PASS) · Arena rows carry ckpt STATE + evidence head + fingerprint · all 6 mutations are test-breaking | `nimna/execution/recovery.py`, `tests/test_recovery.py`, `tests/test_arena_suite.py`, `scripts/run_arena_suite.py` |
 
+| G20 Tool Registry | `pytest -q tests/test_tool_registry.py` | offline (in-memory) | register/replace (strict semver bump, REVOKED un-replaceable) / unregister / duplicate protection · deterministic sorted discovery + capability query · lifecycle table with REVOKED terminal · invocation gates in order: NOT_FOUND → DISABLED/REVOKED → input-schema (before execution) → capability → policy (default-deny) → authorization (default-deny) → execute → output-schema (violation = ok=False, executed=True) · handler exception = HANDLER_ERROR never PASS · hash-chained evidence, digests only, tamper-detecting · Arena verifier `command` re-runs are gated invocations (refusal ⇒ INCONCLUSIVE never PASS) · all 8 mutations are test-breaking | `nimna/execution/tool_registry.py`, `tests/test_tool_registry.py`, `tests/test_arena_suite.py`, `scripts/run_arena_suite.py` |
+
 ## Interpretation
 
 - `PASS` = the named check executed and passed in the named environment.

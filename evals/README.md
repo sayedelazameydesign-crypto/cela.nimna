@@ -71,6 +71,15 @@ python scripts/run_arena_suite.py --mode mock --strict
 | `recovered` | مهمة اصطدمت بفشل ثم أكملت بفحوص 100% (مثل `code-05`) |
 | `mean_wall_ms` | متوسط زمن الجدار للمهام |
 
+**Baseline v6 (P1-T1..T4 + P1-T5 Tool Registry، وضع mock، `SHELL_TOOL_ENABLED=1`):**
+9 ran / 2 skipped / 0 error / mean 55.6 · **Verifier: PASS 2 · FAIL 0 · INCONCLUSIVE 0** ·
+Checkpoint: COMPLETED 2 · FAILED 0 · diagnosable 0 · **Registry: registered 2 ·
+authorized 1 · denied 0 · revoked 0 · schema failures 0** — إعادة تشغيل التحقق
+`command` في code-05 تمر الآن عبر بوابات الـ Registry (`sandbox.command`): 
+verifier داخلياً **5/5** (كان 4) وكل صف verify يحمل `reg: {a}✓/{d}✗ ev:{tail}`.
+بصمات fs قبل/بعد مطابقة v4/v5: code-01 `cb0a7629ae1a→c9425def3b7f` وcode-05
+`fb681ae9c774→02f57fc9b5e6`. راجع `ledger/BASELINE-mock.md` و`BASELINE-mock.json`.
+
 **Baseline v5 (P1-T1..T3 + P1-T4 Checkpoint/Recovery، وضع mock، `SHELL_TOOL_ENABLED=1`):**
 9 ran / 2 skipped / 0 error / mean 55.6 · **Verifier: PASS 2 · FAIL 0 · INCONCLUSIVE 0** ·
 **Checkpoint: COMPLETED 2 · FAILED 0 · diagnosable 0** — كل صف shell يحمل

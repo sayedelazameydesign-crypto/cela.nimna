@@ -1,8 +1,8 @@
 {
   "version": 1,
   "mode": "mock",
-  "repo_version": "2beb5f0",
-  "generated_at": "2026-09-23T18:07:10+00:00",
+  "repo_version": "591ca0d",
+  "generated_at": "2026-09-23T18:21:19+00:00",
   "rows": [
     {
       "task_id": "arabic-01-market-brief",
@@ -43,9 +43,9 @@
         "verified": false,
         "delta_reverified": 0
       },
-      "run_id": "217536c9fdf04acd",
-      "ts": "2026-09-23T18:07:09+00:00",
-      "repo_version": "2beb5f0",
+      "run_id": "1cc2b9647698455e",
+      "ts": "2026-09-23T18:21:18+00:00",
+      "repo_version": "591ca0d",
       "previous_score": null
     },
     {
@@ -87,9 +87,9 @@
         "verified": false,
         "delta_reverified": 0
       },
-      "run_id": "bda3f4de556640b1",
-      "ts": "2026-09-23T18:07:09+00:00",
-      "repo_version": "2beb5f0",
+      "run_id": "29b4288fc22c4294",
+      "ts": "2026-09-23T18:21:18+00:00",
+      "repo_version": "591ca0d",
       "previous_score": null
     },
     {
@@ -147,7 +147,7 @@
         "shell_tool"
       ],
       "metrics": {
-        "wall_ms": 29,
+        "wall_ms": 46,
         "tool_calls": 2,
         "failed_tool_calls": 0,
         "failed_shell_commands": 0,
@@ -163,7 +163,7 @@
         "before_root_hash": "sha256:cb0a7629ae1af35f4af425cbfd917db45cb537a7ef4ef33033083aabe9922d59",
         "after_root_hash": "sha256:c9425def3b7f995f85f354b9d92d2c94fb408d42a3f536fc7dd418e7ddacf507",
         "delta_changes": 1,
-        "audit_hash": "e2565e0565382e3497d3217dee1d808a7cf1b9c6501864061a122de362087ee5"
+        "audit_hash": "cf15df73b5f2e96fc9615a35c58ee301f4e575212d07b9e6f7c95d2f124d9738"
       },
       "verification": {
         "version": 1,
@@ -207,16 +207,28 @@
           }
         ]
       },
+      "registry": {
+        "registered": [
+          "sandbox.command"
+        ],
+        "invocations": 0,
+        "authorized": 0,
+        "denied": 0,
+        "revoked": 0,
+        "schema_failures": 0,
+        "evidence_tail": "c457a85bfe48a493",
+        "chain_verified": true
+      },
       "recovery": {
         "state": "COMPLETED",
-        "checkpoint_id": "ckpt_c57d4f71b3b24a43aa136fc7",
+        "checkpoint_id": "ckpt_c9ccfe9d6c094809a6b7f655",
         "state_version": 1,
-        "evidence_head": "e2565e0565382e3497d3217dee1d808a7cf1b9c6501864061a122de362087ee5",
+        "evidence_head": "cf15df73b5f2e96fc9615a35c58ee301f4e575212d07b9e6f7c95d2f124d9738",
         "observation_fingerprint": "sha256:c9425def3b7f995f85f354b9d92d2c94fb408d42a3f536fc7dd418e7ddacf507"
       },
-      "run_id": "7e50517b0bad42be",
-      "ts": "2026-09-23T18:07:09+00:00",
-      "repo_version": "2beb5f0",
+      "run_id": "239dc2e0ff4a44cb",
+      "ts": "2026-09-23T18:21:18+00:00",
+      "repo_version": "591ca0d",
       "previous_score": null
     },
     {
@@ -251,7 +263,7 @@
       ],
       "requires": [],
       "metrics": {
-        "wall_ms": 7,
+        "wall_ms": 10,
         "tool_calls": 0,
         "failed_tool_calls": 0,
         "failed_shell_commands": 0,
@@ -263,9 +275,9 @@
         "verified": true,
         "delta_reverified": 0
       },
-      "run_id": "4ce3d65b794e4ee4",
-      "ts": "2026-09-23T18:07:09+00:00",
-      "repo_version": "2beb5f0",
+      "run_id": "98f52384e378409c",
+      "ts": "2026-09-23T18:21:18+00:00",
+      "repo_version": "591ca0d",
       "previous_score": null
     },
     {
@@ -300,7 +312,7 @@
       ],
       "requires": [],
       "metrics": {
-        "wall_ms": 8,
+        "wall_ms": 16,
         "tool_calls": 0,
         "failed_tool_calls": 0,
         "failed_shell_commands": 0,
@@ -312,9 +324,9 @@
         "verified": false,
         "delta_reverified": 0
       },
-      "run_id": "6c5caa03e92a4d00",
-      "ts": "2026-09-23T18:07:10+00:00",
-      "repo_version": "2beb5f0",
+      "run_id": "61e0be8f6ca940a8",
+      "ts": "2026-09-23T18:21:18+00:00",
+      "repo_version": "591ca0d",
       "previous_score": null
     },
     {
@@ -344,7 +356,7 @@
       ],
       "requires": [],
       "metrics": {
-        "wall_ms": 12,
+        "wall_ms": 11,
         "tool_calls": 0,
         "failed_tool_calls": 0,
         "failed_shell_commands": 0,
@@ -356,9 +368,9 @@
         "verified": true,
         "delta_reverified": 0
       },
-      "run_id": "c0528e157ec3423c",
-      "ts": "2026-09-23T18:07:10+00:00",
-      "repo_version": "2beb5f0",
+      "run_id": "0a3810c5890e42cc",
+      "ts": "2026-09-23T18:21:18+00:00",
+      "repo_version": "591ca0d",
       "previous_score": null
     },
     {
@@ -394,7 +406,7 @@
         {
           "name": "verifier:PASS",
           "ok": true,
-          "detail": "passed 4/4 · failed 0 · inconclusive 0"
+          "detail": "passed 5/5 · failed 0 · inconclusive 0"
         }
       ],
       "secret_hits": [],
@@ -412,7 +424,7 @@
         "shell_tool"
       ],
       "metrics": {
-        "wall_ms": 48,
+        "wall_ms": 69,
         "tool_calls": 3,
         "failed_tool_calls": 0,
         "failed_shell_commands": 1,
@@ -428,14 +440,14 @@
         "before_root_hash": "sha256:fb681ae9c7746729d8b6781ab5c433f41cf120ba3d670428a295ad7a7e7c54c6",
         "after_root_hash": "sha256:02f57fc9b5e6143157db10b4111d23258ea8a4ba2b90f98dcc52c8b5a25bb8d7",
         "delta_changes": 1,
-        "audit_hash": "60c6225294b084935733698a57588ecabd0e294f352ac7ebf2a5ced2512318bf"
+        "audit_hash": "e2fd2cb750bba500d263f58bd5ef5c77d866f415f008c2ffeb6f12223a389db3"
       },
       "verification": {
         "version": 1,
         "verdict": "PASS",
         "summary": {
-          "total": 4,
-          "passed": 4,
+          "total": 5,
+          "passed": 5,
           "failed": 0,
           "inconclusive": 0
         },
@@ -463,19 +475,37 @@
             "ok": true,
             "detail": "hash verified",
             "target": "scripts_src/result.txt"
+          },
+          {
+            "kind": "command",
+            "ok": true,
+            "detail": "verification command succeeded",
+            "target": "python3 scripts_src/app.py"
           }
         ]
       },
+      "registry": {
+        "registered": [
+          "sandbox.command"
+        ],
+        "invocations": 1,
+        "authorized": 1,
+        "denied": 0,
+        "revoked": 0,
+        "schema_failures": 0,
+        "evidence_tail": "26c856af3fcfae04",
+        "chain_verified": true
+      },
       "recovery": {
         "state": "COMPLETED",
-        "checkpoint_id": "ckpt_450717e589b74bceb41f7e41",
+        "checkpoint_id": "ckpt_ede03441608d4dcfb990b295",
         "state_version": 1,
-        "evidence_head": "60c6225294b084935733698a57588ecabd0e294f352ac7ebf2a5ced2512318bf",
+        "evidence_head": "e2fd2cb750bba500d263f58bd5ef5c77d866f415f008c2ffeb6f12223a389db3",
         "observation_fingerprint": "sha256:02f57fc9b5e6143157db10b4111d23258ea8a4ba2b90f98dcc52c8b5a25bb8d7"
       },
-      "run_id": "6e9c8919effb4779",
-      "ts": "2026-09-23T18:07:10+00:00",
-      "repo_version": "2beb5f0",
+      "run_id": "c3c81047a15e436c",
+      "ts": "2026-09-23T18:21:19+00:00",
+      "repo_version": "591ca0d",
       "previous_score": null
     },
     {
@@ -522,9 +552,9 @@
         "verified": false,
         "delta_reverified": 0
       },
-      "run_id": "f877e44ca3384997",
-      "ts": "2026-09-23T18:07:10+00:00",
-      "repo_version": "2beb5f0",
+      "run_id": "f738eef0418f4221",
+      "ts": "2026-09-23T18:21:19+00:00",
+      "repo_version": "591ca0d",
       "previous_score": null
     },
     {
@@ -554,7 +584,7 @@
       ],
       "requires": [],
       "metrics": {
-        "wall_ms": 6,
+        "wall_ms": 10,
         "tool_calls": 0,
         "failed_tool_calls": 0,
         "failed_shell_commands": 0,
@@ -566,9 +596,9 @@
         "verified": false,
         "delta_reverified": 0
       },
-      "run_id": "d8f4a5b35ca3473b",
-      "ts": "2026-09-23T18:07:10+00:00",
-      "repo_version": "2beb5f0",
+      "run_id": "79a22f020bd342b8",
+      "ts": "2026-09-23T18:21:19+00:00",
+      "repo_version": "591ca0d",
       "previous_score": null
     },
     {
@@ -590,9 +620,9 @@
         "network"
       ],
       "metrics": {},
-      "run_id": "8bfee0edc8b541db",
-      "ts": "2026-09-23T18:07:10+00:00",
-      "repo_version": "2beb5f0",
+      "run_id": "fa23e1f3a4394024",
+      "ts": "2026-09-23T18:21:19+00:00",
+      "repo_version": "591ca0d",
       "previous_score": null
     },
     {
@@ -614,9 +644,9 @@
         "network"
       ],
       "metrics": {},
-      "run_id": "620622ff0b704925",
-      "ts": "2026-09-23T18:07:10+00:00",
-      "repo_version": "2beb5f0",
+      "run_id": "7b04100573d342db",
+      "ts": "2026-09-23T18:21:19+00:00",
+      "repo_version": "591ca0d",
       "previous_score": null
     }
   ],
@@ -635,14 +665,19 @@
     "shell_executions": 3,
     "evidence_completeness": 100.0,
     "recovered_tasks": 1,
-    "mean_wall_ms": 15.1,
+    "mean_wall_ms": 20.9,
     "delta_reverified": 2,
     "verifier_pass": 2,
     "verifier_fail": 0,
     "verifier_inconclusive": 0,
     "checkpoint_completed": 2,
     "checkpoint_failed": 0,
-    "checkpoint_diagnosable": 0
+    "checkpoint_diagnosable": 0,
+    "registry_registered": 2,
+    "registry_authorized": 1,
+    "registry_denied": 0,
+    "registry_revoked": 0,
+    "registry_schema_failures": 0
   },
   "regressions": []
 }
