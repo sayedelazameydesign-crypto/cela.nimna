@@ -1,8 +1,8 @@
 name: Arena Diff Evaluation
 
 # يستخرج الـ Git Diff لكل Pull Request، يقيّمه عبر scripts/evaluate_arena.py
-# (فحص ثابت + إرسال اختياري إلى Arena API)، ثم ينشر النتيجة كتعليق في الـ PR.
-# التفاصيل: docs/ARENA-DIFF-EVAL.md
+# (فحص ثابت + LLM-as-a-Judge اختياري عبر OPENAI_API_KEY + إرسال اختياري إلى Arena API)،
+# ثم ينشر النتيجة كتعليق في الـ PR. التفاصيل: docs/ARENA-DIFF-EVAL.md
 
 on:
   pull_request:
@@ -52,11 +52,16 @@ jobs:
 
       # 4. تشغيل سكريبت التقييم
       #    بدون ARENA_API_URL/ARENA_API_KEY تُسجَّل حالة الـ Benchmark كـ SKIPPED (لا PASS وهمي).
+      #    بدون OPENAI_API_KEY تُسجَّل حالة الـ LLM-as-a-Judge كـ SKIPPED بنفس القاعدة.
       - name: Run Arena evaluation
         env:
           ARENA_API_URL: ${{ secrets.ARENA_API_URL }}
           ARENA_API_KEY: ${{ secrets.ARENA_API_KEY }}
-          # OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}  # فعّله فقط عند إضافة LLM-as-a-Judge
+          # LLM-as-a-Judge: أي endpoint متوافق مع OpenAI Chat Completions.
+          # بدونه: SKIPPED. مع خطأ اتصال/ردّ: ERROR بلافتة تحذير — لا PASS وهمي أبداً.
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # OPENAI_BASE_URL: https://api.openai.com/v1   # اختياري: مزوّد متوافق (NVIDIA NIM، Ollama، …)
+          # JUDGE_MODEL: gpt-4o-mini                     # اختياري: النموذج المستخدم للحكم
           ARENA_BASE_REF: ${{ github.base_ref || inputs.base_ref || 'main' }}
           ARENA_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           ARENA_PR_NUMBER: ${{ github.event.pull_request.number }}

@@ -145,6 +145,7 @@ def test_empty_diff_reports_no_changes():
     report = ev.build_report("", env={})
     assert report["metrics"]["files"] == 0
     assert report["benchmark"]["status"] == "SKIPPED"
+    assert report["judge"]["status"] == "SKIPPED"
     assert "No Diff found" in ev.render_markdown(report)
 
 
@@ -266,8 +267,9 @@ def test_cli_writes_markdown_and_json_outputs(tmp_path: Path):
     assert proc.returncode == 0, proc.stderr
     assert md_path.read_text(encoding="utf-8").startswith("### 🎯 Arena Evaluation Results")
     data = json.loads(json_path.read_text(encoding="utf-8"))
-    assert data["version"] == 1 and data["metrics"]["files"] == 5
+    assert data["version"] == 2 and data["metrics"]["files"] == 5
     assert data["benchmark"]["status"] == "SKIPPED"
+    assert data["judge"]["status"] == "SKIPPED"
 
 
 def test_cli_strict_mode_fails_on_high_risk(tmp_path: Path):
@@ -279,3 +281,153 @@ def test_cli_strict_mode_fails_on_high_risk(tmp_path: Path):
     )
     assert proc.returncode == 2
     assert json.loads(proc.stdout)["risk"]["level"] == "HIGH"
+
+
+# --------------------------------------------------------------------------- #
+# LLM-as-a-Judge — same honesty contract as the benchmark row
+# --------------------------------------------------------------------------- #
+
+def _judge_content(verdict="PASS", score=87, summary="تغطية جيدة والمنطق سليم"):
+    return json.dumps({"verdict": verdict, "score": score, "summary": summary}, ensure_ascii=False)
+
+
+def _fake_chat_response(content: str) -> "_FakeResponse":
+    payload = json.dumps({"choices": [{"message": {"role": "assistant", "content": content}}]}).encode("utf-8")
+    return _FakeResponse(payload)
+
+
+def test_judge_is_skipped_without_openai_key_and_never_claims_pass():
+    report = ev.build_report(SAMPLE_DIFF, env={}, base_ref="main")
+    assert report["judge"]["status"] == "SKIPPED"
+    assert report["judge"]["detail"]  # the report explains *why*, it never fakes a verdict
+    markdown = ev.render_markdown(report)
+    assert "**حالة الـ LLM-as-a-Judge**" in markdown
+    assert not any(line.startswith(BANNER_PREFIX) for line in markdown.splitlines())
+
+
+def test_judge_off_mode_stays_skipped_even_with_key():
+    report = ev.build_report(SAMPLE_DIFF, env={"OPENAI_API_KEY": "k" * 20, "JUDGE_MODE": "off"})
+    assert report["judge"]["status"] == "SKIPPED"
+    assert report["judge"]["mode"] == "off"
+
+
+def test_judge_mock_mode_is_labelled_mocked_with_top_banner():
+    report = ev.build_report(SAMPLE_DIFF, env={"JUDGE_MODE": "mock"})
+    assert report["judge"]["status"] == "MOCKED"
+    assert report["judge"]["mode"] == "mock"
+    markdown = ev.render_markdown(report)
+    _assert_banner_precedes_every_table(markdown, "JUDGE MOCKED RUN")
+    assert "ليس حكماً حقيقياً" in markdown
+
+
+def test_judge_sends_bearer_model_and_diff_and_reports_real_pass(monkeypatch):
+    captured = {}
+
+    def fake_urlopen(request, timeout):
+        captured["url"] = request.full_url
+        captured["auth"] = request.get_header("Authorization")
+        captured["timeout"] = timeout
+        captured["body"] = json.loads(request.data.decode("utf-8"))
+        return _fake_chat_response(_judge_content())
+
+    monkeypatch.setattr(ev.urllib.request, "urlopen", fake_urlopen)
+    env = {
+        "OPENAI_API_KEY": "sk-" + "k" * 20,
+        "JUDGE_MODEL": "gpt-4o-mini",
+        "JUDGE_TIMEOUT": "45",
+        "OPENAI_BASE_URL": "https://api.example/v1/",
+    }
+    report = ev.build_report(SAMPLE_DIFF, env=env, base_ref="main")
+    assert captured["url"] == "https://api.example/v1/chat/completions"  # trailing slash stripped
+    assert captured["auth"] == "Bearer " + env["OPENAI_API_KEY"]
+    assert captured["timeout"] == 45.0
+    assert captured["body"]["model"] == "gpt-4o-mini"
+    messages = captured["body"]["messages"]
+    assert messages[0]["role"] == "system" and "JSON" in messages[0]["content"]
+    assert "diff --git" in messages[1]["content"] and "Static risk level" in messages[1]["content"]
+    assert report["judge"] == {"status": "PASS", "score": 87, "model": "gpt-4o-mini", "mode": "live",
+                               "detail": "تغطية جيدة والمنطق سليم"}
+    markdown = ev.render_markdown(report) + json.dumps(report, ensure_ascii=False)
+    assert "✅ **PASS** (Score: 87)" in ev.render_markdown(report)
+    assert env["OPENAI_API_KEY"] not in markdown  # the key never leaks into the report
+
+
+def test_judge_normalises_verdicts_and_tolerates_fenced_json(monkeypatch):
+    content = 'هذا تقييمي:\n```json\n{"verdict": "failed", "score": "35", "summary": "broken"}\n```'
+    monkeypatch.setattr(ev.urllib.request, "urlopen", lambda request, timeout: _fake_chat_response(content))
+    report = ev.build_report(SAMPLE_DIFF, env={"OPENAI_API_KEY": "k" * 20})
+    assert report["judge"]["status"] == "FAIL"
+    assert report["judge"]["score"] == 35
+    assert report["judge"]["detail"] == "broken"
+
+
+def test_judge_unknown_verdict_is_never_promoted_to_pass(monkeypatch):
+    content = json.dumps({"summary": "لا يمكنني الحكم"})  # no verdict field at all
+    monkeypatch.setattr(ev.urllib.request, "urlopen", lambda request, timeout: _fake_chat_response(content))
+    report = ev.build_report(SAMPLE_DIFF, env={"OPENAI_API_KEY": "k" * 20})
+    assert report["judge"]["status"] == "UNKNOWN"
+
+
+def test_judge_non_numeric_score_is_reported_as_none_not_invented(monkeypatch):
+    content = json.dumps({"verdict": "PASS", "score": "excellent", "summary": "ok"})
+    monkeypatch.setattr(ev.urllib.request, "urlopen", lambda request, timeout: _fake_chat_response(content))
+    report = ev.build_report(SAMPLE_DIFF, env={"OPENAI_API_KEY": "k" * 20})
+    assert report["judge"]["status"] == "PASS"
+    assert report["judge"]["score"] is None
+
+
+def test_judge_transport_error_is_bannered_and_leaks_nothing(monkeypatch):
+    def boom(request, timeout):
+        raise ev.urllib.error.URLError("down")
+
+    monkeypatch.setattr(ev.urllib.request, "urlopen", boom)
+    key = "sk-live-secret-value-123"
+    report = ev.build_report(SAMPLE_DIFF, env={"OPENAI_API_KEY": key})
+    assert report["judge"]["status"] == "ERROR"
+    rendered = ev.render_markdown(report) + json.dumps(report, ensure_ascii=False)
+    _assert_banner_precedes_every_table(ev.render_markdown(report), "LLM Judge ERROR")
+    assert key not in rendered
+
+
+def test_judge_http_error_is_reported_as_error(monkeypatch):
+    def forbidden(request, timeout):
+        raise ev.urllib.error.HTTPError(request.full_url, 401, "Unauthorized", {}, io.BytesIO(b""))
+
+    monkeypatch.setattr(ev.urllib.request, "urlopen", forbidden)
+    report = ev.build_report(SAMPLE_DIFF, env={"OPENAI_API_KEY": "k" * 20})
+    assert report["judge"]["status"] == "ERROR"
+    assert "401" in report["judge"]["detail"]
+
+
+def test_judge_diff_is_truncated_to_configured_limit(monkeypatch):
+    captured = {}
+
+    def fake_urlopen(request, timeout):
+        captured["body"] = json.loads(request.data.decode("utf-8"))
+        return _fake_chat_response(_judge_content())
+
+    monkeypatch.setattr(ev.urllib.request, "urlopen", fake_urlopen)
+    report = ev.build_report(SAMPLE_DIFF, env={"OPENAI_API_KEY": "k" * 20, "JUDGE_MAX_DIFF_CHARS": "50"})
+    user_content = captured["body"]["messages"][1]["content"]
+    assert "Diff truncated: yes" in user_content
+    assert len(user_content.rsplit("Unified diff:\n", 1)[1]) == 50
+    assert report["judge"]["status"] == "PASS"
+
+
+def test_cli_strict_mode_fails_on_judge_fail(monkeypatch, tmp_path: Path):
+    content = json.dumps({"verdict": "FAIL", "score": 12, "summary": "SQL injection in new helper"})
+    monkeypatch.setenv("OPENAI_API_KEY", "k" * 20)  # main() reads os.environ
+    monkeypatch.setattr(ev.urllib.request, "urlopen", lambda request, timeout: _fake_chat_response(content))
+    diff_path = tmp_path / "changes.diff"
+    diff_path.write_text(SAMPLE_DIFF, encoding="utf-8")
+    rc = ev.main(["--diff_file", str(diff_path), "--strict", "--format", "json",
+                  "--output", str(tmp_path / "out.md")])
+    assert rc == 2
+
+
+def test_strict_mode_still_passes_when_judge_is_skipped(tmp_path: Path):
+    diff_path = tmp_path / "changes.diff"
+    diff_path.write_text(SAMPLE_DIFF, encoding="utf-8")
+    rc = ev.main(["--diff_file", str(diff_path), "--strict", "--format", "json",
+                  "--output", str(tmp_path / "out.md")])
+    assert rc == 0  # SKIPPED is expected/normal — it must not fail strict mode
