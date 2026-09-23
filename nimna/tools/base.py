@@ -33,6 +33,16 @@ Risk = Literal["safe", "confirm"]
 
 # substrings that look like secrets – redacted before logging / showing to the model
 _SECRET_RE = re.compile(r"(api[_-]?key|secret|password|token|bearer)", re.I)
+# long opaque tokens like sk-..., nvidia_sk_...
+_TOKEN_RE = re.compile(r"(sk-[A-Za-z0-9_\-]{10,}|nvapi-[A-Za-z0-9_\-]{10,}|Bearer\s+[A-Za-z0-9._\-]{10,})")
+
+
+def _redact_string(text: str) -> str:
+    # hide long tokens even when they appear in free-form messages
+    text = _TOKEN_RE.sub("***REDACTED***", text)
+    # also hide query-string secrets like ?api_key=...
+    text = re.sub(r"((?:api[_-]?key|secret|token|password)\s*[:=]\s*)([^\s&,;]+)", r"\1***REDACTED***", text, flags=re.I)
+    return text
 
 
 def redact_payload(payload: Any) -> Any:
@@ -43,13 +53,22 @@ def redact_payload(payload: Any) -> Any:
                 out[key] = "***REDACTED***"
             elif isinstance(value, (dict, list)):
                 out[key] = redact_payload(value)
-            elif isinstance(value, str) and len(value) > 20 and _SECRET_RE.search(value):
-                out[key] = "***REDACTED***"
+            elif isinstance(value, str):
+                # redact inside string values too
+                if len(value) > 12 and (_SECRET_RE.search(value) or _TOKEN_RE.search(value)):
+                    out[key] = _redact_string(value)
+                    # if original value looked like a secret, collapse to single marker
+                    if _SECRET_RE.search(str(key)) or _TOKEN_RE.fullmatch(value.strip()):
+                        out[key] = "***REDACTED***"
+                else:
+                    out[key] = value
             else:
                 out[key] = redact_payload(value) if isinstance(value, (dict, list)) else value
         return out
     if isinstance(payload, list):
         return [redact_payload(item) for item in payload]
+    if isinstance(payload, str):
+        return _redact_string(payload)
     return payload
 
 
@@ -250,9 +269,11 @@ class ToolRegistry:
             result = tool.run(params, ctx)
             ok = True
         except ToolError as exc:
-            result, ok = {"error": str(exc)}, False
+            result, ok = {"error": _redact_string(str(exc))}, False
         except Exception as exc:  # unexpected: log with traceback, tell the model briefly
-            log.exception("tool %s crashed", name)
-            result, ok = {"error": f"{type(exc).__name__}: {exc}"}, False
+            # never log raw secret – redact before emitting
+            msg = _redact_string(str(exc))
+            log.exception("tool %s crashed: %s", name, msg)
+            result, ok = {"error": _redact_string(f"{type(exc).__name__}: {exc}")}, False
         duration_ms = int((time.perf_counter() - started) * 1000)
         return serialize_result(result, max_chars=max_chars), ok, duration_ms

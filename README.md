@@ -253,12 +253,15 @@ curl -s localhost:8000/api/approvals/3f2c... -H 'Content-Type: application/json'
 ## Docker
 
 ```bash
-cp .env.example .env   # ضع المفتاح
-docker compose up --build
+cp .env.example .env   # ضع المفتاح (chmod 600 .env)
+docker compose up --build          # الوضع الآمن: subprocess sandbox (يطلب موافقة لـ run_python)
+# أو للعزل الحقيقي عبر Docker (يحتاج Docker Engine على المضيف):
+docker compose --profile local-sandbox up --build   # يشغل nimna-sandbox مع docker.sock
 ```
 
 - المجلدات `skills/` و`workspace/` مركّبة كـ volumes: أضف مهارة أو ملفًا دون إعادة بناء.
-- لعزل تنفيذ Python داخل حاويات مستقلة (`SANDBOX_BACKEND=docker`) فعّل تركيب `/var/run/docker.sock` في `docker-compose.yml`. في هذا الوضع يعمل `run_python` داخل `python:3.11-slim` بلا شبكة، بحدود ذاكرة/CPU/عمليات، وبكل الصلاحيات محذوفة، ويصبح مصنفًا **safe** (لا يحتاج موافقة).
+- **تحذير:** تركيب `/var/run/docker.sock` يمنح الحاوية تحكمًا شبه كامل بالمضيف (يمكنها إنشاء حاويات بصلاحيات عالية) ويلغي عزل الـ sandbox. لذلك **الخدمة الافتراضية `nimna` لا تركّب الـ socket** وتعمل بـ `SANDBOX_BACKEND=subprocess` (يطلب موافقة). استخدم الخدمة `nimna-sandbox` ذات الـ profile فقط للتطوير المحلي، أو شغّل Nimna خارج Docker واجعل `run_python` يستخدم Docker Engine، أو استخدم proxy محدود الصلاحيات / Podman / خدمة sandbox منفصلة — انظر `SECURITY.md` و`docker-compose.yml`.
+- عند استخدام الـ profile، يعمل `run_python` داخل `python:3.11-slim` بلا شبكة، بحدود ذاكرة/CPU/عمليات، وبكل الصلاحيات محذوفة، ويصبح مصنفًا **safe** (لا يحتاج موافقة).
 
 ---
 

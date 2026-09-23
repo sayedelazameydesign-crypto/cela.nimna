@@ -7,14 +7,34 @@ services:
     env_file:
       - .env                      # copy .env.example -> .env and add your key
     environment:
-      # docker is the recommended backend (needs the socket mounted below)
-      SANDBOX_BACKEND: ${SANDBOX_BACKEND:-docker}
+      # Safe default: no Docker socket mounted. The Python sandbox runs with
+      # subprocess + rlimits and requires approval for run_python.
+      # For real isolation, use the local-sandbox profile (see below).
+      SANDBOX_BACKEND: ${SANDBOX_BACKEND:-subprocess}
     volumes:
       - ./skills:/app/skills:ro    # add a folder -> new skill (POST /api/skills/reload)
       - ./workspace:/app/workspace
       - nimna-data:/app/data
-      - /var/run/docker.sock:/var/run/docker.sock   # required for SANDBOX_BACKEND=docker; comment out to use subprocess
     restart: unless-stopped
+
+  # ── Local sandbox with Docker isolation ──────────────────────────────────
+  # This service mounts the Docker socket, which grants the container near-
+  # host control (can create arbitrary containers). Use only for local
+  # development and never in production.
+  #
+  #   docker compose --profile local-sandbox up nimna-sandbox
+  #
+  nimna-sandbox:
+    extends:
+      service: nimna
+    profiles: ["local-sandbox"]
+    environment:
+      SANDBOX_BACKEND: docker
+    volumes:
+      - ./skills:/app/skills:ro
+      - ./workspace:/app/workspace
+      - nimna-data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
 
 volumes:
   nimna-data:

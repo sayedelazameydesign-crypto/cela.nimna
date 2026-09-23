@@ -366,10 +366,14 @@ class Agent:
                 state.consecutive_failures += 1
                 continue
             risk = tool.effective_risk(params, ctx)
-            if risk == "confirm" and tool.name not in state.approved_tools and not self.settings.auto_approve:
+            # permanent approval is scoped to tool + skill set + versions (review §2)
+            approval_key = self._approval_key(tool.name, state)
+            legacy_approved = tool.name in state.approved_tools
+            scoped_approved = approval_key in state.approved_tools
+            if risk == "confirm" and not scoped_approved and not legacy_approved and not self.settings.auto_approve:
                 decision = self.approval_policy.decide(state, tool, call)
                 self._audit(state, "approval_requested", {"tool": tool.name, "arguments": call.arguments,
-                                                          "decision": decision.value})
+                                                          "decision": decision.value, "approval_key": approval_key})
                 if decision == Decision.DEFER:
                     state.pending = PendingApproval(
                         approval_id=state.run_id, tool_name=tool.name, tool_call=call, risk=risk,
@@ -383,7 +387,11 @@ class Agent:
                     state.consecutive_failures += 1
                     continue
                 if decision == Decision.ALWAYS:
-                    state.approved_tools.append(tool.name)
+                    # store both scoped and legacy for backward compat
+                    if approval_key not in state.approved_tools:
+                        state.approved_tools.append(approval_key)
+                    if tool.name not in state.approved_tools:
+                        state.approved_tools.append(tool.name)
             # approved or safe – run it
             self._run_tool(state, tool, call, ctx, approved=(risk == "confirm") or None)
             # update counters
@@ -408,7 +416,11 @@ class Agent:
             state.consecutive_failures += 1
             return
         if decision == Decision.ALWAYS:
-            state.approved_tools.append(pending.tool_name)
+            key = self._approval_key(pending.tool_name, state)
+            if key not in state.approved_tools:
+                state.approved_tools.append(key)
+            if pending.tool_name not in state.approved_tools:
+                state.approved_tools.append(pending.tool_name)
         tool = self.tools.get(pending.tool_name)
         if tool is None:
             self._record_tool_error(state, call, "tool disappeared before execution")
@@ -462,6 +474,25 @@ class Agent:
     @staticmethod
     def _signature(call: ToolCall) -> str:
         return f"{call.name}:{json.dumps(call.arguments, sort_keys=True, ensure_ascii=False)}"
+
+    def _approval_key(self, tool_name: str, state: RunState) -> str:
+        """Scoped permanent-approval key: tool + skill name:version.
+
+        ``ALWAYS`` should not auto-approve the same tool for a different
+        skill set, so the key binds the decision to the exact skill versions
+        that were active when it was granted.
+        """
+        parts: list[str] = []
+        for sname in sorted(state.loaded_skills):
+            try:
+                ver = self.skills.get(sname).meta.version
+            except Exception:
+                ver = "?"
+            parts.append(f"{sname}:{ver}")
+        # for core tools that are not skill-bound, no skill suffix – tool alone
+        if not parts:
+            return tool_name
+        return f"{tool_name}|" + ",".join(parts)
 
     # ------------------------------------------------------------------
     # termination helpers

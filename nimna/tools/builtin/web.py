@@ -111,37 +111,81 @@ class _TextExtractor(HTMLParser):
         return raw.strip()
 
 
+def _is_blocked_ip(ip: ipaddress._BaseAddress) -> bool:
+    """True if this IP should be blocked (private / loopback / etc).
+
+    Handles IPv4-mapped IPv6 (e.g. ::ffff:127.0.0.1) by inspecting the
+    embedded IPv4.
+    """
+    # IPv4-mapped IPv6: check underlying IPv4
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        v4 = ip.ipv4_mapped
+        return (
+            v4.is_private
+            or v4.is_loopback
+            or v4.is_link_local
+            or v4.is_multicast
+            or v4.is_unspecified
+            or v4.is_reserved
+        )
+    # pure IPv4 / pure IPv6
+    if isinstance(ip, ipaddress.IPv4Address):
+        return (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_unspecified
+            or ip.is_reserved
+        )
+    # IPv6 pure: block private/loopback/link-local/multicast/unspecified.
+    # is_reserved for IPv6 includes documentation 2001:db8::/32 which should
+    # be blocked, but we already handled mapped case. Keep it.
+    return (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_unspecified
+        or ip.is_reserved
+    )
+
+
 def _assert_public_url(url: str) -> None:
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         raise ToolError("only absolute http(s) URLs are allowed")
     host = parsed.hostname.lower()
-    # block obvious local names even before DNS
-    if host in {"localhost", "127.0.0.1", "0.0.0.0", "::1", "::ffff:127.0.0.1"}:
+    # block obvious local names even before DNS (including IPv4-mapped form)
+    if host in {"localhost", "127.0.0.1", "0.0.0.0", "::1", "::ffff:127.0.0.1", "::ffff:0.0.0.0"}:
         raise ToolError("fetching local/internal hosts is not allowed")
     if host.endswith(".local") or host.endswith(".internal") or host.endswith(".localhost"):
         raise ToolError("fetching local/internal hosts is not allowed")
     # literal IP: check without DNS round-trip
     try:
         ip = ipaddress.ip_address(host)
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
+        if _is_blocked_ip(ip):
             raise ToolError("fetching private network addresses is not allowed")
         return
     except ValueError:
         pass
-    # hostname: resolve and check every address
+    # hostname: resolve and check every address (fresh DNS each hop – mitigates rebinding)
     try:
+        # Use getaddrinfo without caching; each redirect hop re-resolves.
         infos = socket.getaddrinfo(host, parsed.port or (443 if parsed.scheme == "https" else 80),
                                    proto=socket.IPPROTO_TCP)
     except socket.gaierror as exc:
         raise ToolError(f"cannot resolve host '{host}': {exc}")
-    private = []
+    blocked: list[str] = []
     for info in infos:
-        ip = ipaddress.ip_address(info[4][0])
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
-            private.append(str(ip))
-    if private:
-        raise ToolError(f"host '{host}' resolves to private address {private[0]} – fetching blocked")
+        try:
+            ip = ipaddress.ip_address(info[4][0])
+        except ValueError:
+            continue
+        if _is_blocked_ip(ip):
+            blocked.append(str(ip))
+    if blocked:
+        raise ToolError(f"host '{host}' resolves to private address {blocked[0]} – fetching blocked")
 
 
 def register(registry: ToolRegistry) -> None:
@@ -150,6 +194,7 @@ def register(registry: ToolRegistry) -> None:
     def web_search(params: SearchParams, ctx: ToolContext):
         url = f"https://html.duckduckgo.com/html/?q={quote_plus(params.query)}&kl={quote_plus(params.region)}"
         try:
+            # No connection pooling across calls – each search is isolated.
             response = httpx.get(url, headers={"User-Agent": USER_AGENT, "Accept-Language": "ar,en;q=0.8"},
                                  timeout=20, follow_redirects=True)
         except httpx.HTTPError as exc:
@@ -179,17 +224,18 @@ def register(registry: ToolRegistry) -> None:
                    FetchParams, tags=["web"])
     def fetch_url(params: FetchParams, ctx: ToolContext):
         _assert_public_url(params.url)
-        # manual redirect loop so we can validate each hop
+        # manual redirect loop so we can validate each hop with fresh DNS
+        # (mitigates DNS rebinding where first lookup is public then rebinding to private)
         current = params.url
         for _ in range(5):
             try:
+                # Use a fresh client per hop – no connection reuse if DNS changed
                 with httpx.stream("GET", current, headers={"User-Agent": USER_AGENT}, timeout=20,
                                   follow_redirects=False) as response:
                     if response.status_code in {301, 302, 303, 307, 308}:
                         location = response.headers.get("location")
                         if not location:
                             raise ToolError(f"redirect without location for {current}")
-                        # resolve relative redirects
                         from urllib.parse import urljoin
                         nxt = urljoin(current, location)
                         _assert_public_url(nxt)
@@ -211,7 +257,7 @@ def register(registry: ToolRegistry) -> None:
                 raise ToolError(f"fetch failed: {exc}")
         else:
             raise ToolError("too many redirects")
-        # double-check final URL is still public
+        # double-check final URL is still public (DNS may have rebound)
         _assert_public_url(final_url)
         text = body.decode("utf-8", errors="replace")
         title = ""

@@ -6,6 +6,7 @@ file) so that API keys never live inside the code base.
 from __future__ import annotations
 
 import os
+import stat
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable
@@ -79,6 +80,15 @@ def _env_list(name: str, default: Iterable[str]) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def _key_source(primary: str, fallback: str) -> tuple[str | None, str | None]:
+    """Return (value, source_name) respecting priority."""
+    for name in (primary, fallback):
+        v = os.environ.get(name)
+        if v and v.strip():
+            return v.strip(), name
+    return None, None
+
+
 @dataclass
 class Settings:
     """All tunables of the agent. Build with :meth:`Settings.from_env`."""
@@ -86,9 +96,11 @@ class Settings:
     # model provider
     provider: str = "gemini"  # gemini | openai | mock
     gemini_api_key: str | None = None
+    gemini_key_source: str | None = None  # which env var supplied it
     gemini_model: str = "gemini-2.5-flash"
     openai_base_url: str = "https://integrate.api.nvidia.com/v1"
     openai_api_key: str | None = None
+    openai_key_source: str | None = None
     openai_model: str = "meta/llama-3.3-70b-instruct"
     temperature: float = 0.2
     request_timeout: float = 120.0
@@ -119,8 +131,8 @@ class Settings:
     workspace_dir: Path = Path("workspace")
     db_path: Path = Path("data/nimna.db")
 
-    # python sandbox – docker is the only real isolation
-    sandbox_backend: str = "docker"  # docker | subprocess
+    # python sandbox – subprocess is safe default (asks for approval); docker needs opt-in profile
+    sandbox_backend: str = "subprocess"  # docker | subprocess
     sandbox_image: str = "python:3.11-slim"
     sandbox_timeout: int = 20
     sandbox_memory_mb: int = 512
@@ -134,14 +146,19 @@ class Settings:
     def from_env(cls, env_file: str | os.PathLike | None = ".env") -> "Settings":
         if env_file:
             load_dotenv(env_file)
-        openai_key = _env("OPENAI_API_KEY") or _env("NVIDIA_API_KEY")
+        # Gemini: GEMINI_API_KEY takes precedence over GOOGLE_API_KEY
+        gemini_key, gemini_src = _key_source("GEMINI_API_KEY", "GOOGLE_API_KEY")
+        # OpenAI/NVIDIA: OPENAI_API_KEY takes precedence over NVIDIA_API_KEY
+        openai_key, openai_src = _key_source("OPENAI_API_KEY", "NVIDIA_API_KEY")
         return cls(
             provider=(_env("MODEL_PROVIDER", "gemini") or "gemini").lower(),
-            gemini_api_key=_env("GEMINI_API_KEY") or _env("GOOGLE_API_KEY"),
+            gemini_api_key=gemini_key,
+            gemini_key_source=gemini_src,
             gemini_model=_env("GEMINI_MODEL", "gemini-2.5-flash") or "gemini-2.5-flash",
             openai_base_url=_env("OPENAI_BASE_URL", "https://integrate.api.nvidia.com/v1")
             or "https://integrate.api.nvidia.com/v1",
             openai_api_key=openai_key,
+            openai_key_source=openai_src,
             openai_model=_env("OPENAI_MODEL", "meta/llama-3.3-70b-instruct")
             or "meta/llama-3.3-70b-instruct",
             temperature=_env_float("MODEL_TEMPERATURE", 0.2),
@@ -165,7 +182,7 @@ class Settings:
             skills_dir=Path(_env("SKILLS_DIR", "skills") or "skills"),
             workspace_dir=Path(_env("WORKSPACE_DIR", "workspace") or "workspace"),
             db_path=Path(_env("DB_PATH", "data/nimna.db") or "data/nimna.db"),
-            sandbox_backend=(_env("SANDBOX_BACKEND", "docker") or "docker").lower(),
+            sandbox_backend=(_env("SANDBOX_BACKEND", "subprocess") or "subprocess").lower(),
             sandbox_image=_env("SANDBOX_IMAGE", "python:3.11-slim") or "python:3.11-slim",
             sandbox_timeout=_env_int("SANDBOX_TIMEOUT", 20),
             sandbox_memory_mb=_env_int("SANDBOX_MEMORY_MB", 512),
@@ -186,6 +203,24 @@ class Settings:
     def ensure_dirs(self) -> None:
         self.workspace_dir = Path(self.workspace_dir)
         self.workspace_dir.mkdir(parents=True, exist_ok=True)
+        # restrict workspace to owner only (best-effort, no-op on Windows)
+        try:
+            self.workspace_dir.chmod(0o700)
+        except Exception:
+            pass
         if str(self.db_path) != ":memory:":
             self.db_path = Path(self.db_path)
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                self.db_path.parent.chmod(0o700)
+                if self.db_path.exists():
+                    self.db_path.chmod(0o600)
+            except Exception:
+                pass
+        # also tighten .env if it exists
+        try:
+            env = Path(".env")
+            if env.is_file():
+                env.chmod(0o600)
+        except Exception:
+            pass

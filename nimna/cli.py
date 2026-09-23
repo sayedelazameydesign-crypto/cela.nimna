@@ -216,12 +216,21 @@ def cmd_doctor(args: argparse.Namespace) -> int:
             ok = False
 
     env_file = Path(getattr(args, "env_file", ".env"))
-    check(f"env file {env_file}", env_file.is_file(), "create from .env.example" if not env_file.is_file() else "found")
+    if env_file.is_file():
+        print(f"✅ env file {env_file} – found")
+    else:
+        # .env is optional – env vars may provide all config (especially in CI with MODEL_PROVIDER=mock)
+        print(f"ℹ️  env file {env_file} – not found (using environment variables; create from .env.example if needed)")
 
-    # provider key
+    # provider key – show which env var is used (review §2)
     if settings.provider == "gemini":
         has_key = bool(settings.gemini_api_key)
-        check(f"GEMINI_API_KEY for {settings.gemini_model}", has_key, "set GEMINI_API_KEY in .env – https://aistudio.google.com/apikey")
+        src = settings.gemini_key_source or "GEMINI_API_KEY"
+        label = f"Gemini key: configured via {src}" if has_key else "Gemini key: not configured"
+        hint = "" if has_key else "set GEMINI_API_KEY (preferred) or GOOGLE_API_KEY in .env – https://aistudio.google.com/apikey"
+        check(label + f" for {settings.gemini_model}", has_key, hint)
+        if has_key:
+            check(f"  ↳ NVIDIA key: {'configured via ' + settings.openai_key_source if settings.openai_api_key else 'not configured'}", True)
         # live ping if key present and requested
         if has_key and not args.offline:
             try:
@@ -231,10 +240,21 @@ def cmd_doctor(args: argparse.Namespace) -> int:
                 r = p.generate([Message.user("ping")], max_tokens=10)
                 check("Gemini live ping", bool(r.text or r.tool_calls), f"response: {r.text[:60]}")
             except Exception as exc:
-                check("Gemini live ping", False, str(exc)[:200])
+                # redact any secret that might appear in traceback
+                from ..tools.base import redact_payload
+                msg = str(exc)
+                # quick string redaction for long tokens
+                import re
+                msg = re.sub(r"sk-[A-Za-z0-9-_]{10,}", "***REDACTED***", msg)
+                check("Gemini live ping", False, msg[:200])
     elif settings.provider == "openai":
         has_key = bool(settings.openai_api_key)
-        check(f"OPENAI_API_KEY / NVIDIA_API_KEY for {settings.openai_model}", has_key, f"set key for {settings.openai_base_url}")
+        src = settings.openai_key_source or "OPENAI_API_KEY"
+        label = f"OpenAI/NVIDIA key: configured via {src}" if has_key else "OpenAI/NVIDIA key: not configured"
+        hint = "" if has_key else f"set OPENAI_API_KEY or NVIDIA_API_KEY for {settings.openai_base_url}"
+        check(label + f" for {settings.openai_model}", has_key, hint)
+        if has_key:
+            check(f"  ↳ Gemini key: {'configured via ' + settings.gemini_key_source if settings.gemini_api_key else 'not configured'}", True)
         if has_key and not args.offline:
             try:
                 from .providers.openai_compat import OpenAICompatibleProvider
@@ -243,9 +263,14 @@ def cmd_doctor(args: argparse.Namespace) -> int:
                 r = p.generate([Message.user("ping")], max_tokens=10)
                 check("OpenAI-compatible live ping", bool(r.text or r.tool_calls), f"response: {r.text[:60]}")
             except Exception as exc:
-                check("OpenAI-compatible live ping", False, str(exc)[:200])
+                import re
+                msg = re.sub(r"sk-[A-Za-z0-9-_]{10,}", "***REDACTED***", str(exc))
+                check("OpenAI-compatible live ping", False, msg[:200])
     else:
         check(f"provider={settings.provider}", True, "mock mode – no key needed")
+        # still report key status for convenience
+        check(f"  ↳ Gemini key: {'configured via ' + settings.gemini_key_source if settings.gemini_api_key else 'not configured'}", True)
+        check(f"  ↳ NVIDIA key: {'configured via ' + settings.openai_key_source if settings.openai_api_key else 'not configured'}", True)
 
     check(f"workspace {settings.workspace_dir}", settings.workspace_dir.exists() or True, "will be created" if not settings.workspace_dir.exists() else "exists")
     try:
@@ -257,6 +282,15 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     except Exception as exc:
         check("workspace writable", False, str(exc))
 
+    # .env permissions – skip for .env.example which intentionally contains no secrets
+    if env_file.is_file() and env_file.name != ".env.example":
+        try:
+            mode = env_file.stat().st_mode & 0o777
+            # should be 600 (or 400), not world-readable
+            check(f".env permissions {oct(mode)}", mode in (0o600, 0o400), "run: chmod 600 .env")
+        except Exception as exc:
+            check(".env permissions", False, str(exc))
+
     # sqlite
     try:
         from .memory.store import MemoryStore
@@ -264,6 +298,12 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         m.ensure_session("doctor")
         m.close()
         check(f"SQLite {settings.db_path}", True)
+        if str(settings.db_path) != ":memory:" and Path(settings.db_path).exists():
+            try:
+                mode = Path(settings.db_path).stat().st_mode & 0o777
+                check(f"SQLite permissions {oct(mode)}", mode in (0o600, 0o640), "run: chmod 600 " + str(settings.db_path))
+            except Exception as exc:
+                check("SQLite permissions", False, str(exc))
     except Exception as exc:
         check(f"SQLite {settings.db_path}", False, str(exc))
 

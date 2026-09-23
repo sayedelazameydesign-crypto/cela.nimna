@@ -39,7 +39,9 @@ class GeminiProvider(ModelProvider):
     def __init__(self, api_key: str, model: str = "gemini-2.5-flash", *,
                  temperature: float = 0.2, timeout: float = 120.0):
         if not api_key:
-            raise ProviderError("GEMINI_API_KEY is not set")
+            raise ProviderError(
+                "Gemini API key is not set – set GEMINI_API_KEY (preferred) or GOOGLE_API_KEY"
+            )
         try:
             from google import genai  # type: ignore
             from google.genai import types  # type: ignore

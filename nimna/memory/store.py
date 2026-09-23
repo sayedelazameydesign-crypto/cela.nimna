@@ -78,12 +78,28 @@ class MemoryStore:
         self.db_path = str(db_path)
         if self.db_path != ":memory:":
             Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
+            try:
+                Path(self.db_path).parent.chmod(0o700)
+            except Exception:
+                pass
+        # use WAL for better concurrency and to survive restarts with pending runs
+        self._conn = sqlite3.connect(self.db_path, check_same_thread=False, isolation_level=None)
         self._conn.row_factory = sqlite3.Row
         self._lock = threading.RLock()
         with self._lock:
+            # pragmas for durability + permissions
+            try:
+                self._conn.execute("PRAGMA journal_mode=WAL;")
+                self._conn.execute("PRAGMA foreign_keys=ON;")
+            except Exception:
+                pass
             self._conn.executescript(SCHEMA)
             self._conn.commit()
+            if self.db_path != ":memory:":
+                try:
+                    Path(self.db_path).chmod(0o600)
+                except Exception:
+                    pass
 
     def close(self) -> None:
         with self._lock:
@@ -239,11 +255,18 @@ class MemoryStore:
 
     def resolve_pending(self, run_id: str, decision: str) -> None:
         with self._lock:
-            self._conn.execute(
-                "UPDATE pending_runs SET resolved_at = ?, decision = ? WHERE id = ?",
+            # Atomic: only transition from NULL -> timestamp, prevents duplicate resume
+            cur = self._conn.execute(
+                "UPDATE pending_runs SET resolved_at = ?, decision = ? WHERE id = ? AND resolved_at IS NULL",
                 (_now(), decision, run_id),
             )
             self._conn.commit()
+            if cur.rowcount == 0:
+                # check if it exists but already resolved → duplicate resume
+                row = self._conn.execute("SELECT resolved_at FROM pending_runs WHERE id = ?", (run_id,)).fetchone()
+                if row is not None and row["resolved_at"] is not None:
+                    raise KeyError(f"run '{run_id}' already resolved ({row['resolved_at']})")
+                raise KeyError(f"no pending approval for run '{run_id}'")
 
     def list_pending(self, session_id: Optional[str] = None) -> list[dict[str, Any]]:
         with self._lock:
