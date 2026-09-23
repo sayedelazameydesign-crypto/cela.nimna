@@ -24,10 +24,11 @@ nimna ask "التقط صورة للشاشة وأخبرني ماذا ترى"
 ## الأدوات باختصار
 | الأداة | موافقة | وصف |
 |---|---|---|
-| `take_screenshot` | لا | يلتقط PNG ويعيده base64 + يحفظه في `workspace/.screenshots/` |
-| `mouse_click(x,y, button, clicks)` | نعم (بصرية) | نقرة مع نقطة حمراء للمراجعة |
+| `take_screenshot` | لا | يلتقط PNG مع شبكة إحداثيات ويعيده base64 + يحفظه في `workspace/.screenshots/` — يكسر حلقة اللقطات إذا تكررت 3 مرات |
+| `get_element_coordinates(element)` | لا | **جديد** — يحدد (x,y) بدقة عبر OCR/شبكة لتجنب توهان الإحداثيات |
+| `mouse_click(x,y, button, clicks)` | نعم (بصرية) | نقرة مع نقطة حمراء للمراجعة — استخدم الإحداثيات من الأداة السابقة |
 | `type_text(text, submit)` | نعم | كتابة مع محاكاة تأخير واقعي |
-| `shell_execute(command)` | نعم | تشغيل أمر في `/bin/bash` داخل الحاوية |
+| `shell_execute(command)` | نعم | تشغيل أمر في `/bin/bash` داخل الحاوية مع حماية موارد صارمة (ulimit + timeout) |
 
 ## نمط التفكير
 اعرض دائمًا في واجهة البطاقات:

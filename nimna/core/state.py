@@ -66,6 +66,9 @@ class RunState(BaseModel):
     usage: dict[str, int] = Field(default_factory=dict)
     error: Optional[str] = None
     started_at: float = Field(default_factory=lambda: 0.0)
+    # visual duplication detector (Computer Use)
+    screenshot_hashes: list[str] = Field(default_factory=list)
+    consecutive_identical_screenshots: int = 0
 
     def last_assistant(self) -> Optional[Message]:
         for message in reversed(self.messages):

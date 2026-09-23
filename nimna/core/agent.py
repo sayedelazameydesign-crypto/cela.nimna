@@ -453,6 +453,14 @@ class Agent:
             try:
                 import base64, json
                 data = json.loads(result) if result else {}
+                # unwrap truncation wrapper if needed
+                if data.get("truncated") and isinstance(data.get("result"), str):
+                    try:
+                        inner = json.loads(data["result"])
+                        if isinstance(inner, dict):
+                            data = inner
+                    except Exception:
+                        pass
                 # the tool returns {"path": " .screenshots/...", ...} — path is display_path
                 rel = data.get("path") or ""
                 # resolve inside workspace
@@ -471,12 +479,83 @@ class Agent:
                             raw = raw[:1_500_000]
                         b64 = base64.b64encode(raw).decode("ascii")
                         mime = "image/jpeg" if p.suffix.lower() in {".jpg", ".jpeg"} else "image/png"
+                        # --- visual duplicate detector (break screenshot loops) ---
+                        try:
+                            import hashlib
+                            # lightweight perceptual hash: 16x16 grayscale
+                            try:
+                                from PIL import Image
+                                import io
+                                img = Image.open(io.BytesIO(raw)).convert("L").resize((16,16))
+                                h = hashlib.md5(img.tobytes()).hexdigest()[:12]
+                            except Exception:
+                                h = hashlib.md5(raw[:4096]).hexdigest()[:12]
+                            state.screenshot_hashes.append(h)
+                            # keep last 10
+                            if len(state.screenshot_hashes) > 10:
+                                state.screenshot_hashes = state.screenshot_hashes[-10:]
+                            # check last 3 identical
+                            if len(state.screenshot_hashes) >= 3 and len(set(state.screenshot_hashes[-3:])) == 1:
+                                state.consecutive_identical_screenshots = state.consecutive_identical_screenshots + 1 if state.consecutive_identical_screenshots else 3
+                            else:
+                                # count consecutive identical from tail
+                                cnt = 1
+                                for i in range(len(state.screenshot_hashes)-1, 0, -1):
+                                    if state.screenshot_hashes[i] == state.screenshot_hashes[i-1]:
+                                        cnt += 1
+                                    else:
+                                        break
+                                state.consecutive_identical_screenshots = cnt if cnt > 1 else 0
+                            # audit
+                            self._audit(state, "vision_hash", {"hash": h, "consecutive": state.consecutive_identical_screenshots})
+                            # if 3 identical, inject warning for the model
+                            if state.consecutive_identical_screenshots >= 3:
+                                warn = (
+                                    "تنبيه: الشاشة لم تتغير منذ 3 محاولات متتالية (hash=%s). "
+                                    "حاول تغيير الاستراتيجية: استخدم shell_execute للتحقق من العمليات الخلفية، "
+                                    "أو get_element_coordinates للعثور على العنصر بدقة، أو قم بالتمرير/فتح قائمة مختلفة."
+                                ) % h
+                                state.messages.append(Message.user(warn))
+                                self._audit(state, "screenshot_loop_detected", {"hash": h, "count": state.consecutive_identical_screenshots})
+                                # reset to avoid spamming every turn (will trigger again if still identical)
+                                state.consecutive_identical_screenshots = 0
+                        except Exception:
+                            pass
                         # inject as a user message with image + caption
                         caption = f"[Screenshot: {rel} — {data.get('source','')} — {data.get('width','')}x{data.get('height','')}]"
                         state.messages.append(Message.user_with_image(caption, b64, mime))
-                        self._audit(state, "vision_injected", {"path": rel, "bytes": len(raw), "mime": mime})
+                        self._audit(state, "vision_injected", {"path": rel, "bytes": len(raw), "mime": mime, "hash": state.screenshot_hashes[-1] if state.screenshot_hashes else None})
             except Exception:
                 # never break the run on vision failure
+                pass
+        # also inject annotated screenshot from get_element_coordinates
+        if tool.name == "get_element_coordinates" and ok:
+            try:
+                import base64 as _b64, json as _json
+                _data = _json.loads(result) if result else {}
+                if _data.get("truncated") and isinstance(_data.get("result"), str):
+                    try:
+                        _inner = _json.loads(_data["result"])
+                        if isinstance(_inner, dict):
+                            _data = _inner
+                    except Exception:
+                        pass
+                _rel = _data.get("annotated_screenshot") or ""
+                if _rel:
+                    _p = (ctx.workspace / _rel).resolve()
+                    try:
+                        _p.relative_to(ctx.workspace.resolve())
+                    except ValueError:
+                        _p = None
+                    if _p and _p.is_file():
+                        _raw = _p.read_bytes()
+                        if len(_raw) > 1_500_000:
+                            _raw = _raw[:1_500_000]
+                        _b64s = _b64.b64encode(_raw).decode("ascii")
+                        _mime = "image/png"
+                        state.messages.append(Message.user_with_image(f"[Locate: {_data.get('element','')} at ({_data.get('x')},{_data.get('y')})]", _b64s, _mime))
+                        self._audit(state, "vision_injected", {"path": _rel, "bytes": len(_raw), "mime": _mime, "kind": "locate"})
+            except Exception:
                 pass
 
     def _record_tool_error(self, state: RunState, call: ToolCall, message: str) -> None:

@@ -88,6 +88,48 @@ def _generate_placeholder_png(text: str = "Nimna Desktop — simulated") -> tupl
         data = base64.b64decode(_FALLBACK_PNG_B64)
         return data, _FALLBACK_PNG_B64
 
+def _overlay_grid(data: bytes, opacity: int = 38) -> bytes:
+    """Overlay a faint coordinate grid to help the model locate elements."""
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+        import io
+        img = Image.open(io.BytesIO(data)).convert("RGB")
+        w, h = img.size
+        # downscale huge images for model (max 1280 width)
+        if w > 1280:
+            ratio = 1280 / w
+            img = img.resize((1280, int(h * ratio)))
+            w, h = img.size
+        draw = ImageDraw.Draw(img, "RGBA")
+        # faint grid every 200px
+        for x in range(0, w, 200):
+            draw.line([(x, 0), (x, h)], fill=(80, 90, 110, opacity), width=1)
+            draw.rectangle([x+2, 2, x+44, 16], fill=(15,20,25,180))
+            draw.text((x+4, 3), str(x), fill=(200,210,225))
+        for y in range(0, h, 100):
+            draw.line([(0, y), (w, y)], fill=(80, 90, 110, opacity), width=1)
+            draw.rectangle([2, y+2, 36, y+16], fill=(15,20,25,180))
+            draw.text((4, y+3), str(y), fill=(200,210,225))
+        # border
+        draw.rectangle([0,0,w-1,h-1], outline=(60,70,90,120), width=1)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG", optimize=True)
+        return buf.getvalue()
+    except Exception:
+        return data
+
+def _hash_image(data: bytes) -> str:
+    import hashlib
+    # perceptual-ish: downscale to 16x16 grayscale and hash
+    try:
+        from PIL import Image
+        import io
+        img = Image.open(io.BytesIO(data)).convert("L").resize((16,16))
+        return hashlib.md5(img.tobytes()).hexdigest()[:12]
+    except Exception:
+        import hashlib
+        return hashlib.md5(data[:4096]).hexdigest()[:12]
+
 def _try_real_screenshot(ctx: ToolContext) -> Optional[tuple[bytes, str]]:
     """Attempt to fetch a real screenshot from the desktop container.
 
@@ -108,7 +150,7 @@ def _try_real_screenshot(ctx: ToolContext) -> Optional[tuple[bytes, str]]:
                     url = api_url.rstrip("/") + suffix
                     r = httpx.get(url, timeout=4.0, follow_redirects=True)
                     if r.status_code == 200 and r.headers.get("content-type", "").startswith("image/"):
-                        data = r.content
+                        data = _overlay_grid(r.content)
                         return data, base64.b64encode(data).decode("ascii")
                     # JSON wrapper {image: base64}
                     if r.headers.get("content-type", "").startswith("application/json"):
@@ -117,7 +159,9 @@ def _try_real_screenshot(ctx: ToolContext) -> Optional[tuple[bytes, str]]:
                         if b64:
                             if "," in b64:  # data URL
                                 b64 = b64.split(",", 1)[1]
-                            return base64.b64decode(b64), b64
+                            raw = base64.b64decode(b64)
+                            raw = _overlay_grid(raw)
+                            return raw, base64.b64encode(raw).decode("ascii")
                 except Exception:
                     continue
         except Exception:
@@ -145,7 +189,8 @@ def _try_real_screenshot(ctx: ToolContext) -> Optional[tuple[bytes, str]]:
             if b64 and not b64.startswith("__NIMNA_ERR__") and len(b64) > 100:
                 try:
                     data = base64.b64decode(b64)
-                    return data, b64
+                    data = _overlay_grid(data)
+                    return data, base64.b64encode(data).decode("ascii")
                 except Exception:
                     pass
     except Exception:
@@ -161,6 +206,12 @@ class TakeScreenshotParams(BaseModel):
     width: int = Field(1280, ge=320, le=2560, description="Requested width (hint, may be ignored in simulated mode).")
     height: int = Field(800, ge=240, le=1600, description="Requested height (hint).")
     format: Literal["png", "jpeg"] = Field("png", description="Image format.")
+
+class GetElementParams(BaseModel):
+    element_name: str = Field(..., min_length=1, max_length=120, description="Text or icon name to locate, e.g. 'Firefox', 'Save', 'حفظ'.")
+    purpose: str = Field("", description="Why you need this element.")
+    use_ocr: bool = Field(True, description="Try OCR to locate text; if false, return estimated position from grid.")
+    screenshot_reason: str = Field("locate element", description="Reason for auxiliary screenshot if needed.")
 
 class MouseClickParams(BaseModel):
     x: int = Field(..., ge=0, le=2560, description="X coordinate from top-left (0,0).")
@@ -180,6 +231,58 @@ class ShellExecuteParams(BaseModel):
     timeout: int = Field(20, ge=1, le=120, description="Timeout seconds.")
     purpose: str = Field(..., min_length=3, description="Why you need this command (for approval).")
 
+
+def _run_with_limits(cmd: list[str], timeout: int, cwd: str | None = None) -> subprocess.CompletedProcess:
+    """Run with strict resource limits (CPU, mem, files, procs)."""
+    import resource
+    def _preexec():
+        try:
+            # CPU 30s
+            resource.setrlimit(resource.RLIMIT_CPU, (30, 30))
+            # Memory 512 MB
+            resource.setrlimit(resource.RLIMIT_AS, (512*1024*1024, 512*1024*1024))
+            # Open files 64
+            resource.setrlimit(resource.RLIMIT_NOFILE, (64, 64))
+            # Processes 32 (Linux only)
+            try:
+                resource.setrlimit(resource.RLIMIT_NPROC, (32, 32))
+            except Exception:
+                pass
+            # File size 10 MB
+            resource.setrlimit(resource.RLIMIT_FSIZE, (10*1024*1024, 10*1024*1024))
+        except Exception:
+            pass
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd, preexec_fn=_preexec)
+    except (ValueError, OSError):
+        # preexec not supported on this platform (e.g. Windows) — fall back
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd)
+
+def _locate_element_on_image(data: bytes, query: str) -> tuple[int, int] | None:
+    """Try to locate an element by text using simple heuristics (OCR if available)."""
+    # Try OCR (pytesseract) if installed
+    try:
+        import io
+        from PIL import Image
+        try:
+            import pytesseract  # type: ignore
+            img = Image.open(io.BytesIO(data))
+            # get boxes
+            boxes = pytesseract.image_to_data(img, output_type=pytesseract.Output.DICT)  # type: ignore
+            q = query.lower().strip()
+            best = None
+            for i, txt in enumerate(boxes.get("text", [])):
+                if q in txt.lower() and txt.strip():
+                    x, y, w, h = boxes["left"][i], boxes["top"][i], boxes["width"][i], boxes["height"][i]
+                    best = (x + w//2, y + h//2)
+                    break
+            if best:
+                return best
+        except Exception:
+            pass
+    except Exception:
+        pass
+    return None
 
 def register(registry: ToolRegistry) -> None:
     @registry.tool(
@@ -233,11 +336,87 @@ def register(registry: ToolRegistry) -> None:
             "width": params.width,
             "height": params.height,
             "bytes": len(data),
-            "image_b64": b64[:120] + "…",  # preview; full image is at path
-            "image_b64_full": b64,  # for Vision Gateway
+            "image_b64": b64[:120] + "…",  # preview only; full image is at path and injected via Vision Gateway file load
             "hint": "Image is at the path above; the model will receive it as vision input on the next turn."
             if source == "real"
             else "Simulated desktop. Run: docker compose --profile computer up -d desktop for a real VNC desktop at http://localhost:6901",
+        }
+
+    @registry.tool(
+        "get_element_coordinates",
+        "Find the (x,y) of a UI element by name using OCR/grid. Saves a fresh screenshot, overlays a grid, and returns precise coordinates so the model doesn't have to guess. Safe, no approval needed.",
+        GetElementParams,
+        risk="safe",
+        tags=["computer", "vision", "read"],
+    )
+    def get_element_coordinates(params: GetElementParams, ctx: ToolContext):
+        # Take a fresh screenshot (real or placeholder) and try to locate the element
+        real = _try_real_screenshot(ctx)
+        if real is not None:
+            data, b64 = real
+            source = "real"
+        else:
+            data, b64 = _generate_placeholder_png(f"locate: {params.element_name}")
+            source = "simulated"
+        # Try OCR location
+        located = _locate_element_on_image(data, params.element_name) if params.use_ocr else None
+        # Heuristic fallback: known icons positions on the simulated desktop
+        fallback_map = {
+            "firefox": (140, 140),
+            "terminal": (140, 180),
+            "files": (140, 220),
+            "chrome": (160, 140),
+            "save": (640, 400),
+            "حفظ": (640, 400),
+        }
+        est = None
+        if located is None:
+            key = params.element_name.lower().strip()
+            for k, v in fallback_map.items():
+                if k in key:
+                    est = v
+                    break
+            # generic center
+            if est is None:
+                est = (640, 400)
+        x, y = located if located else est
+        # Save annotated screenshot with grid + marker
+        try:
+            from PIL import Image, ImageDraw
+            import io
+            img = Image.open(io.BytesIO(data)).convert("RGB")
+            draw = ImageDraw.Draw(img)
+            # draw marker
+            draw.ellipse([x-12, y-12, x+12, y+12], outline=(255,59,48), width=3)
+            draw.ellipse([x-4, y-4, x+4, y+4], fill=(255,59,48))
+            draw.text((x+14, y-8), params.element_name[:24], fill=(255,59,48))
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            annotated = buf.getvalue()
+            fname = f"locate-{datetime.now().strftime('%Y%m%d-%H%M%S')}.png"
+            fpath = _screenshot_dir(ctx) / fname
+            fpath.write_bytes(annotated)
+            # update latest
+            import json as _json
+            (ctx.workspace / ".screenshots" / "_latest.json").write_text(
+                _json.dumps({"path": ctx.display_path(fpath), "source": source, "located": {"x": x, "y": y, "located": bool(located)}}),
+                encoding="utf-8",
+            )
+            b64a = base64.b64encode(annotated).decode("ascii")
+        except Exception:
+            x, y = est
+            b64a = b64
+            fpath = None
+        return {
+            "element": params.element_name,
+            "x": int(x),
+            "y": int(y),
+            "located_by": "ocr" if located else "grid-heuristic",
+            "source": source,
+            "confidence": 0.85 if located else 0.45,
+            "annotated_screenshot": ctx.display_path(fpath) if fpath else None,
+            "screenshot_b64_preview": b64a[:120] + "…",
+            "hint": f"Use mouse_click(x={x}, y={y}) next — will show a red dot for visual approval." if located else f"Estimated at ({x},{y}) — take_screenshot to verify before clicking.",
         }
 
     @registry.tool(
@@ -359,11 +538,13 @@ def register(registry: ToolRegistry) -> None:
         if any(b in lowered for b in blocklist):
             raise ToolError("blocked: command looks destructive for the isolated desktop")
         if _vnc_enabled():
-            # try docker exec desktop
+            # try docker exec desktop — with resource limits inside the container the host timeout still applies
             try:
-                out = subprocess.run(
-                    ["docker", "exec", "desktop", "bash", "-lc", params.command],
-                    capture_output=True, text=True, timeout=params.timeout,
+                # prepend ulimit inside the container for extra safety
+                wrapped = f"ulimit -t 30; ulimit -v 524288; ulimit -n 64; timeout {params.timeout} bash -lc {params.command!r}"
+                out = _run_with_limits(
+                    ["docker", "exec", "desktop", "bash", "-lc", wrapped],
+                    timeout=params.timeout + 2,
                 )
                 # also capture via timeout
                 return {
@@ -381,11 +562,11 @@ def register(registry: ToolRegistry) -> None:
             except Exception as exc:
                 raise ToolError(f"shell_execute failed: {exc}") from exc
         # simulated fallback: run in a very restricted way inside workspace sandbox (still jails, but flagged simulated)
-        # We do NOT actually run the command on the host for safety; we just echo.
+        # We do NOT actually run arbitrary commands on the host for safety; we just echo.
         if lowered.startswith("echo ") or lowered.startswith("ls") or lowered.startswith("pwd") or lowered in {"ls", "pwd", "whoami", "date"}:
             try:
-                out = subprocess.run(
-                    params.command, shell=True, capture_output=True, text=True, timeout=min(params.timeout, 5), cwd=str(ctx.workspace)
+                out = _run_with_limits(
+                    ["bash", "-lc", params.command], timeout=min(params.timeout, 5), cwd=str(ctx.workspace)
                 )
                 return {
                     "command": params.command,
