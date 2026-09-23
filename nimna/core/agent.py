@@ -28,6 +28,15 @@ try:
 except Exception:  # pragma: no cover
     get_detector = None  # type: ignore
 
+# Swarm (Sprint 2) — lazy import to keep tests light
+def _get_swarm_components():
+    try:
+        from .planner_swarm import PlannerSwarm
+        from ..agents import AGENT_CLASSES
+        return PlannerSwarm, AGENT_CLASSES
+    except Exception:
+        return None, None
+
 from ..config import Settings
 from ..memory.store import MemoryStore
 from ..providers.base import Message, ModelProvider, ProviderError, ToolCall
@@ -80,7 +89,83 @@ class Agent:
     # ------------------------------------------------------------------
     # public API
     # ------------------------------------------------------------------
+    def _should_swarm(self, user_message: str) -> bool:
+        if not getattr(self.settings, "swarm_enabled", False):
+            return False
+        # explicit marker or env SWARM_FORCE
+        if user_message.strip().startswith("[swarm]") or "swarm:" in user_message.lower():
+            return True
+        # heuristic: composite requests (Arabic و/ثم + multiple intents)
+        low = user_message.lower()
+        markers = [" و ", " ثم ", " بعد ", " and ", " then ", " وابحث", " ونفذ", " وابني"]
+        composite = sum(1 for m in markers if m in low) >= 1 and len(user_message) > 80
+        # also if provider is mock and tasks detected via keyword decompose -> still use swarm for demo
+        if composite:
+            return True
+        # fallback: if planner_swarm would create >1 task, use swarm
+        try:
+            PlannerSwarm, _ = _get_swarm_components()
+            if PlannerSwarm is not None:
+                ps = PlannerSwarm(self.provider, self.settings)
+                tasks = ps.decompose(user_message)
+                if len(tasks) > 1:
+                    return True
+        except Exception:
+            pass
+        return False
+
+    def run_swarm(self, user_message: str, session_id: Optional[str] = None) -> AgentResult:
+        """Swarm orchestration: DAG -> parallel sub-agents -> synthesis."""
+        import asyncio
+        session_id = session_id or uuid.uuid4().hex[:12]
+        self.memory.ensure_session(session_id)
+        state = RunState(session_id=session_id, user_message=user_message, started_at=time.perf_counter())
+        self._audit(state, "run_started", {"message": user_message[:500], "mode": "swarm"})
+        self.memory.add_message(session_id, "user", user_message, {"run_id": state.run_id, "mode": "swarm"})
+        try:
+            PlannerSwarm, _ = _get_swarm_components()
+            if PlannerSwarm is None:
+                raise RuntimeError("swarm components unavailable")
+            planner = PlannerSwarm(self.provider, self.settings)
+            tasks = planner.decompose(user_message)
+            self._audit(state, "swarm_decomposed", {"tasks": [t.to_dict() for t in tasks]})
+            # execute DAG
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+            if loop and loop.is_running():
+                # unlikely in sync run, but handle via new loop in thread
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as pool:
+                    fut = pool.submit(asyncio.run, planner.execute(tasks, session_id, self))
+                    swarm_out = fut.result()
+            else:
+                swarm_out = asyncio.run(planner.execute(tasks, session_id, self))
+            # map swarm tasks to tool_calls for UI
+            for td in swarm_out.get("tasks", []):
+                state.tool_calls.append(ToolCallRecord(name=f"swarm:{td['agent']}", arguments={"task": td["task"][:200]}, ok=(td.get("status")=="done"), result_preview=str(td.get("result",{}).get("output",""))[:300]))
+            state.plan = [f"{t.id}:{t.agent}:{t.task[:60]}" for t in tasks]
+            state.selection_reason = f"swarm DAG ({len(tasks)} tasks, batches={swarm_out.get('batches')})"
+            state.final_text = swarm_out.get("synthesis", "") or "تم تنفيذ المهام عبر Swarm."
+            state.status = RunStatus.DONE
+            state.step = len(tasks)
+            # persist synthesis
+            self._audit(state, "swarm_finished", {"tasks": swarm_out.get("tasks"), "elapsed_ms": swarm_out.get("elapsed_ms"), "all_ok": swarm_out.get("all_ok")})
+            return self._finish(state)
+        except ProviderError as exc:
+            return self._fail(state, f"model provider error: {exc}")
+        except Exception as exc:
+            log.exception("swarm run crashed")
+            return self._fail(state, f"internal error: {type(exc).__name__}: {exc}")
+
     def run(self, user_message: str, session_id: Optional[str] = None) -> AgentResult:
+        # Swarm fast-path (if enabled and request is composite)
+        try:
+            if self._should_swarm(user_message):
+                return self.run_swarm(user_message, session_id=session_id)
+        except Exception as exc:
+            log.warning("swarm check failed (%s), falling back to single-agent", exc)
         if len(user_message) > self.settings.max_user_message_chars:
             # truncate rather than reject – keep UX friendly but bounded
             user_message = user_message[: self.settings.max_user_message_chars] + "\n[... message truncated]"

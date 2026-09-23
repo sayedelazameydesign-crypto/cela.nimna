@@ -148,6 +148,12 @@ class Settings:
     embedding_dim: int = 768
     embedding_provider: str = "auto"  # auto | gemini | hash
 
+    # swarm — Multi-Agent (Sprint 2, المسار 2)
+    swarm_enabled: bool = False
+    swarm_max_agents: int = 3
+    swarm_self_healing_retries: int = 3
+    swarm_parallel: bool = True
+
     # server
     host: str = "0.0.0.0"
     port: int = 8000
@@ -204,6 +210,10 @@ class Settings:
             embedding_model=_env("EMBEDDING_MODEL", "text-embedding-004") or "text-embedding-004",
             embedding_dim=_env_int("EMBEDDING_DIM", 768),
             embedding_provider=(_env("EMBEDDING_PROVIDER", "auto") or "auto").lower(),
+            swarm_enabled=_env_bool("SWARM_ENABLED", False),
+            swarm_max_agents=_env_int("SWARM_MAX_AGENTS", 3),
+            swarm_self_healing_retries=_env_int("SWARM_SELF_HEALING_RETRIES", 3),
+            swarm_parallel=_env_bool("SWARM_PARALLEL", True),
             host=_env("HOST", "0.0.0.0") or "0.0.0.0",
             port=_env_int("PORT", 8000),
             log_level=(_env("LOG_LEVEL", "INFO") or "INFO").upper(),

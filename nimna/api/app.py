@@ -37,6 +37,7 @@ STATIC_DIR = Path(__file__).parent / "static"
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=20000)
     session_id: Optional[str] = Field(None, description="Omit to start a new session.")
+    swarm: Optional[bool] = Field(None, description="Force swarm mode (true/false); default = SWARM_ENABLED env")
 
 
 class ApprovalRequest(BaseModel):
@@ -94,6 +95,13 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
             }
         except Exception as _e:
             memory_info = {"enabled": False, "error": str(_e)[:200]}
+        swarm_info: dict[str, Any] = {
+            "enabled": bool(settings.swarm_enabled),
+            "parallel": bool(settings.swarm_parallel),
+            "max_agents": int(settings.swarm_max_agents),
+            "self_healing_retries": int(settings.swarm_self_healing_retries),
+            "agents": ["search", "code", "vision"],
+        }
         return {
             "status": "ok",
             **agent.provider.describe(),
@@ -110,6 +118,7 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
             "cache": cache_info,
             "anomaly": anomaly_info,
             "memory": memory_info,
+            "swarm": swarm_info,
             "limits": {
                 "max_steps": settings.max_steps,
                 "max_tool_calls": settings.max_tool_calls,
@@ -119,6 +128,21 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
             "port": int(__import__("os").getenv("PORT", "8000")),
             "infra": {"redis_url": bool(settings.redis_url), "vision_cache_ttl": settings.vision_cache_ttl, "qdrant_url": bool(settings.qdrant_url)},
         }
+
+    @app.get("/api/swarm/status")
+    def swarm_status() -> dict[str, Any]:
+        try:
+            from nimna.core.planner_swarm import PlannerSwarm
+            # lightweight check
+            return {
+                "enabled": bool(settings.swarm_enabled),
+                "parallel": bool(settings.swarm_parallel),
+                "max_agents": int(settings.swarm_max_agents),
+                "agents": ["search", "code", "vision"],
+                "planner": "available",
+            }
+        except Exception as exc:
+            return {"enabled": bool(settings.swarm_enabled), "error": str(exc)[:200]}
 
     @app.get("/api/skills")
     def list_skills() -> dict[str, Any]:
@@ -151,6 +175,14 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
             raise HTTPException(409, "this session has a pending approval; resolve it first")
         if len(request.message) > settings.max_user_message_chars:
             raise HTTPException(413, f"message too long ({len(request.message)} chars); max {settings.max_user_message_chars}")
+        # swarm override via request
+        if request.swarm is not None:
+            orig = settings.swarm_enabled
+            settings.swarm_enabled = bool(request.swarm)
+            try:
+                return await run_in_threadpool(agent.run, request.message, session_id)
+            finally:
+                settings.swarm_enabled = orig
         return await run_in_threadpool(agent.run, request.message, session_id)
 
     @app.get("/api/approvals")

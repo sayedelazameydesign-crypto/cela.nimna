@@ -56,6 +56,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter','IBM Plex Sans A
   <div class="flex-1"></div>
   <div class="flex items-center gap-2">
     <div id="wsBadge" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-medium" style="background:var(--panel);border-color:var(--border)"><span id="wsDot" class="size-2 rounded-full bg-zinc-500"></span><span id="wsTxt">HTTP</span></div>
+    <div id="swarmBadge" class="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-medium" style="background:var(--panel);border-color:var(--border)"><span id="swarmDot" class="size-2 rounded-full bg-zinc-600"></span><span id="swarmTxt">Swarm • off</span></div>
     <button id="cmdBtn" class="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border text-[11px] hover:bg-white/5" style="border-color:var(--border);color:var(--muted)">⌘K <span class="mono bg-white/10 px-1 rounded">palette</span></button>
     <button id="newBtn" class="px-3.5 py-1.5 rounded-full bg-[#7c3aed] hover:bg-[#6d28d9] text-white text-[12px] font-semibold hidden sm:flex">＋ جلسة جديدة</button>
   </div>
@@ -298,6 +299,9 @@ function renderResult(res){
         addTimeline('💻','يتم تنفيذ الأمر','CLI — '+ (c.arguments?.command||'').slice(0,40), ok?'violet':'amber');
         // terminal logs will be added after we parse result preview
         if(c.result_preview) addTerminal(c.arguments?.command||'shell', c.result_preview.slice(0,500), '');
+      } else if(c.name.startsWith('swarm:')){
+        const ag=c.name.split(':')[1]; const icons={search:'🔍',code:'🧩',vision:'👁️'}; const col={search:'emerald',code:'violet',vision:'amber'};
+        addTimeline(icons[ag]||'🤖', `${ag} • ${c.arguments?.task||''}`.slice(0,48), (c.result_preview||'').slice(0,60), ok?'emerald':'amber');
       } else {
         addTimeline('🔧',c.name, JSON.stringify(c.arguments||{}).slice(0,50), ok?'emerald':'amber');
       }
@@ -363,6 +367,8 @@ async function boot(){
     $('#providerLbl').textContent=h.provider+' • '+(h.model||'');
     $('#modelLbl').textContent=h.verify?'verify on':'verify off';
     $('#limitsLbl').textContent=`${h.limits.max_steps} خطوات • ${h.limits.max_tool_calls} أدوات`;
+    // Swarm badge
+    try{ const sw=h.swarm||await fetch('/api/swarm/status').then(r=>r.json()); const on=!!sw.enabled; $('#swarmTxt').textContent='Swarm • '+(on?'on':'off')+(sw.parallel?' • parallel':''); $('#swarmDot').className='size-2 rounded-full '+(on?'bg-emerald-500 animate-pulse':'bg-zinc-500'); $('#swarmBadge').title=`Agents: ${(sw.agents||[]).join(', ')} | max:${sw.max_agents} self-heal:${sw.self_healing_retries||sw.self_heal||3}`;}catch(e){}
     const s=await fetch('/api/skills').then(r=>r.json());
     $('#skillCnt').textContent=s.skills.length;
     $('#toolCnt').textContent=(await fetch('/api/tools').then(r=>r.json())).tools.length;
