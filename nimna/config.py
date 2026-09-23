@@ -73,6 +73,16 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
+def _env_optional_float(name: str) -> float | None:
+    value = _env(name)
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        return None
+
+
 def _env_list(name: str, default: Iterable[str]) -> list[str]:
     value = _env(name)
     if value is None:
@@ -107,6 +117,16 @@ class Settings:
     # token budget forwarded to the model (where the provider supports it)
     max_response_tokens: int = 4096
 
+    # governance — the default is a hard zero-spend gate.  Gemini is treated as
+    # an explicitly declared free-tier profile; unknown/paid profiles fail closed.
+    cost_guard_enabled: bool = True
+    cost_guard_hard: bool = True
+    max_spend_usd: float = 0.0
+    model_cost_input_usd_per_1k: float | None = None
+    model_cost_output_usd_per_1k: float | None = None
+    model_context_window: int = 0
+    mock_tool_calling: bool = False
+
     # agent behaviour – hard limits that kill runaway loops
     max_steps: int = 12
     max_tool_calls: int = 30
@@ -140,6 +160,16 @@ class Settings:
     # infra — Vision Gateway cache + scaling
     redis_url: str | None = None
     vision_cache_ttl: int = 600
+
+    # optional Browser Use Cloud V4 integration.  It is disabled and zero-cost
+    # by default; enabling it still requires an explicit positive browser budget.
+    browser_use_enabled: bool = False
+    browser_use_api_key: str | None = None
+    browser_use_base_url: str = "https://api.browser-use.com"
+    browser_use_timeout: float = 120.0
+    browser_use_poll_interval: float = 2.0
+    browser_use_reasoning_effort: str | None = None
+    browser_use_max_spend_usd: float = 0.0
 
     # vector memory — Qdrant (Sprint 2)
     qdrant_url: str | None = None
@@ -181,6 +211,13 @@ class Settings:
             temperature=_env_float("MODEL_TEMPERATURE", 0.2),
             request_timeout=_env_float("MODEL_TIMEOUT", 120.0),
             max_response_tokens=_env_int("AGENT_MAX_RESPONSE_TOKENS", 4096),
+            cost_guard_enabled=_env_bool("COST_GUARD_ENABLED", True),
+            cost_guard_hard=_env_bool("COST_GUARD_HARD", True),
+            max_spend_usd=_env_float("MAX_SPEND_USD", 0.0),
+            model_cost_input_usd_per_1k=_env_optional_float("MODEL_COST_INPUT_USD_PER_1K"),
+            model_cost_output_usd_per_1k=_env_optional_float("MODEL_COST_OUTPUT_USD_PER_1K"),
+            model_context_window=_env_int("MODEL_CONTEXT_WINDOW", 0),
+            mock_tool_calling=_env_bool("MOCK_TOOL_CALLING", False),
             max_steps=_env_int("AGENT_MAX_STEPS", 12),
             max_tool_calls=_env_int("AGENT_MAX_TOOL_CALLS", 30),
             max_runtime_seconds=_env_int("AGENT_MAX_RUNTIME_SECONDS", 300),
@@ -205,6 +242,13 @@ class Settings:
             sandbox_memory_mb=_env_int("SANDBOX_MEMORY_MB", 512),
             redis_url=_env("REDIS_URL", None),
             vision_cache_ttl=_env_int("VISION_CACHE_TTL", 600),
+            browser_use_enabled=_env_bool("BROWSER_USE_ENABLED", False),
+            browser_use_api_key=_env("BROWSER_USE_API_KEY", None),
+            browser_use_base_url=_env("BROWSER_USE_BASE_URL", "https://api.browser-use.com") or "https://api.browser-use.com",
+            browser_use_timeout=_env_float("BROWSER_USE_TIMEOUT", 120.0),
+            browser_use_poll_interval=_env_float("BROWSER_USE_POLL_INTERVAL", 2.0),
+            browser_use_reasoning_effort=_env("BROWSER_USE_REASONING_EFFORT", None),
+            browser_use_max_spend_usd=_env_float("BROWSER_USE_MAX_SPEND_USD", 0.0),
             qdrant_url=_env("QDRANT_URL", None),
             qdrant_api_key=_env("QDRANT_API_KEY", None),
             embedding_model=_env("EMBEDDING_MODEL", "text-embedding-004") or "text-embedding-004",
@@ -224,9 +268,11 @@ class Settings:
     def model_name(self) -> str:
         if self.provider == "gemini":
             return self.gemini_model
-        if self.provider == "openai":
+        if self.provider in {"openai", "nvidia", "openai-compatible", "openai_compatible"}:
             return self.openai_model
-        return "mock"
+        if self.provider == "mock":
+            return "mock"
+        return self.gemini_model
 
     def ensure_dirs(self) -> None:
         self.workspace_dir = Path(self.workspace_dir)

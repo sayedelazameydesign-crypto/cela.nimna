@@ -1,0 +1,25 @@
+name: 00 — Repository integrity and capability evidence
+
+on:
+  push:
+    branches: ["main", "arena/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify capability contract and docs
+        run: python scripts/verify_capabilities.py
+      - name: Compile Python source
+        run: python -m compileall -q nimna security
+      - name: Ensure no plaintext environment file is tracked
+        run: test ! -e .env

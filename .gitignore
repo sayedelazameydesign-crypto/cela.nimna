@@ -13,6 +13,8 @@ venv/
 
 # Secrets & local config
 .env
+.env.*
+!.env.example
 *.local.env
 
 # Runtime data

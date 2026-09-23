@@ -1,6 +1,6 @@
 # Nimna — وكيل ذكي قابل لإعادة استخدام المهارات (Reusable-Skills Agent)
 
-> **الحالة: Release Candidate Sprint 2 — Vector Memory (Qdrant + fallback, 768-dim) + 25 أداة — 77 اختبارًا**
+> **الحالة: Release Candidate Sprint 2 — Vector Memory (Qdrant + fallback, 768-dim) + 26 أداة — 83 اختبارًا**
 > الاختبارات لا تثبت الأمان المطلق. الحاويات تشترك في **نواة المضيف**؛ أبقِ المضيف وDocker محدثين واستخدم **seccomp/AppArmor/SELinux**. لا تستخدم `subprocess` كعزل أمني، ولا تعتبر `mock` دليل اتصال حقيقي.
 
 وكيل عام يعمل فوق **مفتاح Gemini المجاني** (أو NVIDIA NIM أو أي نموذج OpenAI-compatible) بمكتبة مهارات `SKILL.md` قابلة للتبديل:
@@ -22,17 +22,18 @@
 ## المحتويات
 1. [التشغيل السريع](#التشغيل-السريع)
 2. [البنية](#البنية)
-3. [المهارات (8)](#المهارات-skills)
-4. [الأدوات (22) والصلاحيات](#الأدوات-والصلاحيات)
+3. [المهارات (9)](#المهارات-skills)
+4. [الأدوات (26) والصلاحيات](#الأدوات-والصلاحيات)
 5. [الذاكرة والتدقيق](#الذاكرة-وسجل-التدقيق)
 6. [تبديل المزود](#تبديل-المزود-gemini--nvidia--openai)
 7. [واجهة REST & WebSocket](#واجهة-rest--websocket)
 8. [Docker والنشر](#docker-والنشر)
 9. [التحكم بالكمبيوتر والواجهة المتقدمة](#التحكم-بالكمبيوتر-والواجهة-المتقدمة-beating-manus-2026)
 10. [الإعدادات](#الإعدادات)
-11. [الأمان — المراجعة #1](#الأمان--المراجعة-1-أعلى-مخاطرة)
-12. [الاختبار والتشخيص](#الاختبار-والتشخيص)
-13. [المساهمة](#المساهمة)
+11. [Agent OS boundaries](#agent-os-boundaries----الإضافة-المعمارية)
+12. [الأمان — المراجعة #1](#الأمان--المراجعة-1-أعلى-مخاطرة)
+13. [الاختبار والتشخيص](#الاختبار-والتشخيص)
+14. [المساهمة](#المساهمة)
 
 ---
 
@@ -52,7 +53,7 @@ nimna ask "حلّل ملف المبيعات وأنشئ تقريراً"
 nimna chat                               # تفاعلي — الموافقات في الطرفية
 PORT=8001 nimna serve                    # واجهة + REST  http://localhost:8001
 nimna doctor --offline
-pytest -q                                # 77 اختبار بلا مفتاح (mock)
+pytest -q                                # 83 اختبار بلا مفتاح (mock)
 ```
 
 بدون مفتاح: `MODEL_PROVIDER=mock nimna serve` — ترى اختيار المهارات والأدوات حياً والردود فقط وهمية.
@@ -87,9 +88,9 @@ nimna/
 │   ├── app.py           # FastAPI + WebSocket hardened (1MB, ping, rate 10/s)
 │   └── static/index.html# لوحة تحكم 3 أعمدة + Computer Use متقدم
 └── cli.py               # nimna ask|chat|skills|tools|serve|approvals|resume|doctor
-skills/                  # 8 مهارات — أضف مجلد = مهارة جديدة
+skills/                  # 9 مهارات — أضف مجلد = مهارة جديدة
 workspace/               # مساحة عمل مقيدة (كل أدوات الملفات مسجونة داخلها)
-tests/                   # 77 اختبار — بلا شبكة
+tests/                   # 83 اختبار — بلا شبكة
 ```
 
 **دورة طلب واحد** ـ «حلّل المبيعات»:
@@ -132,7 +133,7 @@ risk_level: safe
 - `nimna skills validate` ينبه لأداة غير مسجلة أو مهارة `restricted` تحتاج مراجعة.
 - إضافة مهارة = إضافة مجلد + `POST /api/skills/reload`.
 
-### المهارات المضمّنة (8)
+### المهارات المضمّنة (9)
 
 | المهارة | الغرض | الأدوات | المستوى |
 |---------|-------|---------|---------|
@@ -144,6 +145,7 @@ risk_level: safe
 | `skill_author` | تأليف `SKILL.md` جديدة | `write_file, list_skills` | safe |
 | `computer_control` | **تحكم بصري معزول VNC** — تصفح/نقر/كتابة | `take_screenshot, get_element_coordinates, mouse_click, type_text, list_files, read_file` | **restricted** |
 | `code_execution` | **تنفيذ أوامر/كود** — فصل أمني عن التحكم البصري | `shell_execute, run_python, write_file` | **restricted** |
+| `browser_use` | **Browser Use Cloud API V4** — متصفح سحابي opt-in وبميزانية/موافقة | `browser_use_run` | **restricted** |
 
 > فصل `computer_control` عن `code_execution` يمنع خداع الموافقة عبر حقن في صفحة ويب: موافقتك على نقرة لا تمنح تنفيذ shell.
 
@@ -151,7 +153,7 @@ risk_level: safe
 
 ## الأدوات والصلاحيات
 
-`nimna tools` → 25 أداة (22 + 3 vector memory):
+`nimna tools` → 26 أداة (22 + 3 vector memory + Browser Use V4):
 
 - **safe**: قراءة/حساب — تنفذ مباشرة.
 - **confirm/restricted**: تحتاج موافقة (تعليق). `delete_file` دائماً؛ `write_file/report` عند الكتابة فوق موجود؛ `run_python` مع `subprocess`؛ كل أدوات `computer_control`/`code_execution`.
@@ -299,6 +301,9 @@ docker compose --profile computer up -d desktop    # سطح مكتب معزول 
 | `AGENT_MAX_TOOL_CALLS` | 30 | استدعاءات أدوات |
 | `AGENT_MAX_RUNTIME_SECONDS` | 300 | حد زمني |
 | `AGENT_MAX_RESPONSE_TOKENS` | 4096 | سقف توكن |
+| `COST_GUARD_ENABLED` / `COST_GUARD_HARD` | true / true | بوابة تكلفة قبل طلب النموذج |
+| `MAX_SPEND_USD` | 0 | الحد الصلب الافتراضي؛ unknown/paid يُحظر |
+| `MODEL_COST_*_USD_PER_1K` | — | أسعار المزود المدفوع المعلنة صراحة |
 | `AGENT_MAX_CONSECUTIVE_FAILURES` | 5 | توقف بعد أخطاء متتالية |
 | `AGENT_MAX_SKILLS` | 3 | مهارات/طلب |
 | `AGENT_VERIFY` | true | مراجع الجواب |
@@ -310,6 +315,9 @@ docker compose --profile computer up -d desktop    # سطح مكتب معزول 
 | `SANDBOX_BACKEND` | `subprocess` | `docker` أو `subprocess` |
 | `WORKSPACE_DIR`/`SKILLS_DIR`/`DB_PATH` | `workspace`/`skills`/`data/nimna.db` | مسارات |
 | `QDRANT_URL` / `EMBEDDING_*` | — / `text-embedding-004` / `768` / `auto` | ذاكرة متجهية (Sprint 2, fallback تلقائي) |
+| `BROWSER_USE_ENABLED` | false | تشغيل Cloud V4 اختيارياً |
+| `BROWSER_USE_MAX_SPEND_USD` | 0 | بوابة Browser Use الصلبة |
+| `BROWSER_USE_API_KEY` | — | مفتاح V4، لا يظهر في API أو audit |
 | `PORT` | 8000 | منفذ `nimna serve` |
 
 ---
@@ -332,14 +340,63 @@ docker compose --profile computer up -d desktop    # سطح مكتب معزول 
 
 ```bash
 nimna doctor --offline   # .env, مفاتيح, Docker, صلاحيات, SQLite, مخططات الأدوات
-pytest -q                # 77 اختبار (mock) — بلا شبكة
+pytest -q                # 83 اختبار (mock) — بلا شبكة
 nimna skills validate    # صياغة SKILL.md + restricted
-nimna tools              # 25 أداة مع risk ( +3 vector memory)
+nimna tools              # 26 أداة مع risk ( +3 vector memory + Browser Use V4)
 curl -s localhost:8001/api/health | jq
 websocat ws://localhost:8001/ws/test
 ```
 
 توقف تلقائي عند: تكرار نفس استدعاء أداة 3 مرات، تكرار نص 3 مرات، تجاوز `MAX_*`, أو 5 أخطاء متتالية. كل الحمولات عبر `redact_payload` (***REDACTED***).
+
+---
+
+## Agent OS boundaries — الإضافة المعمارية
+
+هذه النسخة لا تحول المستودع إلى `src/` ضخم ولا تدعي قدرات غير مثبتة؛ بل تضيف
+حدوداً قابلة للقياس حول الـRuntime الحالي:
+
+```text
+Gateway / CLI / Web
+        ↓
+Mission Runtime
+        ├── Model Registry → CostGuard (MAX_SPEND_USD=0 hard gate)
+        ├── Skill scope → Tool validation → Governance → Approval
+        ├── SQLite canonical Memory + optional vector retrieval
+        ├── Sandbox / workspace jail
+        └── Audit → SHA-256 Evidence → Runtime fingerprint
+```
+
+- `nimna/models/`: capability-aware registry و`GovernedModelProvider`.
+- `nimna/governance/`: risk vocabulary وpolicy قبل التنفيذ.
+- `nimna/evidence/` و`nimna/provenance/`: سجل أدلة وسلسلة hash وبصمة runtime.
+- `nimna/observability/`: تلخيص model/tool/approval metrics من audit canonical.
+- `docs/CAPABILITY-MATRIX.md`: ما نملكه فعلاً مقابل المخطط.
+- `docs/VERIFICATION-MATRIX.md`: PASS / MOCKED / BLOCKED / PARTIAL بدون خلط.
+- `docs/architecture/agent-os-blueprint.md`: خطة ترقية تدريجية بلا كسر النسخة.
+
+### Browser Use Cloud V4 (اختياري ومحكوم)
+
+يوجد محول REST لا يحتاج SDK عند الاستيراد في `nimna/browser/cloud_v4.py`، وأداة
+`browser_use_run` داخل skill منفصل. الإعداد الافتراضي مغلق وميزانية Browser Use
+صفر؛ أي تشغيل سحابي يحتاج تفعيل صريح، ميزانية موجبة، وموافقة. المحول يرسل
+`X-Browser-Use-API-Key` بلا `Bearer`، يحترم نافذة rate-limit ذات الخمس ثواني و
+`Retry-After`، ويوقف المتصفح المملوك داخل `finally` عبر V4 stop endpoint.
+التفاصيل في [`docs/browser_use_v4.md`](docs/browser_use_v4.md).
+
+Endpoints الجديدة:
+
+| Endpoint | الغرض |
+|---|---|
+| `GET /api/models` | الملف النشط، capabilities، cost profile، budget |
+| `GET /api/capabilities` | claims قابلة للآلة مع evidence وحالات صريحة |
+| `GET /api/provenance` | commit/files/skills/tools/runtime fingerprint |
+| `GET /api/runs/{run_id}/evidence` | audit events + hash verification + metrics |
+| `GET /api/browser-use/status` | حالة V4 بدون كشف المفتاح |
+
+**مهم:** `subprocess` ليس عزلاً أمنياً كاملاً؛ وBrowser Use live smoke لا يعمل في
+CI العادي لأنه قد يستهلك credits أو يغير بيانات خارجية. راجع `SECURITY.md` قبل
+النشر.
 
 ---
 
@@ -360,6 +417,6 @@ cp .env.example .env          # GEMINI_API_KEY (free) or NVIDIA/OpenAI
 nimna ask "analyse sales.csv and write a report"
 PORT=8001 nimna serve         # http://localhost:8001
 nimna doctor --offline
-pytest -q                     # 77 offline tests (mock)
+pytest -q                     # 83 offline tests (mock)
 ```
 Add a skill: `skills/<name>/SKILL.md` (`name, description, triggers, allowed_tools`) → `POST /api/skills/reload`. Add a tool: register Pydantic handler on `ToolRegistry`. Swap model: change `MODEL_PROVIDER` — skills/tools/memory stay identical.

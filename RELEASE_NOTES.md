@@ -3,6 +3,63 @@
 > **محصّن وفق نطاق الاختبارات الحالية — ليس إثباتًا للأمان المطلق.**
 > الحاويات تشترك في نواة المضيف؛ حافظ على المضيف وDocker محدثين واستخدم seccomp/AppArmor أو SELinux.
 
+## v0.3.0-governed — Release Candidate — 2026-09-23
+
+> هذا الإصدار يضيف حدود Agent OS محكومة وقابلة للإثبات. الوسم الرسمي ينتظر
+> مراجعة ودمج طلب الدمج إلى `main`؛ لا تُفهم اختبارات mock على أنها اتصال إنتاجي.
+
+### 1. Model Registry & Cost Guard
+
+- إضافة `nimna/models/` مع capability-aware model profiles و`GovernedModelProvider`.
+- `MAX_SPEND_USD=0` بوابة صلبة قبل Planner وVerifier وAgent loop وSwarm.
+- أسعار غير معروفة أو نماذج مدفوعة تفشل مغلقاً في hard mode؛ profile Gemini free-tier معلن صراحةً وليس ضمان فوترة لحساب المزود.
+
+### 2. Governance & Policy Engine
+
+- تطبيق خط المعالجة:
+  `scope → validation → policy → approval → execution`.
+- المهارات `restricted` ترفع الأدوات إلى طبقة الموافقة.
+- الإبقاء على pause/resume وTTL وsession-scoped approval الحالي.
+
+### 3. Provenance & Evidence Chain
+
+- إضافة `nimna/evidence/` و`nimna/provenance/`.
+- سجل التدقيق SQLite يحصل على SHA-256 hash chain لكشف التعديل اللاحق.
+- runtime manifest يضم commit hash وبصمات الملفات والمهارات والأدوات والتكوينات غير الحساسة.
+
+### 4. Browser Use Cloud API V4
+
+- إضافة `nimna/browser/cloud_v4.py` بدون فرض تثبيت SDK عند الاستيراد.
+- المصادقة عبر `X-Browser-Use-API-Key` بدون `Bearer`.
+- احترام `Retry-After` وتفسير `X-RateLimit-Limit` كنافذة خمس ثوانٍ.
+- إيقاف المتصفحات المملوكة عبر `PATCH /api/v4/browsers/{id}` داخل `finally`.
+- إضافة `skills/browser_use/` و`browser_use_run` كقدرة opt-in تتطلب تفعيلاً وميزانية موجبة وموافقة.
+- توثيق V4 الكامل في `docs/browser_use_v4.md`، مع التنبيه إلى أن Browser Use Cloud خدمة pay-as-you-go.
+
+### 5. Observability & CI Integrity Gate
+
+- نقاط الفحص الجديدة:
+  `/api/models`, `/api/capabilities`, `/api/provenance`,
+  `/api/runs/{run_id}/evidence`, `/api/browser-use/status`.
+- إضافة `.github/workflows/00-integrity.yml` و`verify_capabilities.py`.
+- مصفوفتا القدرات والتحقق تميزان بين `PASS`, `MOCKED`, `BLOCKED`, `PARTIAL` و`PLANNED`.
+
+### نتائج التحقق
+
+- `pytest -q`: **83 passed**.
+- `python scripts/verify_capabilities.py`: **integrity PASS**.
+- Browser Use live smoke: **لم يُشغّل**؛ لا يوجد API key في CI ولا يجب استهلاك credits أو تعديل بيانات خارجية في Pull Request عادي.
+- Docker sandbox الحقيقي وrootless runtime وMCP Gateway وPostgreSQL multi-replica: ما زالت موثقة كـ`partial` أو `planned` في `docs/CAPABILITY-MATRIX.md`.
+
+### ملفات مرجعية
+
+- `docs/CAPABILITY-MATRIX.md`
+- `docs/VERIFICATION-MATRIX.md`
+- `docs/architecture/agent-os-blueprint.md`
+- `docs/browser_use_v4.md`
+
+---
+
 ## 0.1.0-rc1 — 2026-09-23
 
 ### الاختبارات
