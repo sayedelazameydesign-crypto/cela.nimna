@@ -33,7 +33,7 @@
 | OpenTelemetry / Prometheus traces | partial | audit + metrics summary | no exporter claim | `observability` |
 | Signed release / SBOM / SLSA | planned | — | release workflow must add artifacts | `release` |
 | Arabic evaluation suite | planned | — | capability row reserved, no PASS claim | `evaluation` |
-| PR diff evaluation gate (Arena) | implemented | `scripts/evaluate_arena.py`, `.github/workflows/arena_diff_eval.yml` | `tests/test_evaluate_arena.py`; remote Arena API is opt-in (`SKIPPED` without key) | `evaluation/ci` |
+| PR diff evaluation gate (Arena) | implemented | `scripts/evaluate_arena.py`, `.github/workflows/arena_diff_eval.yml` | `tests/test_evaluate_arena.py`; remote Arena API is opt-in (`SKIPPED` without key); LLM-as-a-Judge is opt-in via `OPENAI_API_KEY` on any OpenAI-compatible endpoint (`SKIPPED` without key, `ERROR` banner on failure, verdict advisory) | `evaluation/ci` |
 
 ## Status vocabulary
 

@@ -349,7 +349,7 @@ websocat ws://localhost:8001/ws/test
 
 توقف تلقائي عند: تكرار نفس استدعاء أداة 3 مرات، تكرار نص 3 مرات، تجاوز `MAX_*`, أو 5 أخطاء متتالية. كل الحمولات عبر `redact_payload` (***REDACTED***).
 
-**تقييم الفروقات في كل PR (Arena Diff Evaluation):** الـ workflow `arena_diff_eval.yml` يستخرج `git diff origin/main...HEAD`، يشغّل `scripts/evaluate_arena.py` (مقاييس حقيقية + إشارات مخاطر: أسرار، مسارات حساسة، كود بلا اختبارات)، وينشر النتيجة كتعليق في الـ PR. بدون `ARENA_API_URL`/`ARENA_API_KEY` تكون حالة الـ Benchmark `SKIPPED` وليس `PASS` وهمياً. التفاصيل: [`docs/ARENA-DIFF-EVAL.md`](docs/ARENA-DIFF-EVAL.md).
+**تقييم الفروقات في كل PR (Arena Diff Evaluation):** الـ workflow `arena_diff_eval.yml` يستخرج `git diff origin/main...HEAD`، يشغّل `scripts/evaluate_arena.py` (مقاييس حقيقية + إشارات مخاطر: أسرار، مسارات حساسة، كود بلا اختبارات)، وينشر النتيجة كتعليق في الـ PR. بدون `ARENA_API_URL`/`ARENA_API_KEY` تكون حالة الـ Benchmark `SKIPPED` وليس `PASS` وهمياً. يدعم أيضاً خطوة **LLM-as-a-Judge** اختيارية عبر `OPENAI_API_KEY` (أي مزوّد متوافق مع OpenAI Chat Completions) بنفس قاعدة الأمانة: بدون مفتاح `SKIPPED`، ومع فشل الاتصال/الردّ `ERROR` بلافتة تحذير — حكم النموذج استشاري ولا يستبدل `pytest`. التفاصيل: [`docs/ARENA-DIFF-EVAL.md`](docs/ARENA-DIFF-EVAL.md).
 
 ```bash
 git diff origin/main...HEAD > changes.diff
