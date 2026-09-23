@@ -124,9 +124,13 @@ jobs:
       - name: Sandbox escape attempt (subprocess backend)
         run: |
           python3 - << 'PY'
+          from pathlib import Path
           from nimna.config import Settings
           from nimna.bootstrap import build_agent
           s = Settings.from_env(env_file=None)
+          s.provider = "mock"
+          s.db_path = Path(":memory:")
+          s.verify = False
           s.sandbox_backend = "subprocess"
           s.auto_approve = True
           agent = build_agent(s)
