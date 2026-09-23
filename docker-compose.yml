@@ -1,0 +1,107 @@
+services:
+  nimna:
+    build: .
+    image: nimna-agent:latest
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env                      # copy .env.example -> .env and add your key
+    environment:
+      # Safe default: no Docker socket mounted. The Python sandbox runs with
+      # subprocess + rlimits and requires approval for run_python.
+      # For real isolation, use the local-sandbox profile (see below).
+      SANDBOX_BACKEND: ${SANDBOX_BACKEND:-subprocess}
+    volumes:
+      - ./skills:/app/skills:ro    # add a folder -> new skill (POST /api/skills/reload)
+      - ./workspace:/app/workspace
+      - nimna-data:/app/data
+    restart: unless-stopped
+
+  # ── Local sandbox with Docker isolation (development only) ───────────────
+  # This service mounts the Docker socket, which grants the container near-
+  # host control (can create arbitrary privileged containers) — even read-only
+  # mount is not sufficient isolation. Do NOT use in production or untrusted CI.
+  # Use only for local development on a machine without sensitive data.
+  #
+  #   docker compose --profile local-sandbox up nimna-sandbox
+  #
+  # The default `nimna` service does NOT mount the socket (verify with
+  # `docker compose config | grep -F docker.sock` — should return nothing).
+  nimna-sandbox:
+    extends:
+      service: nimna
+    profiles: ["local-sandbox"]
+    environment:
+      SANDBOX_BACKEND: docker
+    volumes:
+      - ./skills:/app/skills:ro
+      - ./workspace:/app/workspace
+      - nimna-data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+
+  # ── Redis Vision Gateway Cache (profile: infra) ────────────────────────
+  # docker compose --profile infra up -d redis
+  # Requires REDIS_URL=redis://redis:6379/0 inside the nimna service.
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./infra/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - redis-data:/data
+    profiles: ["infra"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 2s
+      retries: 3
+
+  # ── Qdrant Vector DB (profile: infra) — Sprint 2 Memory ────────────────
+  # docker compose --profile infra up -d qdrant
+  # QDRANT_URL=http://localhost:6333  (or http://qdrant:6333 inside compose/k8s)
+  qdrant:
+    image: qdrant/qdrant:v1.11.0
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    profiles: ["infra"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+  # ── Isolated desktop for Computer Control (VNC + noVNC) ────────────────
+  # Provides an Ubuntu LXDE desktop that Nimna can see and click.
+  # Isolated from the host — only workspace is shared.
+  #   docker compose --profile computer up -d desktop
+  #   open http://localhost:6901  (password: nimna, if set)
+  # Nimna's Mirror View will show the same desktop via noVNC.
+  desktop:
+    image: dorowu/ubuntu-desktop-lxde-vnc:focal
+    ports:
+      - "6901:80"
+    environment:
+      - RESOLUTION=1280x800
+      - VNC_PASSWORD=nimna
+      - LANGUAGE=ar
+    volumes:
+      - ./workspace:/home/ubuntu/workspace:rw
+      - desktop-home:/home/ubuntu
+    shm_size: 1gb
+    profiles: ["computer"]
+    restart: unless-stopped
+    # no need for privileged; keep it isolated
+
+volumes:
+  nimna-data:
+  desktop-home:
+  redis-data:
+  qdrant-data:

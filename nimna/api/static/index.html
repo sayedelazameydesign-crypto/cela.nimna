@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Nimna • Advanced Computer Use</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+<script>tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Inter','IBM Plex Sans Arabic','sans-serif'],mono:['JetBrains Mono','monospace']}}}}</script>
+<style>
+:root{--bg:#080a0f;--panel:#0f1219;--panel2:#151924;--panel3:#1c2333;--border:#1e2636;--border2:#263148;--text:#e6eaf2;--muted:#8b95a8;--accent:#7c3aed;--neon:#00ffa3;--neon2:#00d4ff;--amber:#f59e0b}
+*{scrollbar-width:thin;scrollbar-color:#263148 transparent}
+::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-thumb{background:#263148;border-radius:999px}
+body{background:var(--bg);color:var(--text);font-family:'Inter','IBM Plex Sans Arabic',sans-serif}
+.mono{font-family:'JetBrains Mono',monospace}
+.glass{backdrop-filter:blur(16px) saturate(160%);-webkit-backdrop-filter:blur(16px) saturate(160%)}
+.neon-box{position:absolute;border:1.5px solid var(--neon);border-radius:8px;box-shadow:0 0 0 1px rgba(0,255,163,.2),0 0 18px rgba(0,255,163,.45),inset 0 0 12px rgba(0,255,163,.12);animation:neonPulse 1.6s infinite;background:linear-gradient(180deg,rgba(0,255,163,.08),transparent)}
+.neon-box::before{content:attr(data-label);position:absolute;top:-22px;inset-inline-start:0;background:var(--neon);color:#00110a;font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;letter-spacing:.02em;white-space:nowrap;box-shadow:0 2px 8px rgba(0,255,163,.4)}
+.neon-box.alt{border-color:var(--neon2);box-shadow:0 0 0 1px rgba(0,212,255,.2),0 0 18px rgba(0,212,255,.45),inset 0 0 12px rgba(0,212,255,.12)}
+.neon-box.alt::before{background:var(--neon2);color:#001018}
+@keyframes neonPulse{0%,100%{box-shadow:0 0 0 1px rgba(0,255,163,.2),0 0 18px rgba(0,255,163,.45),inset 0 0 12px rgba(0,255,163,.12)}50%{box-shadow:0 0 0 1px rgba(0,255,163,.3),0 0 28px rgba(0,255,163,.6),inset 0 0 16px rgba(0,255,163,.18)}}
+.ai-cursor{position:absolute;width:20px;height:20px;pointer-events:none;z-index:30;transform:translate(-2px,-2px);transition:left .42s cubic-bezier(.22,1,.36,1),top .42s cubic-bezier(.22,1,.36,1);filter:drop-shadow(0 2px 8px rgba(0,0,0,.6))}
+.ai-cursor::before{content:'';position:absolute;left:0;top:0;width:0;height:0;border-left:12px solid #fff;border-top:12px solid #fff;border-right:6px solid transparent;border-bottom:6px solid transparent;transform:rotate(-8deg);box-shadow:0 1px 0 rgba(0,0,0,.4)}
+.ai-cursor::after{content:'';position:absolute;left:9px;top:9px;width:7px;height:7px;background:var(--neon);border:1.5px solid #fff;border-radius:50%;box-shadow:0 0 10px var(--neon)}
+.ai-cursor.clicking{animation:cursorClick .28s}
+@keyframes cursorClick{0%{transform:translate(-2px,-2px) scale(1)}50%{transform:translate(-2px,-2px) scale(.82)}100%{transform:translate(-2px,-2px) scale(1)}}
+.click-ripple{position:absolute;width:36px;height:36px;border:2px solid #fff;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;animation:ripple .7s ease-out forwards;box-shadow:0 0 0 6px rgba(255,255,255,.12)}
+@keyframes ripple{0%{transform:translate(-50%,-50%) scale(.4);opacity:1}100%{transform:translate(-50%,-50%) scale(1.8);opacity:0}}
+.timeline-track{height:2px;background:linear-gradient(90deg,var(--neon),var(--neon2));background-size:200% 100%;animation:shimmer 1.4s linear infinite}
+@keyframes shimmer{0%{background-position:-200% 0}100%{background-position:200% 0}}
+.prose{line-height:1.7}
+.prose a{color:#a78bfa;text-decoration:underline}
+.prose code:not(pre code){background:#1c2333;border:1px solid #263148;padding:1px 6px;border-radius:6px;font-size:.88em}
+.prose pre{background:#05070a;border:1px solid #1e2636;border-radius:12px;padding:14px;overflow:auto}
+</style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden">
+<!-- Top Bar -->
+<header class="h-[52px] shrink-0 flex items-center gap-3 px-3 border-b glass sticky top-0 z-40" style="background:rgba(8,10,15,.82);border-color:var(--border)">
+  <div class="flex items-center gap-3">
+    <div class="size-8 rounded-lg grid place-items-center font-bold text-white text-[13px]" style="background:linear-gradient(135deg,#7c3aed,#00ffa3)">N</div>
+    <div class="hidden md:block leading-tight">
+      <div class="font-semibold text-[13px] flex items-center gap-1.5">Nimna <span class="text-[10px] px-1.5 py-0.5 rounded-full border" style="background:rgba(124,58,237,.14);border-color:rgba(124,58,237,.3);color:#c4b5fd">manus-beating • v0.1</span></div>
+      <div class="text-[11px]" style="color:var(--muted)">Advanced Computer Use • Live Bounding Boxes</div>
+    </div>
+  </div>
+  <div class="hidden lg:flex items-center gap-2 ms-6 text-[11px]">
+    <span class="size-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,.7)]"></span>
+    <span id="providerLbl" class="font-medium">mock</span><span style="color:var(--muted)" id="modelLbl">gemini-2.5-flash</span>
+    <span class="h-4 w-px" style="background:var(--border)"></span>
+    <span id="limitsLbl" class="mono" style="color:var(--muted)"></span>
+  </div>
+  <div class="flex-1"></div>
+  <div class="flex items-center gap-2">
+    <div id="wsBadge" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-medium" style="background:var(--panel);border-color:var(--border)"><span id="wsDot" class="size-2 rounded-full bg-zinc-500"></span><span id="wsTxt">HTTP</span></div>
+    <div id="swarmBadge" class="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-medium" style="background:var(--panel);border-color:var(--border)"><span id="swarmDot" class="size-2 rounded-full bg-zinc-600"></span><span id="swarmTxt">Swarm • off</span></div>
+    <button id="cmdBtn" class="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border text-[11px] hover:bg-white/5" style="border-color:var(--border);color:var(--muted)">⌘K <span class="mono bg-white/10 px-1 rounded">palette</span></button>
+    <button id="newBtn" class="px-3.5 py-1.5 rounded-full bg-[#7c3aed] hover:bg-[#6d28d9] text-white text-[12px] font-semibold hidden sm:flex">＋ جلسة جديدة</button>
+  </div>
+</header>
+
+<div class="flex-1 min-h-0 flex">
+  <!-- Sidebar -->
+  <aside class="w-[240px] shrink-0 hidden lg:flex flex-col border-e" style="background:var(--panel);border-color:var(--border)">
+    <nav class="p-2 space-y-1 text-[12.5px]">
+      <a data-nav="tasks" class="nav-link flex items-center gap-2.5 px-2.5 py-2 rounded-xl bg-white text-zinc-900 font-medium"><span>◎</span> المهام <span class="ms-auto mono text-[10px] bg-zinc-900 text-white px-1.5 py-0.5 rounded-full" id="tasksCount">0</span></a>
+      <a data-nav="memory" class="nav-link flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-white/5" style="color:var(--muted)"><span>◈</span> الذاكرة</a>
+      <a data-nav="projects" class="nav-link flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-white/5" style="color:var(--muted)"><span>▦</span> المشاريع</a>
+      <a data-nav="files" class="nav-link flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-white/5" style="color:var(--muted)"><span>⧉</span> الملفات <span class="ms-auto text-[10px]">workspace</span></a>
+      <a data-nav="settings" class="nav-link flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-white/5" style="color:var(--muted)"><span>⚙</span> الإعدادات</a>
+    </nav>
+    <div class="mx-2 h-px" style="background:var(--border)"></div>
+    <div class="flex-1 overflow-auto p-3 space-y-4">
+      <div id="sideContent">
+        <div class="text-[11px] font-semibold tracking-widest uppercase mb-2" style="color:var(--muted)">المهارات • <span id="skillCnt">—</span></div>
+        <div id="skillsList" class="space-y-2"></div>
+        <div class="mt-4 text-[11px] font-semibold tracking-widest uppercase mb-2" style="color:var(--muted)">الأدوات • <span id="toolCnt">—</span></div>
+        <div id="toolsList" class="flex flex-wrap gap-1"></div>
+      </div>
+      <div class="rounded-xl border p-3 text-[11px] leading-relaxed" style="background:rgba(245,158,11,.08);border-color:rgba(245,158,11,.2);color:var(--muted)"><b style="color:#f59e0b">🛡️ محصّن وفق الاختبارات</b><br>فصل `computer_control` عن `code_execution` — موافقة منفصلة لكل طبقة.</div>
+    </div>
+    <div class="p-3 border-t flex items-center gap-2 text-[11px]" style="border-color:var(--border);color:var(--muted)"><div class="size-7 rounded-full bg-zinc-700 grid place-items-center text-white">S</div><div class="leading-tight"><div style="color:var(--text)" class="font-medium">Studio</div><div>محلي • subprocess</div></div><span class="ms-auto mono">⌘K</span></div>
+  </aside>
+
+  <!-- Chat Column -->
+  <section class="w-[380px] xl:w-[420px] shrink-0 hidden md:flex flex-col border-e min-h-0" style="background:var(--bg);border-color:var(--border)">
+    <div class="h-[40px] shrink-0 flex items-center gap-2 px-3 border-b text-[11px] font-semibold tracking-widest uppercase" style="border-color:var(--border);color:var(--muted)"><span class="size-1.5 rounded-full bg-emerald-500 animate-pulse"></span> AI Chat Box • Chain of Thought<span id="sessLbl" class="ms-auto mono normal-case tracking-normal" style="color:var(--muted)">—</span></div>
+    <div id="chatLog" class="flex-1 overflow-auto p-3 space-y-3">
+      <div id="emptyChat" class="rounded-2xl border p-4" style="background:var(--panel);border-color:var(--border)">
+        <div class="text-[13px] font-semibold">مرحباً — أنا Nimna</div>
+        <div class="text-[11px] mt-1 leading-relaxed" style="color:var(--muted)">أكتب مهمتك. سأفكر بصوت عالٍ (Chain of Thought) وأنفذ خطوة بخطوة مع تحديد بصري حيّ يتفوق على Manus.</div>
+        <div class="grid grid-cols-2 gap-2 mt-3">
+          <button class="promptBtn text-start rounded-xl border p-2.5 text-[11px] leading-relaxed hover:border-violet-500/30 hover:bg-violet-500/10" style="border-color:var(--border);background:var(--panel2)" data-prompt="افتح المتصفح في الكمبيوتر المعزول والتقط صورة ثم حدد Firefox">🖥️ افتح المتصفح + حدد</button>
+          <button class="promptBtn text-start rounded-xl border p-2.5 text-[11px] leading-relaxed hover:border-emerald-500/30 hover:bg-emerald-500/10" style="border-color:var(--border);background:var(--panel2)" data-prompt="حلّل sales.csv وأنشئ تقريراً جديداً مع رسم">📊 حلّل المبيعات</button>
+        </div>
+      </div>
+      <div id="messages" class="space-y-3"></div>
+    </div>
+    <div id="thoughtBox" class="mx-3 mb-2 rounded-xl border overflow-hidden hidden" style="border-color:var(--border);background:var(--panel)">
+      <div class="h-7 flex items-center gap-2 px-2.5 text-[11px] font-semibold" style="background:var(--panel2);border-bottom:1px solid var(--border)"><span class="size-1.5 rounded-full bg-violet-500 animate-pulse"></span> Chain of Thought — يفكر الآن<div class="ms-auto mono text-[10px]" style="color:var(--muted)" id="thoughtStep">—</div></div>
+      <div id="thoughtLog" class="max-h-[160px] overflow-auto p-2 space-y-1.5 text-[11px] leading-relaxed" style="color:var(--muted)"></div>
+      <div class="timeline-track"></div>
+    </div>
+    <div class="p-3 border-t" style="border-color:var(--border);background:var(--panel)">
+      <div class="rounded-2xl border flex flex-col overflow-hidden" style="background:var(--panel2);border-color:var(--border)">
+        <textarea id="chatInput" rows="1" placeholder="وجّه الأمر — / للأوامر السريعة" class="bg-transparent outline-none text-[13px] p-3 min-h-[44px] max-h-[120px] resize-none placeholder:text-zinc-500"></textarea>
+        <div class="flex items-center gap-2 px-2 pb-2">
+          <span class="mono text-[10px] px-1.5 py-1 rounded border" style="background:var(--panel);border-color:var(--border);color:var(--muted)">↵ إرسال • ⇧↵ سطر</span>
+          <div class="flex-1"></div>
+          <span id="charCnt" class="mono text-[10px]" style="color:var(--muted)">0</span>
+          <button id="sendBtn" class="size-8 rounded-full bg-white text-zinc-900 grid place-items-center hover:bg-zinc-100">▸</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Advanced Computer Use Display -->
+  <main class="flex-1 min-w-0 flex flex-col min-h-0" style="background:var(--bg)">
+    <!-- Computer header -->
+    <div class="h-[40px] shrink-0 flex items-center gap-2 px-3 border-b" style="border-color:var(--border);background:var(--panel)">
+      <div class="flex items-center gap-1.5 text-[11px] font-semibold"><span class="size-2 rounded-full bg-emerald-500 animate-pulse"></span> Advanced Computer Use <span class="hidden sm:inline font-normal" style="color:var(--muted)">— Live Bounding Boxes • Neon</span></div>
+      <div class="flex-1"></div>
+      <span class="hidden md:flex items-center gap-1.5 mono text-[10px] px-2 py-1 rounded-full border" style="background:var(--panel2);border-color:var(--border);color:var(--muted)"><span class="size-1.5 rounded-full bg-emerald-500"></span> Mirror View • 1280×800</span>
+      <button id="btnScreenshot" class="px-2.5 py-1 rounded-full bg-white text-zinc-900 text-[11px] font-semibold">📸 لقطة</button>
+      <button id="btnGrid" class="px-2.5 py-1 rounded-full border text-[11px] hover:bg-white/5" style="border-color:var(--border)">شبكة</button>
+      <button id="btnFullscreen" class="size-7 grid place-items-center rounded-full border hover:bg-white/5" style="border-color:var(--border)">⛶</button>
+    </div>
+
+    <!-- Central viewport -->
+    <div id="viewport" class="flex-1 min-h-0 relative overflow-hidden flex flex-col" style="background:#05070a">
+      <!-- Stage -->
+      <div id="stage" class="flex-1 relative overflow-hidden grid place-items-center p-4 md:p-6">
+        <div id="screenWrap" class="relative w-full max-w-[960px] aspect-[1280/800] rounded-2xl overflow-hidden border shadow-[0_20px_60px_rgba(0,0,0,.6)]" style="background:#000;border-color:var(--border2)">
+          <!-- macOS chrome -->
+          <div class="h-7 flex items-center gap-1.5 px-3 border-b shrink-0" style="background:#0f1219;border-color:var(--border)"><span class="size-2.5 rounded-full bg-[#ff5f57]"></span><span class="size-2.5 rounded-full bg-[#febc2e]"></span><span class="size-2.5 rounded-full bg-[#28c840]"></span><span class="flex-1 mx-3 mono text-[10px] px-2 py-1 rounded-full border text-center truncate" style="background:var(--panel2);border-color:var(--border);color:var(--muted)" id="screenUrl">isolated desktop — دورو Ubuntu LXDE • VNC</span><span class="mono text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">LIVE</span></div>
+          <div id="canvasArea" class="relative flex-1 overflow-hidden bg-black" style="height:calc(100% - 28px)">
+            <img id="screenImg" class="w-full h-full object-contain hidden" alt="desktop">
+            <div id="screenPlaceholder" class="absolute inset-0 grid place-items-center p-8 text-center">
+              <div class="max-w-[420px]">
+                <div class="size-16 mx-auto rounded-2xl grid place-items-center text-[28px] border" style="background:var(--panel);border-color:var(--border)">🖥️</div>
+                <div class="font-semibold mt-3">بث حي — في انتظار أول لقطة</div>
+                <div class="text-[11px] mt-1 leading-relaxed" style="color:var(--muted)">سيظهر هنا سطح المكتب المعزول مع <span style="color:var(--neon)">صناديق نيون</span> حول العناصر التي يراها الذكاء الاصطناعي، مع مؤشر AI مخصص.</div>
+                <button id="activateBtn" class="mt-3 px-4 py-1.5 rounded-full bg-[#7c3aed] text-white text-[12px] font-medium">التقط أول لقطة</button>
+              </div>
+            </div>
+            <!-- Neon bounding boxes layer -->
+            <div id="bboxLayer" class="absolute inset-0 pointer-events-none"></div>
+            <!-- AI Cursor -->
+            <div id="aiCursor" class="ai-cursor hidden" style="left:50%;top:50%"></div>
+            <div id="rippleLayer" class="absolute inset-0 pointer-events-none"></div>
+          </div>
+        </div>
+        <!-- Zoom hint -->
+        <div class="absolute bottom-3 end-3 mono text-[10px] px-2 py-1 rounded-full border flex items-center gap-1.5" style="background:rgba(0,0,0,.6);border-color:rgba(255,255,255,.12);color:#fff"><span>◉</span> AI Cursor • Neon Boxes</div>
+      </div>
+
+      <!-- Action Timeline Overlay -->
+      <div id="timeline" class="shrink-0 border-t" style="background:rgba(15,18,25,.92);border-color:var(--border);backdrop-filter:blur(12px)">
+        <div class="h-7 flex items-center gap-2 px-3 text-[11px] font-semibold tracking-widest uppercase" style="color:var(--muted)"><span class="size-1.5 rounded-full bg-emerald-500 animate-pulse"></span> Action Timeline — سجل الإجراءات الزمني<div class="ms-auto flex items-center gap-1.5"><span id="timelineStatus" class="mono normal-case tracking-normal font-normal" style="color:var(--muted)">خامل</span><button id="clearTimeline" class="px-2 py-0.5 rounded-full border text-[10px] hover:bg-white/5" style="border-color:var(--border)">مسح</button></div></div>
+        <div id="timelineTrack" class="timeline-track hidden"></div>
+        <div id="timelineList" class="flex gap-2 p-2 overflow-auto scrollbar-thin">
+          <div class="shrink-0 rounded-xl border border-dashed px-3 py-2 text-[11px] text-center min-w-[180px]" style="border-color:var(--border);color:var(--muted);background:var(--panel2)">لا إجراءات بعد — سيظهر هنا: "يتم النقر على زر الإرسال"...</div>
+        </div>
+      </div>
+
+      <!-- Terminal Logs Drawer -->
+      <div id="terminal" class="shrink-0 border-t flex flex-col" style="background:#04060a;border-color:var(--border);max-height:180px">
+        <div class="h-7 shrink-0 flex items-center gap-2 px-3 text-[11px] font-medium border-b" style="border-color:var(--border);background:#080a0f"><span class="mono bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 px-1.5 py-0.5 rounded text-[10px]">CLI</span> Terminal Logs — سجل الأوامر والاستخراج (Scraping)<span class="ms-auto flex items-center gap-1"><span class="size-1.5 rounded-full bg-emerald-500 animate-pulse"></span><span class="mono" style="color:var(--muted)">شفافية كاملة</span><button id="toggleTerminal" class="ms-2 size-6 grid place-items-center rounded-full hover:bg-white/10">−</button></span></div>
+        <div id="terminalBody" class="flex-1 overflow-auto p-3 mono text-[11px] leading-relaxed whitespace-pre-wrap" style="color:#9ef0c8">$ nimna ready — في انتظار أوامر shell_execute / python...</div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Approval Sheet (visual) -->
+<div id="approvalSheet" class="hidden fixed inset-0 z-50">
+  <div id="approvalBg" class="absolute inset-0 bg-black/60 backdrop-blur"></div>
+  <div class="absolute inset-0 grid place-items-center p-4">
+    <div class="w-full max-w-[640px] rounded-2xl border overflow-hidden shadow-[0_20px_60px_rgba(0,0,0,.6)]" style="background:var(--panel);border-color:var(--border)">
+      <div class="h-1" style="background:linear-gradient(90deg,#f59e0b,#ff3b30)"></div>
+      <div class="p-4">
+        <div class="font-bold text-[13px]">الوكيل يطلب موافقتك</div>
+        <div class="text-[11px]" style="color:var(--muted)"><span id="apprTool" class="mono px-1.5 py-0.5 rounded border" style="background:var(--panel2);border-color:var(--border)">—</span> <span id="apprSkill"></span></div>
+        <div id="apprImpact" class="mt-3 rounded-xl border p-3 text-[12px] leading-relaxed" style="background:var(--panel2);border-color:var(--border)"></div>
+        <pre id="apprArgs" class="mt-3 rounded-xl border p-3 mono text-[11px] overflow-auto max-h-[140px]" style="background:#05070a;border-color:var(--border);color:#cbd5e1"></pre>
+        <div class="mt-3 flex gap-2">
+          <button id="apprOk" class="flex-1 py-2 rounded-full bg-[#7c3aed] text-white text-[12px] font-semibold">موافقة</button>
+          <button id="apprAlways" class="px-4 py-2 rounded-full border text-[12px]" style="border-color:var(--border)">دائمة</button>
+          <button id="apprNo" class="px-4 py-2 rounded-full bg-[#ff3b30] text-white text-[12px]">رفض</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Command Palette -->
+<div id="cmdPal" class="hidden fixed inset-0 z-50">
+  <div id="cmdBg" class="absolute inset-0 bg-black/50 backdrop-blur"></div>
+  <div class="absolute top-[18vh] inset-x-0 mx-auto w-[min(640px,92vw)] rounded-2xl border overflow-hidden shadow-[0_20px_60px_rgba(0,0,0,.5)]" style="background:var(--panel);border-color:var(--border)">
+    <input id="cmdInput" placeholder="ابحث — Tasks / Memory / Projects / Files ..." class="w-full h-12 px-4 bg-transparent outline-none text-[13px] border-b" style="border-color:var(--border)">
+    <div id="cmdList" class="max-h-[320px] overflow-auto p-2 space-y-1"></div>
+  </div>
+</div>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+let sessionId=localStorage.getItem('nimna.session')||null, ws=null, pending=null, latestB64=null;
+const escapeHtml=s=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=()=>new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
+
+function setWS(on){$('#wsDot').className='size-2 rounded-full '+(on?'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,.6)]':'bg-zinc-500');$('#wsTxt').textContent=on?'Live':'HTTP';}
+function updateSess(){if($('#sessLbl'))$('#sessLbl').textContent=sessionId?sessionId.slice(0,8):'—';}
+function addThought(t,d,c='#8b95a8'){
+  const box=$('#thoughtLog'); if(!box) return;
+  $('#thoughtBox')?.classList.remove('hidden');
+  if($('#thoughtStep')) $('#thoughtStep').textContent=t.slice(0,18);
+  const el=document.createElement('div'); el.className='flex gap-2 p-2 rounded-xl border text-[11px]'; el.style.background='var(--panel2)'; el.style.borderColor='var(--border)';
+  el.innerHTML=`<span class="size-1.5 rounded-full mt-1.5 shrink-0" style="background:${c}"></span><div class="flex-1 min-w-0"><div class="font-medium">${escapeHtml(t)}</div><div style="color:var(--muted)">${escapeHtml(d).slice(0,120)}</div></div><span class="mono text-[10px]" style="color:var(--muted)">${fmt()}</span>`;
+  box.prepend(el); while(box.children.length>8) box.lastChild.remove();
+}
+function addTimeline(icon, title, subtitle, color='emerald'){
+  const list=$('#timelineList'); if(list.textContent.includes('لا إجراءات')) list.innerHTML='';
+  $('#timelineTrack').classList.remove('hidden'); $('#timelineStatus').textContent='حي — '+title;
+  const col=color==='emerald'?'rgba(0,255,163,.14)':color==='violet'?'rgba(124,58,237,.14)':'rgba(245,158,11,.14)';
+  const border=color==='emerald'?'rgba(0,255,163,.3)':'rgba(124,58,237,.3)';
+  const el=document.createElement('div'); el.className='shrink-0 rounded-xl border px-3 py-2 min-w-[200px] flex gap-2 items-start';
+  el.style.background=col; el.style.borderColor=border;
+  el.innerHTML=`<span class="size-6 rounded-full grid place-items-center shrink-0 text-[12px] bg-white text-zinc-900 font-bold">${icon}</span><div class="flex-1 min-w-0"><div class="text-[11px] font-semibold leading-none">${escapeHtml(title)}</div><div class="text-[10px] mt-1 leading-relaxed" style="color:var(--muted)">${escapeHtml(subtitle).slice(0,90)}</div></div><span class="mono text-[10px]" style="color:var(--muted)">${fmt()}</span>`;
+  list.prepend(el);
+}
+function addTerminal(cmd, out, err){
+  const body=$('#terminalBody');
+  const line=document.createElement('div'); line.className='border-b pb-2 mb-2'; line.style.borderColor='rgba(255,255,255,.06)';
+  line.innerHTML=`<div class="flex items-center gap-2"><span style="color:#00ffa3">$</span><span class="mono">${escapeHtml(cmd).slice(0,120)}</span><span class="ms-auto mono text-[10px] px-1.5 py-0.5 rounded border" style="border-color:var(--border);color:var(--muted)">${fmt()}</span></div>${out?`<div class="mt-1 mono whitespace-pre-wrap" style="color:#cbd5e1">${escapeHtml(out).slice(0,800)}</div>`:''}${err?`<div class="mono whitespace-pre-wrap" style="color:#fca5a5">${escapeHtml(err).slice(0,400)}</div>`:''}`;
+  body.prepend(line); body.scrollTop=0;
+}
+function showBbox(x,y,label,alt=false){
+  const layer=$('#bboxLayer'); layer.innerHTML='';
+  // main neon box 120x36 centered on x,y
+  const box=document.createElement('div'); box.className='neon-box'+(alt?' alt':''); box.dataset.label=label;
+  const left=(x/1280*100), top=(y/800*100);
+  box.style.left=`calc(${left}% - 60px)`; box.style.top=`calc(${top}% - 18px)`; box.style.width='120px'; box.style.height='36px';
+  layer.appendChild(box);
+  // secondary scanning box
+  const scan=document.createElement('div'); scan.className='neon-box alt'; scan.dataset.label='تحليل بصري';
+  scan.style.left='8%'; scan.style.top='12%'; scan.style.width='32%'; scan.style.height='22%'; scan.style.opacity='.6';
+  layer.appendChild(scan);
+}
+function moveCursor(x,y,click=false){
+  const cur=$('#aiCursor'); cur.classList.remove('hidden');
+  cur.style.left=(x/1280*100)+'%'; cur.style.top=(y/800*100)+'%';
+  if(click){
+    cur.classList.add('clicking'); setTimeout(()=>cur.classList.remove('clicking'),280);
+    const rip=document.createElement('div'); rip.className='click-ripple'; rip.style.left=(x/1280*100)+'%'; rip.style.top=(y/800*100)+'%';
+    $('#rippleLayer').appendChild(rip); setTimeout(()=>rip.remove(),700);
+  }
+}
+function updateScreen(b64){
+  if(!b64) return; latestB64=b64;
+  const img=$('#screenImg'), ph=$('#screenPlaceholder');
+  img.src='data:image/png;base64,'+b64; img.classList.remove('hidden'); ph.classList.add('hidden');
+}
+function renderMarkdown(md){
+  try{ marked.setOptions({gfm:true,breaks:true}); let h=marked.parse(md||''); return DOMPurify.sanitize(h);}catch(e){return `<pre class="mono text-[11px] whitespace-pre-wrap">${escapeHtml(md||'')}</pre>`}
+}
+function addMsg(role, text, extra=''){
+  const empty=$('#emptyChat'); if(empty) empty.style.display='none';
+  const wrap=document.createElement('div'); wrap.className='flex gap-2';
+  const isUser=role==='user';
+  const avatar=isUser?`<div class="size-7 rounded-full grid place-items-center shrink-0 text-white text-[11px] font-bold" style="background:#2563eb">أنت</div>`:`<div class="size-7 rounded-full grid place-items-center shrink-0 text-white" style="background:linear-gradient(135deg,#7c3aed,#00ffa3)">✦</div>`;
+  wrap.innerHTML=`${avatar}<div class="flex-1 min-w-0"><div class="text-[11px] font-semibold flex items-center gap-1">${isUser?'أنت':'Nimna'}<span class="mono font-normal" style="color:var(--muted)">${fmt()}</span></div><div class="${isUser?'mt-1 px-3 py-2 rounded-2xl rounded-br-[6px] bg-[#2563eb] text-white text-[13px] leading-6 whitespace-pre-wrap':'mt-1 px-3 py-2 rounded-2xl rounded-bl-[6px] border prose text-[13px] leading-7'}" style="${isUser?'':'background:var(--panel);border-color:var(--border)'}">${isUser?escapeHtml(text):renderMarkdown(text)}</div>${extra?`<div class="mt-2">${extra}</div>`:''}</div>`;
+  $('#messages').appendChild(wrap); $('#chatLog').scrollTop=$('#chatLog').scrollHeight; return wrap;
+}
+function renderResult(res){
+  if(res.session_id){sessionId=res.session_id;localStorage.setItem('nimna.session',sessionId);updateSess();}
+  if(res.skills_used?.length) addThought('تم اختيار المهارة', res.skills_used.join(', '), '#7c3aed');
+  if(res.tool_calls?.length){
+    for(const c of res.tool_calls){
+      const ok=c.ok;
+      if(c.name==='take_screenshot'){
+        addTimeline('📸','يتم الآن التقاط الشاشة','تحليل بصري + شبكة نيون', ok?'emerald':'amber');
+        if(ok) fetch('/api/computer/screenshot').then(r=>r.json()).then(j=>{if(j.image_b64) updateScreen(j.image_b64); showBbox(640,400,'فحص الشاشة',false)}).catch(()=>{});
+      } else if(c.name==='get_element_coordinates'){
+        const x=c.arguments?.x||c.arguments?.element_name, y=c.arguments?.y;
+        addTimeline('🎯','يتم تحديد العنصر','OCR + شبكة — '+ (c.arguments?.element_name||''), ok?'emerald':'amber');
+        if(ok && c.arguments) { /* will be handled via actual tool result */ }
+        // try to show bbox from result if available via audit? Use args
+        if(c.arguments?.element_name) showBbox(640,400,c.arguments.element_name,true);
+      } else if(c.name==='mouse_click'){
+        addTimeline('🖱️','يتم الآن النقر على زر الإرسال',`(${c.arguments?.x},${c.arguments?.y}) • ${c.arguments?.purpose||''}`, ok?'emerald':'amber');
+        if(c.arguments) moveCursor(c.arguments.x,c.arguments.y,true);
+        showBbox(c.arguments.x,c.arguments.y,c.arguments.purpose?.slice(0,16)||'Click');
+      } else if(c.name==='type_text'){
+        addTimeline('⌨️','يتم إدخال النص',`"${(c.arguments?.text||'').slice(0,30)}"`, ok?'emerald':'amber');
+      } else if(c.name==='shell_execute'){
+        addTimeline('💻','يتم تنفيذ الأمر','CLI — '+ (c.arguments?.command||'').slice(0,40), ok?'violet':'amber');
+        // terminal logs will be added after we parse result preview
+        if(c.result_preview) addTerminal(c.arguments?.command||'shell', c.result_preview.slice(0,500), '');
+      } else if(c.name.startsWith('swarm:')){
+        const ag=c.name.split(':')[1]; const icons={search:'🔍',code:'🧩',vision:'👁️'}; const col={search:'emerald',code:'violet',vision:'amber'};
+        addTimeline(icons[ag]||'🤖', `${ag} • ${c.arguments?.task||''}`.slice(0,48), (c.result_preview||'').slice(0,60), ok?'emerald':'amber');
+      } else {
+        addTimeline('🔧',c.name, JSON.stringify(c.arguments||{}).slice(0,50), ok?'emerald':'amber');
+      }
+    }
+  }
+  if(res.status==='awaiting_approval' && res.pending){
+    pending=res.pending; showApproval(res); return;
+  }
+  if(pending) hideApproval();
+  const text=res.reply||res.error||'(لا رد)';
+  let extra='';
+  if(res.plan?.length) extra+=`<div class="rounded-xl border p-2 text-[11px] leading-relaxed" style="background:var(--panel2);border-color:var(--border)"><b>الخطة:</b><br>${res.plan.map((s,i)=>`${i+1}. ${escapeHtml(s)}`).join('<br>')}</div>`;
+  if(res.tool_calls?.length) extra+=`<div class="mt-2 mono text-[10px] p-2 rounded-xl border" style="background:var(--panel2);border-color:var(--border);color:var(--muted)">${res.tool_calls.map(c=>`${c.ok?'✓':'✗'} ${c.name} • ${c.duration_ms}ms`).join(' • ')}</div>`;
+  addMsg('assistant', text, extra);
+  // handle get_element result to show precise bbox if tool returned x,y in audit
+  const locate=res.tool_calls?.find(c=>c.name==='get_element_coordinates' && c.ok);
+  if(locate){
+    try{ const args=locate.arguments; /* we need actual result x,y from tool result preview parsing */ }catch(e){}
+  }
+}
+function showApproval(res){
+  const p=res.pending; $('#apprTool').textContent=p.tool_name; $('#apprSkill').textContent=(res.skills_used||[]).join(', ');
+  const args=p.tool_call.arguments||{}; let impact='';
+  if(p.tool_name==='mouse_click'){ impact=`🖱️ نقرة في (${args.x},${args.y}) — ${escapeHtml(args.purpose||'')}`; moveCursor(args.x,args.y,false); showBbox(args.x,args.y,'موافقة مطلوبة');}
+  else if(p.tool_name==='shell_execute'){ impact=`💻 أمر: <code class="mono">${escapeHtml(args.command||'')}</code><br><span style="color:var(--muted)">${escapeHtml(args.purpose||'')}</span>`;}
+  else if(p.tool_name==='type_text'){ impact=`⌨️ كتابة: "${escapeHtml((args.text||'').slice(0,80))}"`;}
+  else impact=escapeHtml(p.description||'');
+  $('#apprImpact').innerHTML=impact; $('#apprArgs').textContent=JSON.stringify(args,null,2);
+  $('#approvalSheet').classList.remove('hidden');
+}
+function hideApproval(){ $('#approvalSheet').classList.add('hidden'); pending=null; }
+async function postChat(msg){
+  addMsg('user', msg); $('#emptyChat')?.style && ($('#emptyChat').style.display='none');
+  // show thinking
+  addThought('يفكر...','اختيار المهارة وتحميل التعليمات', '#7c3aed');
+  $('#timelineTrack').classList.remove('hidden');
+  try{
+    if(ws && ws.readyState===1){ ws.send(JSON.stringify({message:msg, session_id:sessionId})); return;}
+    const res=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg, session_id:sessionId})}).then(async r=>{const j=await r.json(); if(!r.ok) throw new Error(j.detail||r.statusText); return j;});
+    renderResult(res);
+  }catch(e){ addMsg('assistant','خطأ: '+e.message); }
+}
+function connectWS(){
+  try{
+    const proto=location.protocol==='https:'?'wss:':'ws:';
+    const url=proto+'//'+location.host+'/ws/'+(sessionId||'default');
+    ws=new WebSocket(url);
+    ws.onopen=()=>setWS(true); ws.onclose=()=>{setWS(false); setTimeout(connectWS,2500)}; ws.onerror=()=>setWS(false);
+    ws.onmessage=e=>{
+      try{
+        const d=JSON.parse(e.data);
+        if(d.type==='ping'){ ws.send(JSON.stringify({type:'pong'})); return;}
+        if(d.type==='result') renderResult(d.result);
+        else if(d.type==='status') addThought(d.message||'يفكر...','', '#00ffa3');
+      }catch(err){ console.log(e.data)}
+    };
+  }catch(e){ setWS(false)}
+}
+async function boot(){
+  updateSess();
+  try{
+    const h=await fetch('/api/health').then(r=>r.json());
+    $('#providerLbl').textContent=h.provider+' • '+(h.model||'');
+    $('#modelLbl').textContent=h.verify?'verify on':'verify off';
+    $('#limitsLbl').textContent=`${h.limits.max_steps} خطوات • ${h.limits.max_tool_calls} أدوات`;
+    // Swarm badge
+    try{ const sw=h.swarm||await fetch('/api/swarm/status').then(r=>r.json()); const on=!!sw.enabled; $('#swarmTxt').textContent='Swarm • '+(on?'on':'off')+(sw.parallel?' • parallel':''); $('#swarmDot').className='size-2 rounded-full '+(on?'bg-emerald-500 animate-pulse':'bg-zinc-500'); $('#swarmBadge').title=`Agents: ${(sw.agents||[]).join(', ')} | max:${sw.max_agents} self-heal:${sw.self_healing_retries||sw.self_heal||3}`;}catch(e){}
+    const s=await fetch('/api/skills').then(r=>r.json());
+    $('#skillCnt').textContent=s.skills.length;
+    $('#toolCnt').textContent=(await fetch('/api/tools').then(r=>r.json())).tools.length;
+    $('#skillsList').innerHTML=s.skills.map(k=>`<div class="rounded-xl border p-2.5 flex gap-2" style="background:var(--panel2);border-color:var(--border)"><span class="size-7 rounded-lg grid place-items-center shrink-0 border text-[12px]" style="background:var(--panel);border-color:var(--border)">${k.name==='computer_control'?'🖥️':k.name==='code_execution'?'💻':k.name==='web_research'?'◉':'🧩'}</span><div class="flex-1 min-w-0"><div class="flex items-center gap-1"><b class="text-[11px]">${escapeHtml(k.display_name||k.name)}</b><span class="mono text-[9px] px-1 py-0.5 rounded border" style="background:var(--panel);border-color:var(--border);color:var(--muted)">v${k.version}</span><span class="text-[9px] px-1 py-0.5 rounded-full border ${k.risk_level==='restricted'?'bg-red-500/10 border-red-500/20 text-red-400':'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'}">${k.risk_level}</span></div><div class="text-[10px] leading-relaxed line-clamp-2" style="color:var(--muted)">${escapeHtml(k.description||'').slice(0,80)}</div></div></div>`).join('');
+    $('#toolsList').innerHTML=(await fetch('/api/tools').then(r=>r.json())).tools.map(t=>`<span class="mono text-[9px] px-1.5 py-1 rounded-full border" style="background:var(--panel2);border-color:var(--border);color:var(--muted)">${t.name}</span>`).join('');
+    if(sessionId){
+      const m=await fetch('/api/sessions/'+sessionId+'/messages').then(r=>r.json()).catch(()=>({messages:[]}));
+      if(m.messages?.length){ $('#emptyChat').style.display='none'; for(const msg of m.messages) addMsg(msg.role, msg.content); }
+    }
+    connectWS();
+  }catch(e){ console.error(e)}
+}
+ // events
+$('#sendBtn').addEventListener('click',()=>{const v=$('#chatInput').value.trim(); if(!v) return; $('#chatInput').value=''; postChat(v);});
+$('#chatInput').addEventListener('keydown',e=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); $('#sendBtn').click();}});
+$('#chatInput').addEventListener('input',()=>{ $('#charCnt').textContent=$('#chatInput').value.length;});
+$$('.promptBtn').forEach(b=>b.addEventListener('click',()=>{ $('#chatInput').value=b.dataset.prompt; $('#chatInput').focus();}));
+$('#btnScreenshot').addEventListener('click',()=>postChat('التقط صورة للشاشة الآن مع تحديد الشبكة'));
+$('#activateBtn').addEventListener('click',()=>postChat('التقط صورة للشاشة الآن'));
+$('#btnGrid').addEventListener('click',()=>{ const l=$('#bboxLayer'); l.classList.toggle('hidden');});
+$('#btnFullscreen').addEventListener('click',()=>{ const el=$('#screenWrap'); if(document.fullscreenElement) document.exitFullscreen(); else el.requestFullscreen();});
+$('#toggleTerminal').addEventListener('click',()=>{ const b=$('#terminalBody'); b.classList.toggle('hidden'); $('#toggleTerminal').textContent=b.classList.contains('hidden')?'+':'−';});
+$('#clearTimeline').addEventListener('click',()=>{ $('#timelineList').innerHTML='<div class="shrink-0 rounded-xl border border-dashed px-3 py-2 text-[11px] text-center min-w-[180px]" style="border-color:var(--border);color:var(--muted);background:var(--panel2)">تم المسح</div>'; $('#timelineTrack').classList.add('hidden');});
+$('#newBtn').addEventListener('click',()=>{ sessionId=null; localStorage.removeItem('nimna.session'); updateSess(); $('#messages').innerHTML=''; $('#emptyChat').style.display='block'; if(ws) ws.close(); connectWS();});
+$('#approvalBg').addEventListener('click',hideApproval);
+$('#apprOk').addEventListener('click',async()=>{ if(!pending) return; const id=pending.approval_id; $('#apprOk').disabled=true; try{const res=await fetch('/api/approvals/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({approved:true,always:false})}).then(async r=>{const j=await r.json(); if(!r.ok) throw new Error(j.detail); return j;}); hideApproval(); renderResult(res);}catch(e){alert(e.message); $('#apprOk').disabled=false;}});
+$('#apprNo').addEventListener('click',async()=>{ if(!pending) return; const id=pending.approval_id; try{const res=await fetch('/api/approvals/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({approved:false})}).then(async r=>{const j=await r.json(); if(!r.ok) throw new Error(j.detail); return j;}); hideApproval(); renderResult(res);}catch(e){alert(e.message);}});
+$('#apprAlways').addEventListener('click',async()=>{ if(!pending) return; const id=pending.approval_id; try{const res=await fetch('/api/approvals/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({approved:true,always:true})}).then(async r=>{const j=await r.json(); if(!r.ok) throw new Error(j.detail); return j;}); hideApproval(); renderResult(res);}catch(e){alert(e.message);}});
+document.addEventListener('keydown',e=>{ if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){ e.preventDefault(); $('#cmdPal').classList.remove('hidden'); $('#cmdInput').focus();} if(e.key==='Escape'){ $('#approvalSheet').classList.add('hidden'); $('#cmdPal').classList.add('hidden');}});
+$('#cmdBtn').addEventListener('click',()=>{ $('#cmdPal').classList.remove('hidden'); $('#cmdInput').focus();}); $('#cmdBg').addEventListener('click',()=>$('#cmdPal').classList.add('hidden'));
+const cmds=[{k:'screenshot',l:'التقط صورة',a:()=>postChat('التقط صورة')},{k:'tasks',l:'المهام',a:()=>{}},{k:'memory',l:'الذاكرة',a:()=>{}},{k:'projects',l:'المشاريع',a:()=>{}},{k:'files',l:'الملفات',a:()=>{}}];
+function renderCmd(q=''){ const f=cmds.filter(c=>!q||c.l.includes(q)); $('#cmdList').innerHTML=f.map(c=>`<button class="w-full text-start px-3 py-2 rounded-xl hover:bg-white/5 flex items-center gap-2" data-k="${c.k}"><span class="size-7 rounded-lg grid place-items-center border" style="background:var(--panel2);border-color:var(--border)">⌘</span>${c.l}</button>`).join('');}
+$('#cmdInput')?.addEventListener('input',e=>renderCmd(e.target.value)); renderCmd();
+$$('.nav-link').forEach(a=>a.addEventListener('click',e=>{e.preventDefault(); $$('.nav-link').forEach(x=>{x.className='nav-link flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-white/5'; x.style.color='var(--muted)'}); a.className='nav-link flex items-center gap-2.5 px-2.5 py-2 rounded-xl bg-white text-zinc-900 font-medium'; a.style.color='';}));
+boot();
+</script>
+</body>
+</html>

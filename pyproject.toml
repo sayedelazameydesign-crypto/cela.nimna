@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nimna"
+version = "0.1.0"
+description = "Reusable-skills AI agent: SKILL.md progressive loading, scoped tools, SQLite memory, approvals; runs on Gemini (free tier), NVIDIA NIM or any OpenAI-compatible model."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "pydantic==2.13.5",
+  "pyyaml==6.0.3",
+  "httpx==0.28.1",
+  "fastapi==0.141.1",
+  "uvicorn[standard]==0.53.0",
+  "google-genai==2.25.0",
+  "Pillow>=10.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest==9.1.1"]
+charts = ["matplotlib==3.8.4"]
+
+[project.scripts]
+nimna = "nimna.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["nimna*"]
+
+[tool.setuptools.package-data]
+nimna = ["api/static/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

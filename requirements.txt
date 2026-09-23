@@ -1,0 +1,12 @@
+pydantic==2.13.5
+pyyaml==6.0.3
+httpx==0.28.1
+fastapi==0.141.1
+uvicorn[standard]==0.53.0
+google-genai==2.25.0
+Pillow>=10.0
+pytest==9.1.1
+redis>=5.0.0  # optional: VisionCache backend (fallback to memory if absent)
+prometheus-client>=0.19  # HPA custom metric active_websockets
+qdrant-client>=1.11.0  # optional: Vector Memory (fallback to in-memory cosine)
+numpy>=1.24  # for vector math (optional, hash embedding works without)
