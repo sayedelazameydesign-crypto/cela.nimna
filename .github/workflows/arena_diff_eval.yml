@@ -1,0 +1,113 @@
+name: Arena Diff Evaluation
+
+# يستخرج الـ Git Diff لكل Pull Request، يقيّمه عبر scripts/evaluate_arena.py
+# (فحص ثابت + إرسال اختياري إلى Arena API)، ثم ينشر النتيجة كتعليق في الـ PR.
+# التفاصيل: docs/ARENA-DIFF-EVAL.md
+
+on:
+  pull_request:
+    branches: ["main", "master"]
+  workflow_dispatch:
+    inputs:
+      base_ref:
+        description: "Base branch to diff against"
+        required: false
+        default: "main"
+
+# أقل صلاحيات ممكنة: قراءة الكود + كتابة تعليق في الـ PR فقط.
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: arena-diff-eval-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  evaluate-diff:
+    runs-on: ubuntu-latest
+    env:
+      BASE_REF: ${{ github.base_ref || inputs.base_ref || 'main' }}
+
+    steps:
+      # 1. جلب الكود مع تاريخ الـ Git بالكامل لحساب الـ Diff
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # 2. إعداد بايثون — السكريبت يعتمد على المكتبة القياسية فقط (لا pip install)
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # 3. استخراج الـ Diff وحفظه في ملف (مقارنة الفرع الحالي مع الفرع الرئيسي)
+      - name: Generate Git diff
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "${BASE_REF}"
+          git diff --no-color --no-ext-diff "origin/${BASE_REF}...HEAD" > changes.diff
+          echo "Diff generated: $(wc -l < changes.diff) lines against origin/${BASE_REF}"
+
+      # 4. تشغيل سكريبت التقييم
+      #    بدون ARENA_API_URL/ARENA_API_KEY تُسجَّل حالة الـ Benchmark كـ SKIPPED (لا PASS وهمي).
+      - name: Run Arena evaluation
+        env:
+          ARENA_API_URL: ${{ secrets.ARENA_API_URL }}
+          ARENA_API_KEY: ${{ secrets.ARENA_API_KEY }}
+          # OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}  # فعّله فقط عند إضافة LLM-as-a-Judge
+          ARENA_BASE_REF: ${{ github.base_ref || inputs.base_ref || 'main' }}
+          ARENA_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          ARENA_PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          python scripts/evaluate_arena.py \
+            --diff_file changes.diff \
+            --output result.md \
+            --json-output result.json
+          cat result.md
+
+      # 5. حفظ الـ Diff والتقرير كـ Artifacts للمراجعة اللاحقة
+      - name: Upload evaluation artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: arena-diff-evaluation
+          path: |
+            changes.diff
+            result.md
+            result.json
+          if-no-files-found: ignore
+          retention-days: 14
+
+      # 6. نشر/تحديث النتيجة كتعليق واحد في الـ Pull Request
+      #    PRs القادمة من fork تملك GITHUB_TOKEN للقراءة فقط → الخطوة استشارية ولا تُفشل الـ workflow.
+      - name: Post result to PR
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- arena-diff-eval -->';
+            const limit = 60000; // GitHub comment hard limit is 65536 chars
+            let result = fs.readFileSync('result.md', 'utf8');
+            if (result.length > limit) {
+              result = result.slice(0, limit) + '\n\n… (truncated — see the `arena-diff-evaluation` artifact)';
+            }
+            const body = `${marker}\n${result}`;
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number, per_page: 100,
+            });
+            const existing = comments.find(c => c.body && c.body.startsWith(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+              core.info(`Updated Arena evaluation comment #${existing.id}`);
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+              core.info('Created Arena evaluation comment');
+            }
