@@ -510,6 +510,46 @@ Evidence لا claim، Recovery bounded) ونضيف طبقة واحدة جديد�
 - الاختبارات: `tests/test_policy.py` (24) + اختبار partial-match في
   `test_tool_registry.py` + تحديثا تكامل العدّاء = **252 passed**.
 
+### P1-T7 — Agent Execution Gateway → **نقطة العبور الوحيدة** ✅
+
+> **✅ الحالة: نُفِّذت** — إغلاق الفجوة بين الـ Fabric والـ Agent Core: لا مسارين
+> بعد اليوم. Agent ✗→ raw handler؛ **Agent ✓→ Gateway**. الـ Gateway orchestrator
+> فقط (Registry → Capability → Policy → Authorization → Executor) — لا يملك
+> سياسة ولا God Object.
+
+- **`nimna/execution/gateway.py`:** `ExecutionGateway.invoke(tool_id, request,
+  context)` هي المدخل الوحيد — الـ registry محفوظ خاص (`_registry`، لا وصول
+  عام لمعالِج خام) والاكتشاف يعيد descriptors **منزوعة الـ handler**. الفصل
+  بنيوي لا اتفاقي: الـ Gateway نفسه لا ينفّذ معالجاً خارج أنبوب T5 المُبوَّب.
+- **No-bypass invariant مُختبَر بـ spy:** `Policy=DENY ⇒ handler_called=False`
+  صراحةً — سيناريوهات الأربع (missing capability / policy DENY / expired
+  authorization / خارج workspace) كلها تتوقف **قبل** المعالج (الـ spy فارغ)
+  ويُسجَّل كل رفض بسجل موحّد. الـ traversal يُضبط أبكر — عند بوابة السياق.
+- **Evidence موحّد (13 حقلاً):** tool_id, tool_version, request_digest,
+  capabilities, policy_id, policy_version, authorization_id, decision,
+  execution_status, observation, verification, checkpoint, evidence_digest —
+  digests فقط بلا أسرار، وسلسلة T5 تحمل حدث البوابة + سجل الـ Gateway معاً.
+- **ذيل الـ Fabric لكل استدعاء:** Observe (T2: snapshot قبل/بعد + delta للأدوات
+  ذات side_effects filesystem) → Verify (T3: حكم حتمي عندما يطلب السياق
+  verify_spec — فشل التحقق يمنع ok) → Checkpoint (T4: سجل إثبات لكل استدعاء —
+  PASS ⇒ COMPLETED، FAIL/HANDLER_ERROR ⇒ FAILED، INCONCLUSIVE ⇒ CHECKPOINTED
+  قابل للتشخيص).
+- **ربط الـ Core (opt-in آمن):** `Agent(execution_gateway=...)` افتراضي **None**
+  = المسار القديم byte-for-byte؛ عند الربط `_run_tool` يمرر كل أداة مسجَّلة في
+  الـ Gateway عبر `_invoke_via_gateway` — مُثبت باختبار **sabotage**: تعريف
+  الـ legacy handler يرمي AssertionError إن لمَسته، والاستدعاء ينجح عبر الـ
+  Fabric (السجل الموحد موجود والسلسلة تتحقق).
+- **Arena:** إعادة تشغيل التحقق تعبر الآن الـ Gateway كاملاً (بما فيه observation
+  والتحقق الداخلي exit_code وcheckpoint لكل أمر)؛ التقرير يضيف سطر
+  **Gateway (P1-T7, single path): invoked/refused** وblock لكل صف.
+- **الحَكَم الطفري 10/10:** bypass Registry (4 اختبارات تكسر) — bypass Capability
+  (1) — bypass Policy (6) — bypass Authorization (6) — execute-after-DENY (2) —
+  skip Observation (4) — skip Verification (2) — skip Evidence (2) — skip
+  Checkpoint (4) — fabricate-success (3).
+- الاختبارات: `tests/test_gateway.py` (10: السيناريو الكامل + الرفوض الأربع +
+  honesty + no-bypass البنيوي + ربط الـ agent الحقيقي + المسار القديم) =
+  **262 passed**.
+
 ### P1-T3 — Git آمن
 - `git_tool.py`: `git_status/git_diff/git_add/git_commit/git_log` فقط — registry-level deny لأي subcommand آخر (لا push/remote/reset/clean)، هوية commit من env مُعلن، رسالة commit تُسجل في audit.
 - **Evidence:** اختبار deny شامل + اختبار دورة commit محلية داخل workspace + صف مصفوفة.

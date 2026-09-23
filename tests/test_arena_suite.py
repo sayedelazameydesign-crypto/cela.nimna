@@ -368,9 +368,16 @@ def test_registry_gates_verifier_command_reruns(monkeypatch):
     assert pol["policy_id"] == "arena-suite-policy" and pol["version"] == "1.0.0"
     assert pol["allow"] == 1 and pol["deny"] == 0
     assert report["summary"]["policy_allow"] == 1
+    # P1-T7: the whole crossing went through the single gateway
+    gw_row = row["gateway"]
+    assert gw_row["invoked"] == 1 and gw_row["refused"] == 0
+    assert gw_row["observed"] == 1 and gw_row["verified"] == 1 and gw_row["checkpointed"] == 1
+    assert gw_row["chain_verified"] is True
+    assert report["summary"]["gateway_invoked"] == 1
     markdown = rs.render_markdown(report)
     assert "**Registry (P1-T5, gated invocation):**" in markdown
     assert "**Policy (P1-T6, deterministic governance):**" in markdown
+    assert "**Gateway (P1-T7, single path):**" in markdown
     # the executed event carries the policy identity in its evidence
     assert "suite-policy" in str(row["verification"]) or pol["allow"] == 1
 

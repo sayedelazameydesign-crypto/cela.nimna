@@ -360,7 +360,8 @@ def t5_capability_resolver(catalog: CapabilityCatalog):
 
 
 def t5_policy_adapter(policy: Policy, *, boundary: Optional[WorkspaceBoundary] = None,
-                      stats: Optional[dict[str, int]] = None):
+                      stats: Optional[dict[str, int]] = None,
+                      resource_of=None, operation_of=None):
     """A T5 ``policy`` callable backed by a T6 Policy. DENY blocks; ALLOW and
     REQUIRE_CONFIRMATION pass the policy gate — confirmation still has to clear
     T5's authorization gate, and the policy identity lands in the evidence reason."""
@@ -370,8 +371,10 @@ def t5_policy_adapter(policy: Policy, *, boundary: Optional[WorkspaceBoundary] =
             actor="registry-invocation",
             tool_id=descriptor.tool_id,
             capabilities=tuple(descriptor.capabilities),
-            requested_operation=arguments.get("operation") or descriptor.tool_id,
-            resource=str(arguments.get("resource") or "workspace"),
+            requested_operation=(str(operation_of(arguments)) if operation_of
+                                 else str(arguments.get("operation") or descriptor.tool_id)),
+            resource=(str(resource_of(arguments)) if resource_of
+                      else str(arguments.get("resource") or "workspace")),
             context={"risk": descriptor.risk_level},
             risk=descriptor.risk_level,
         )

@@ -71,6 +71,15 @@ python scripts/run_arena_suite.py --mode mock --strict
 | `recovered` | مهمة اصطدمت بفشل ثم أكملت بفحوص 100% (مثل `code-05`) |
 | `mean_wall_ms` | متوسط زمن الجدار للمهام |
 
+**Baseline v8 (P1-T1..T6 + P1-T7 Execution Gateway، وضع mock، `SHELL_TOOL_ENABLED=1`):**
+9 ran / 2 skipped / 0 error / mean 55.6 · **Verifier: PASS 2 · FAIL 0 · INCONCLUSIVE 0** ·
+Checkpoint: COMPLETED 2 · Registry: authorized 1 · Policy: ALLOW 1 ·
+**Gateway: invoked 1 · refused 0** — إعادة تشغيل التحقق تعبر الآن نقطة العبور
+الوحيدة كاملة (Registry → Capability → Policy → Authorization → Execute →
+Observe → Verify → Checkpoint → Evidence) مع تحقق داخلي exit_code لكل أمر.
+بصمات fs قبل/بعد مطابقة v4–v7: code-01 `cb0a7629ae1a→c9425def3b7f` وcode-05
+`fb681ae9c774→02f57fc9b5e6`. راجع `ledger/BASELINE-mock.md` و`BASELINE-mock.json`.
+
 **Baseline v7 (P1-T1..T5 + P1-T6 Capability/Policy، وضع mock، `SHELL_TOOL_ENABLED=1`):**
 9 ran / 2 skipped / 0 error / mean 55.6 · **Verifier: PASS 2 · FAIL 0 · INCONCLUSIVE 0** ·
 Checkpoint: COMPLETED 2 · Registry: authorized 1 · **Policy (`arena-suite-policy@1.0.0`):

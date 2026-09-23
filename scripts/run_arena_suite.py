@@ -699,19 +699,37 @@ def run_task(spec: TaskSpec, mode: str) -> dict[str, Any]:
                                               tool_id=descriptor.tool_id,
                                               policy_version=suite_policy.version)
 
+                # P1-T7: the suite crosses the fabric through ONE gateway —
+                # Registry → Capability → Policy → Authorization → Execute →
+                # Observe → Verify → Checkpoint → Evidence.
+                from nimna.execution.gateway import ExecutionGateway, InvocationContext
+                from nimna.execution.recovery import CheckpointStore
+                gateway = ExecutionGateway(
+                    registry, catalog=catalog, policy=suite_policy,
+                    authorizer=suite_authorizer, workspace_root=workspace,
+                    checkpoint_store=CheckpointStore(
+                        Path(tempfile.mkdtemp(prefix=f"arena-{spec.id}-gw-"))),
+                    evidence=registry_evidence, actor="arena-suite-operator")
+                gateway_outcomes: list = []
+
                 def _exec_fn(command: str, timeout_ms: int):
-                    outcome = invoke(registry, "sandbox.command",
-                                     {"command": command, "timeout_ms": int(timeout_ms)},
-                                     granted_capabilities=frozenset({"shell"}) if _shell_granted else frozenset(),
-                                     capability_resolver=t5_capability_resolver(catalog),
-                                     policy=t5_policy_adapter(suite_policy,
-                                                              boundary=WorkspaceBoundary(workspace),
-                                                              stats=policy_stats),
-                                     authorizer=t5_authorizer_adapter(
-                                         suite_authorizer, actor="arena-suite-operator",
-                                         policy_version_of=lambda d, a: suite_policy.version,
-                                         grant_for=_operator_consent),
-                                     evidence=registry_evidence)
+                    context = InvocationContext(
+                        actor="arena-suite-operator", session_id=f"arena-{spec.id}",
+                        mission_id=f"arena-{spec.id}:verify",
+                        granted_capabilities=("shell",) if _shell_granted else (),
+                        authorization=(_operator_consent(
+                            registry.get("sandbox.command"), {})
+                            if _shell_granted else None),
+                        requested_operation="verify.command", resource="workspace",
+                        verify_spec=({"kind": "exit_code", "equals": 0},))
+                    outcome = gateway.invoke(
+                        "sandbox.command",
+                        {"command": command, "timeout_ms": int(timeout_ms)}, context)
+                    gateway_outcomes.append(outcome)
+                    if not outcome.handler_called:
+                        # refused before the handler ⇒ honest INCONCLUSIVE downstream
+                        return {"status": "DENIED"}
+                    return outcome.result
                     if outcome.status is not InvocationStatus.EXECUTED:
                         # refused ⇒ honest INCONCLUSIVE downstream, never a fake PASS
                         return {"status": "DENIED"}
@@ -727,11 +745,21 @@ def run_task(spec: TaskSpec, mode: str) -> dict[str, Any]:
                 )
                 vdata = report_v.to_dict()
                 row["verification"] = vdata
+                _gstats = gateway.policy_stats
                 row["policy"] = {"policy_id": suite_policy.policy_id,
                                  "version": suite_policy.version,
-                                 "allow": policy_stats.get("ALLOW", 0),
-                                 "deny": policy_stats.get("DENY", 0),
-                                 "require_confirmation": policy_stats.get("REQUIRE_CONFIRMATION", 0)}
+                                 "allow": _gstats.get("ALLOW", 0),
+                                 "deny": _gstats.get("DENY", 0),
+                                 "require_confirmation": _gstats.get("REQUIRE_CONFIRMATION", 0)}
+                row["gateway"] = {
+                    "invoked": sum(1 for o in gateway_outcomes if o.handler_called),
+                    "refused": sum(1 for o in gateway_outcomes if not o.handler_called),
+                    "observed": sum(1 for o in gateway_outcomes if o.observation),
+                    "verified": sum(1 for o in gateway_outcomes if o.verification),
+                    "checkpointed": sum(1 for o in gateway_outcomes if o.checkpoint),
+                    "evidence_tail": gateway.evidence.tail[7:23],
+                    "chain_verified": gateway.evidence.verify(),
+                }
                 row["registry"] = {
                     "registered": [tool.tool_id for tool in registry.list()],
                     "invocations": len(registry_evidence),
@@ -763,9 +791,9 @@ def run_task(spec: TaskSpec, mode: str) -> dict[str, Any]:
                                    "chain_verified": registry_evidence.verify(),
                                    "error": f"verifier crashed: {exc.__class__.__name__}"}
                 row["policy"] = {"policy_id": "arena-suite-policy", "version": "1.0.0",
-                                 "allow": policy_stats.get("ALLOW", 0),
-                                 "deny": policy_stats.get("DENY", 0),
-                                 "require_confirmation": policy_stats.get("REQUIRE_CONFIRMATION", 0)}
+                                 "allow": gateway.policy_stats.get("ALLOW", 0),
+                                 "deny": gateway.policy_stats.get("DENY", 0),
+                                 "require_confirmation": gateway.policy_stats.get("REQUIRE_CONFIRMATION", 0)}
                 checks.append({"name": "verifier:INCONCLUSIVE", "ok": False,
                                "detail": f"verifier crashed: {exc.__class__.__name__}"})
                 row["checks"] = checks
@@ -905,6 +933,8 @@ def run_suite(tasks: list[TaskSpec], mode: str, *, ledger_path: Path | None = DE
             "policy_allow": sum(int((r.get("policy") or {}).get("allow") or 0) for r in rows),
             "policy_deny": sum(int((r.get("policy") or {}).get("deny") or 0) for r in rows),
             "policy_require_confirmation": sum(int((r.get("policy") or {}).get("require_confirmation") or 0) for r in rows),
+            "gateway_invoked": sum(int((r.get("gateway") or {}).get("invoked") or 0) for r in rows),
+            "gateway_refused": sum(int((r.get("gateway") or {}).get("refused") or 0) for r in rows),
         },
         "regressions": regressions,
     }
@@ -1018,6 +1048,12 @@ def render_markdown(report: dict[str, Any]) -> str:
             f"**Policy (P1-T6, deterministic governance):** ALLOW `{summary.get('policy_allow', 0)}` · "
             f"DENY `{summary.get('policy_deny', 0)}` · REQUIRE_CONFIRMATION `{summary.get('policy_require_confirmation', 0)}` · "
             "no-rule ⇒ default-DENY · policy error ⇒ DENY (fail-closed)",
+            "",
+        ]
+    if any(r.get("gateway") for r in report["rows"]):
+        lines += [
+            f"**Gateway (P1-T7, single path):** invoked `{summary.get('gateway_invoked', 0)}` · "
+            f"refused `{summary.get('gateway_refused', 0)}` — DENY ⇒ handler never called",
             "",
         ]
     if report["regressions"]:

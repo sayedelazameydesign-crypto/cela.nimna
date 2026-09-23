@@ -77,7 +77,8 @@ class Agent:
     def __init__(self, provider: ModelProvider, skills: SkillManager, tools: ToolRegistry,
                  memory: MemoryStore, settings: Settings,
                  approval_policy: Optional[ApprovalPolicy] = None, *,
-                 workspace: Optional[Any] = None, use_llm_planner: bool = True):
+                 workspace: Optional[Any] = None, use_llm_planner: bool = True,
+                 execution_gateway: Optional[Any] = None):
         # Put the budget gate at the provider boundary so planner, verifier,
         # normal turns, and swarm calls share one policy.  The wrapper forwards
         # provider-specific attributes (for example MockProvider.calls).
@@ -100,6 +101,10 @@ class Agent:
         )
         self.selector = SkillSelector(self.provider, skills, max_skills=settings.max_skills,
                                       use_llm=use_llm_planner)
+        # P1-T7: opt-in Execution Fabric binding. None (default) keeps the
+        # legacy tools.execute path byte-for-byte; when bound, every call to a
+        # gateway-registered tool crosses the single governed path.
+        self.execution_gateway = execution_gateway
         self.evidence = EvidenceJournal(memory)
         self.runtime_manifest = build_manifest(
             settings=settings,
@@ -581,12 +586,46 @@ class Agent:
         else:
             state.consecutive_failures += 1
 
+    def _invoke_via_gateway(self, state: RunState, tool: Tool, call: ToolCall,
+                            ctx: ToolContext):
+        """P1-T7 — the single governed path: Registry → Capability → Policy →
+        Authorization → Executor → Observe → Verify → Checkpoint → Evidence."""
+        from ..execution.gateway import InvocationContext
+        from ..execution.policy import AuthorizationGrant
+        gateway = self.execution_gateway
+        granted = tuple(sorted({cap for entry in gateway.list_tools()
+                                for cap in (entry.get("capabilities") or [])}))
+        grant = ctx.extras.get("authorization_grant")
+        if grant is None:
+            # the operator bound this gateway — that binding is the consent;
+            # narrow it per-call via ctx.extras["authorization_grant"].
+            grant = AuthorizationGrant(actor=gateway.actor, tool_id=tool.name,
+                                       policy_version=gateway.policy_identity["policy_version"])
+        context = InvocationContext(
+            actor=gateway.actor, session_id=state.session_id, mission_id=state.run_id,
+            granted_capabilities=granted, authorization=grant,
+            requested_operation=tool.name,
+            resource=str(call.arguments.get("resource") or "workspace"),
+            verify_spec=tuple(ctx.extras.get("verify_spec") or ()),
+        )
+        started = time.perf_counter()
+        outcome = gateway.invoke(tool.name, call.arguments, context)
+        payload = {"status": outcome.execution_status, "ok": outcome.ok,
+                   "reason": outcome.reason[:200],
+                   "result": outcome.result if outcome.handler_called else None,
+                   "evidence_digest": (outcome.record or {}).get("hash", "")}
+        result = json.dumps(payload, ensure_ascii=False, default=str)[: self.settings.tool_result_max_chars]
+        return result, outcome.ok, int((time.perf_counter() - started) * 1000)
+
     def _run_tool(self, state: RunState, tool: Tool, call: ToolCall, ctx: ToolContext,
                   approved: Optional[bool]) -> None:
         self._audit(state, "tool_call", {"tool": tool.name, "arguments": call.arguments})
-        result, ok, duration_ms = self.tools.execute(
-            tool.name, call.arguments, ctx, max_chars=self.settings.tool_result_max_chars
-        )
+        if getattr(self, "execution_gateway", None) is not None and self.execution_gateway.has(tool.name):
+            result, ok, duration_ms = self._invoke_via_gateway(state, tool, call, ctx)
+        else:
+            result, ok, duration_ms = self.tools.execute(
+                tool.name, call.arguments, ctx, max_chars=self.settings.tool_result_max_chars
+            )
         state.messages.append(Message.tool_result(call, result))
         state.tool_calls.append(ToolCallRecord(name=tool.name, arguments=call.arguments, ok=ok,
                                                duration_ms=duration_ms, approved=approved,

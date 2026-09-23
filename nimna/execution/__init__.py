@@ -25,6 +25,7 @@ from .recovery import (
     RecoveryOutcome,
     UnknownMission,
 )
+from .gateway import ExecutionGateway, GatewayOutcome, InvocationContext
 from .policy import (
     AuthorizationGrant,
     Authorizer,
@@ -73,6 +74,7 @@ __all__ = [
     "InvocationStatus", "LifecycleState", "PolicyDecision", "RiskLevel",
     "ToolDescriptor", "ToolNotFound", "ToolRegistry", "VersionConflict",
     "invoke", "validate_instance",
+    "ExecutionGateway", "GatewayOutcome", "InvocationContext",
     "AuthorizationGrant", "Authorizer", "CapabilityCatalog", "Effect",
     "Policy", "PolicyDecision", "PolicyError", "PolicyInput", "PolicyRule",
     "WorkspaceBoundary", "adjudicate", "t5_authorizer_adapter",
