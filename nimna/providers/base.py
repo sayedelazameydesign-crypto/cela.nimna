@@ -129,7 +129,7 @@ class ModelProvider(ABC):
 
     @abstractmethod
     def generate(self, messages: list[Message], tools: Optional[list[ToolSpec]] = None, *,
-                 temperature: Optional[float] = None) -> ModelResponse:
+                 temperature: Optional[float] = None, max_tokens: Optional[int] = None) -> ModelResponse:
         """Run one model turn. ``messages`` may start with a system message."""
 
     def describe(self) -> dict[str, Any]:

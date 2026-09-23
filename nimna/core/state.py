@@ -49,6 +49,12 @@ class RunState(BaseModel):
     allowed_tools: list[str] = Field(default_factory=list)
     approved_tools: list[str] = Field(default_factory=list)
     step: int = 0
+    # loop guards
+    tool_call_count: int = 0
+    consecutive_failures: int = 0
+    seen_signatures: list[str] = Field(default_factory=list)  # ordered for JSON stability
+    last_text: str = ""
+    repeat_text_count: int = 0
     status: RunStatus = RunStatus.RUNNING
     pending: Optional[PendingApproval] = None
     pending_call_index: int = 0
@@ -59,6 +65,7 @@ class RunState(BaseModel):
     plan: list[str] = Field(default_factory=list)
     usage: dict[str, int] = Field(default_factory=dict)
     error: Optional[str] = None
+    started_at: float = Field(default_factory=lambda: 0.0)
 
     def last_assistant(self) -> Optional[Message]:
         for message in reversed(self.messages):

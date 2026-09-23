@@ -32,6 +32,7 @@ def _parse_arguments(raw: Any) -> dict[str, Any]:
     try:
         parsed = json.loads(raw)
     except (TypeError, ValueError):
+        # model returned non-JSON arguments – surface as _raw so agent can handle
         return {"_raw": str(raw)}
     return parsed if isinstance(parsed, dict) else {"value": parsed}
 
@@ -80,12 +81,14 @@ class OpenAICompatibleProvider(ModelProvider):
 
     # -- main call -------------------------------------------------------
     def generate(self, messages: list[Message], tools: Optional[list[ToolSpec]] = None, *,
-                 temperature: Optional[float] = None) -> ModelResponse:
+                 temperature: Optional[float] = None, max_tokens: Optional[int] = None) -> ModelResponse:
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": [self._to_wire(m) for m in messages],
             "temperature": self.temperature if temperature is None else temperature,
         }
+        if max_tokens:
+            payload["max_tokens"] = max_tokens
         if tools:
             payload["tools"] = [
                 {
@@ -104,6 +107,8 @@ class OpenAICompatibleProvider(ModelProvider):
         def call() -> dict[str, Any]:
             try:
                 response = self.client.post("/chat/completions", json=payload)
+            except httpx.TimeoutException as exc:
+                raise ProviderError(f"timeout talking to {self.base_url}: {exc}", retryable=True) from exc
             except httpx.HTTPError as exc:
                 raise ProviderError(f"HTTP error talking to {self.base_url}: {exc}", retryable=True) from exc
             if response.status_code == 429:
@@ -114,8 +119,12 @@ class OpenAICompatibleProvider(ModelProvider):
                     retryable=True, status=response.status_code,
                 )
             if response.status_code >= 400:
+                body = response.text[:600]
+                # some models return 400 when tools are unsupported – surface clearly
+                if "tool" in body.lower() or "function" in body.lower():
+                    log.warning("provider rejected tools payload: %s", body[:300])
                 raise ProviderError(
-                    f"request rejected ({response.status_code}): {response.text[:500]}",
+                    f"request rejected ({response.status_code}): {body}",
                     status=response.status_code,
                 )
             try:
@@ -130,26 +139,35 @@ class OpenAICompatibleProvider(ModelProvider):
     def _parse(data: dict[str, Any]) -> ModelResponse:
         choices = data.get("choices") or []
         if not choices:
-            raise ProviderError(f"provider returned no choices: {json.dumps(data)[:300]}")
+            # some providers return error as choices=[] but with error field – surface it
+            err = data.get("error") or data
+            raise ProviderError(f"provider returned no choices: {json.dumps(err)[:400]}")
         choice = choices[0]
         message = choice.get("message") or {}
-        tool_calls = [
-            ToolCall(
-                id=call.get("id") or ToolCall().id,
-                name=(call.get("function") or {}).get("name", ""),
-                arguments=_parse_arguments((call.get("function") or {}).get("arguments")),
-            )
-            for call in message.get("tool_calls") or []
-            if (call.get("function") or {}).get("name")
-        ]
+        # handle case where model does not support tool_calls: it may return content only
+        raw_tool_calls = message.get("tool_calls")
+        tool_calls: list[ToolCall] = []
+        if raw_tool_calls:
+            for call in raw_tool_calls:
+                fn = (call.get("function") or {})
+                name = fn.get("name")
+                if not name:
+                    continue
+                args = _parse_arguments(fn.get("arguments"))
+                # if model emitted invalid JSON for arguments, keep but warn
+                if "_raw" in args:
+                    log.warning("model emitted non-JSON tool arguments for %s: %r", name, fn.get("arguments"))
+                tool_calls.append(ToolCall(id=call.get("id") or ToolCall().id, name=name, arguments=args))
         content = message.get("content")
         if isinstance(content, list):  # some servers return content parts
             content = "".join(
                 part.get("text", "") for part in content if isinstance(part, dict)
             )
+        elif content is None:
+            content = ""
         usage = {k: v for k, v in (data.get("usage") or {}).items() if isinstance(v, int)}
         return ModelResponse(
-            text=(content or "").strip(),
+            text=str(content).strip(),
             tool_calls=tool_calls,
             raw=None,
             usage=usage,

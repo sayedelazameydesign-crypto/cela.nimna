@@ -1,0 +1,13 @@
+Nimna – reusable-skills AI agent
+Copyright (c) 2026 Nimna Contributors
+
+This product includes software developed by the Nimna project.
+Licensed under the MIT License – see LICENSE.
+
+Third-party components:
+- google-genai (Apache-2.0) – optional, for Gemini provider
+- httpx (BSD-3-Clause)
+- fastapi, uvicorn, pydantic, pyyaml (MIT / BSD)
+- matplotlib (optional, PSF-based) for chart rendering
+
+No API keys or secrets are bundled. See SECURITY.md for key handling.

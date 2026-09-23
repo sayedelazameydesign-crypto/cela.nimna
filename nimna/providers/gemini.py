@@ -52,6 +52,7 @@ class GeminiProvider(ModelProvider):
         self.client = genai.Client(api_key=api_key, http_options=http_options)
         self.model = model
         self.temperature = temperature
+        self.timeout = timeout
 
     # -- conversion ------------------------------------------------------
     def _to_contents(self, messages: list[Message]):
@@ -118,12 +119,14 @@ class GeminiProvider(ModelProvider):
 
     # -- main call -------------------------------------------------------
     def generate(self, messages: list[Message], tools: Optional[list[ToolSpec]] = None, *,
-                 temperature: Optional[float] = None) -> ModelResponse:
+                 temperature: Optional[float] = None, max_tokens: Optional[int] = None) -> ModelResponse:
         t = self._types
         system, contents = self._to_contents(messages)
         config_kwargs: dict[str, Any] = {
             "temperature": self.temperature if temperature is None else temperature,
         }
+        if max_tokens:
+            config_kwargs["max_output_tokens"] = max_tokens
         if system:
             config_kwargs["system_instruction"] = system
         if tools:
@@ -150,10 +153,20 @@ class GeminiProvider(ModelProvider):
             return exc
         code = getattr(exc, "code", None) or getattr(exc, "status_code", None)
         text = str(exc)
-        if code == 429 or "RESOURCE_EXHAUSTED" in text or "429" in text[:40]:
+        lowered = text.lower()
+        if code == 429 or "resource_exhausted" in lowered or "429" in text[:60] or "quota" in lowered:
             return RateLimitError(f"Gemini rate limit: {text[:300]}")
+        # timeouts are retryable
+        if "deadline" in lowered or "timeout" in lowered or "timed out" in lowered:
+            return ProviderError(f"Gemini timeout: {text[:300]}", retryable=True, status=code if isinstance(code, int) else None)
         if isinstance(code, int) and code >= 500:
             return ProviderError(f"Gemini server error: {text[:300]}", retryable=True, status=code)
+        # handle 400 due to invalid function call schema
+        if isinstance(code, int) and code >= 400:
+            return ProviderError(f"Gemini error ({code}): {text[:500]}", status=code)
+        # SDK sometimes throws without code but with retryable hint
+        if "500" in text or "503" in text or "unavailable" in lowered:
+            return ProviderError(f"Gemini transient error: {text[:300]}", retryable=True)
         return ProviderError(f"Gemini error: {text[:500]}", status=code if isinstance(code, int) else None)
 
     def _parse(self, response: Any) -> ModelResponse:
@@ -201,6 +214,9 @@ class GeminiProvider(ModelProvider):
             feedback = getattr(response, "prompt_feedback", None)
             if feedback is not None and getattr(feedback, "block_reason", None):
                 text_parts.append(f"[blocked by safety filters: {feedback.block_reason}]")
+            # handle invalid model JSON case gracefully – return whatever text exists
+            if finish_reason in {"MALFORMED_FUNCTION_CALL", "ERROR"}:
+                text_parts.append(f"[model returned invalid tool call: {finish_reason}]")
 
         return ModelResponse(
             text="".join(text_parts).strip(),

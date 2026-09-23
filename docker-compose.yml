@@ -7,14 +7,13 @@ services:
     env_file:
       - .env                      # copy .env.example -> .env and add your key
     environment:
-      # inside the container use the subprocess sandbox (default) or mount the
-      # docker socket below and set SANDBOX_BACKEND=docker for container isolation
-      SANDBOX_BACKEND: ${SANDBOX_BACKEND:-subprocess}
+      # docker is the recommended backend (needs the socket mounted below)
+      SANDBOX_BACKEND: ${SANDBOX_BACKEND:-docker}
     volumes:
       - ./skills:/app/skills:ro    # add a folder -> new skill (POST /api/skills/reload)
       - ./workspace:/app/workspace
       - nimna-data:/app/data
-      # - /var/run/docker.sock:/var/run/docker.sock   # only for SANDBOX_BACKEND=docker
+      - /var/run/docker.sock:/var/run/docker.sock   # required for SANDBOX_BACKEND=docker; comment out to use subprocess
     restart: unless-stopped
 
 volumes:

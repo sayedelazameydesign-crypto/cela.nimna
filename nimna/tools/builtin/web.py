@@ -19,13 +19,13 @@ USER_AGENT = (
 
 
 class SearchParams(BaseModel):
-    query: str = Field(..., min_length=2, description="Search query.")
+    query: str = Field(..., min_length=2, max_length=500, description="Search query.")
     max_results: int = Field(5, ge=1, le=10)
     region: str = Field("wt-wt", description="DuckDuckGo region code, e.g. 'xa-ar' for Arabic, 'us-en'.")
 
 
 class FetchParams(BaseModel):
-    url: str = Field(..., description="Absolute http(s) URL to fetch.")
+    url: str = Field(..., max_length=2000, description="Absolute http(s) URL to fetch.")
     max_chars: int = Field(8000, ge=200, le=60000, description="Maximum characters of extracted text.")
 
 
@@ -115,18 +115,33 @@ def _assert_public_url(url: str) -> None:
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         raise ToolError("only absolute http(s) URLs are allowed")
-    host = parsed.hostname
-    if host in {"localhost"} or host.endswith(".local") or host.endswith(".internal"):
+    host = parsed.hostname.lower()
+    # block obvious local names even before DNS
+    if host in {"localhost", "127.0.0.1", "0.0.0.0", "::1", "::ffff:127.0.0.1"}:
         raise ToolError("fetching local/internal hosts is not allowed")
+    if host.endswith(".local") or host.endswith(".internal") or host.endswith(".localhost"):
+        raise ToolError("fetching local/internal hosts is not allowed")
+    # literal IP: check without DNS round-trip
+    try:
+        ip = ipaddress.ip_address(host)
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
+            raise ToolError("fetching private network addresses is not allowed")
+        return
+    except ValueError:
+        pass
+    # hostname: resolve and check every address
     try:
         infos = socket.getaddrinfo(host, parsed.port or (443 if parsed.scheme == "https" else 80),
                                    proto=socket.IPPROTO_TCP)
     except socket.gaierror as exc:
         raise ToolError(f"cannot resolve host '{host}': {exc}")
+    private = []
     for info in infos:
         ip = ipaddress.ip_address(info[4][0])
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
-            raise ToolError("fetching private network addresses is not allowed")
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
+            private.append(str(ip))
+    if private:
+        raise ToolError(f"host '{host}' resolves to private address {private[0]} – fetching blocked")
 
 
 def register(registry: ToolRegistry) -> None:
@@ -148,6 +163,11 @@ def register(registry: ToolRegistry) -> None:
             title = " ".join(item["title"].split())
             snippet = " ".join(item["snippet"].split())
             if title and item["url"].startswith("http"):
+                # safety: do not return private-URL results
+                try:
+                    _assert_public_url(item["url"])
+                except ToolError:
+                    continue
                 results.append({"title": title, "url": item["url"], "snippet": snippet})
             if len(results) >= params.max_results:
                 break
@@ -159,22 +179,40 @@ def register(registry: ToolRegistry) -> None:
                    FetchParams, tags=["web"])
     def fetch_url(params: FetchParams, ctx: ToolContext):
         _assert_public_url(params.url)
-        try:
-            with httpx.stream("GET", params.url, headers={"User-Agent": USER_AGENT}, timeout=20,
-                              follow_redirects=True) as response:
-                if response.status_code >= 400:
-                    raise ToolError(f"HTTP {response.status_code} for {params.url}")
-                content_type = response.headers.get("content-type", "")
-                chunks, total = [], 0
-                for chunk in response.iter_bytes():
-                    chunks.append(chunk)
-                    total += len(chunk)
-                    if total > 2_000_000:
-                        break
-                body = b"".join(chunks)
-                final_url = str(response.url)
-        except httpx.HTTPError as exc:
-            raise ToolError(f"fetch failed: {exc}")
+        # manual redirect loop so we can validate each hop
+        current = params.url
+        for _ in range(5):
+            try:
+                with httpx.stream("GET", current, headers={"User-Agent": USER_AGENT}, timeout=20,
+                                  follow_redirects=False) as response:
+                    if response.status_code in {301, 302, 303, 307, 308}:
+                        location = response.headers.get("location")
+                        if not location:
+                            raise ToolError(f"redirect without location for {current}")
+                        # resolve relative redirects
+                        from urllib.parse import urljoin
+                        nxt = urljoin(current, location)
+                        _assert_public_url(nxt)
+                        current = nxt
+                        continue
+                    if response.status_code >= 400:
+                        raise ToolError(f"HTTP {response.status_code} for {current}")
+                    content_type = response.headers.get("content-type", "")
+                    chunks, total = [], 0
+                    for chunk in response.iter_bytes():
+                        chunks.append(chunk)
+                        total += len(chunk)
+                        if total > 2_000_000:
+                            break
+                    body = b"".join(chunks)
+                    final_url = str(response.url) if str(response.url) != current else current
+                    break
+            except httpx.HTTPError as exc:
+                raise ToolError(f"fetch failed: {exc}")
+        else:
+            raise ToolError("too many redirects")
+        # double-check final URL is still public
+        _assert_public_url(final_url)
         text = body.decode("utf-8", errors="replace")
         title = ""
         if "html" in content_type or text.lstrip()[:200].lower().startswith(("<!doctype", "<html")):

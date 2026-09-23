@@ -31,6 +31,8 @@ def settings(workspace: Path) -> Settings:
     s.workspace_dir = workspace
     s.skills_dir = REPO / "skills"
     s.db_path = Path(":memory:")
+    # tests run without Docker – keep subprocess so run_python stays "confirm"
+    s.sandbox_backend = "subprocess"
     return s
 
 

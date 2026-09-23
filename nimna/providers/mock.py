@@ -26,7 +26,7 @@ class MockProvider(ModelProvider):
         self._responses.extend(responses)
 
     def generate(self, messages: list[Message], tools: Optional[list[ToolSpec]] = None, *,
-                 temperature: Optional[float] = None) -> ModelResponse:
+                 temperature: Optional[float] = None, max_tokens: Optional[int] = None) -> ModelResponse:
         self.calls.append({"messages": [m.model_copy() for m in messages], "tools": list(tools or [])})
         if self._responses:
             item = self._responses.pop(0)

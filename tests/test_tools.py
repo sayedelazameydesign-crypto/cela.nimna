@@ -102,6 +102,7 @@ def test_skill_tools(ctx):
 
 
 def test_sandbox_subprocess(settings, workspace):
+    settings.sandbox_backend = "subprocess"
     result = run_python_code("import os; print(sorted(os.listdir('.')))", settings, workspace)
     assert result.ok and "sales.csv" in result.stdout
     result = run_python_code("import time; time.sleep(3)", settings, workspace, timeout=1)

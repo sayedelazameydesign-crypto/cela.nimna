@@ -44,11 +44,13 @@ pip install -e ".[dev]"
 cp .env.example .env
 # ضع مفتاحك: GEMINI_API_KEY=...   (مجاني من https://aistudio.google.com/apikey)
 
+nimna doctor --offline                 # تحقق قبل التشغيل
 nimna skills list                      # المهارات المثبتة
 nimna ask "حلّل ملف المبيعات وأنشئ لي تقريرًا"
 nimna chat                             # محادثة تفاعلية (الموافقات تُطلب في الطرفية)
 nimna serve                            # واجهة ويب + REST على http://localhost:8000
-pytest                                 # 42 اختبارًا تعمل بلا مفتاح (مزود وهمي)
+nimna doctor --offline               # فحص البيئة والمفاتيح و Docker والمهارات
+pytest                                 # 69 اختبارًا تعمل بلا مفتاح (مزود وهمي) (مزود وهمي)
 ```
 
 بدون أي مفتاح يمكنك تجربة كل شيء بالمزود الوهمي: `MODEL_PROVIDER=mock nimna serve` — سترى اختيار المهارات والأدوات يعمل فعليًا، والردود فقط تكون وهمية.
@@ -79,7 +81,7 @@ nimna/
 │   ├── approval.py      #   سياسات الموافقة: Console / Defer (API) / Auto / Callback
 │   └── state.py         #   RunState قابل للتسلسل، AgentResult
 ├── api/                 # FastAPI + واجهة ويب صغيرة (RTL) تدعم بطاقة الموافقة
-└── cli.py               # nimna ask | chat | skills | tools | serve | approvals
+└── cli.py               # nimna ask | chat | skills | tools | serve | approvals | resume | doctor
 skills/                  # مكتبة المهارات (أضف مجلدًا = مهارة جديدة)
 workspace/               # مساحة عمل الوكيل (كل أدوات الملفات مقيدة بداخلها)
 tests/                   # pytest – تعمل بالكامل بدون شبكة
@@ -126,9 +128,9 @@ allowed_tools: [list_files, read_csv, calculate_statistics, create_chart, read_s
 2. لا تعدّل الملف الأصلي.
 ```
 
-- الحقول: `name` (مطلوب)، `description` (مطلوب)، `triggers`، `allowed_tools` (تُقبل أيضًا `allowed-tools` بصيغة agentskills)، `version`، `tags`، `metadata`.
+- الحقول: `name` (مطلوب)، `description` (مطلوب)، `triggers`، `allowed_tools` (تُقبل أيضًا `allowed-tools` بصيغة agentskills)، `version`، `risk_level` (`safe`/`confirm`/`restricted`)، `tags`، `metadata`.
 - إن نسي الكاتب اقتباس نقطتين `:` داخل الوصف، يوجد محلل متسامح احتياطي.
-- **إضافة مهارة = إضافة مجلد** ثم `POST /api/skills/reload` (أو إعادة التشغيل). `nimna skills validate` يفحص الصياغة.
+- **إضافة مهارة = إضافة مجلد** ثم `POST /api/skills/reload` (أو إعادة التشغيل). `nimna skills validate` يفحص الصياغة وينبه لأدوات غير مسجلة (`allowed_tools` تشير لأداة غير موجودة) أو مهارة `restricted` تحتاج مراجعة يدوية.
 - مهارة `skill_author` تجعل الوكيل نفسه يكتب مهارات جديدة عند طلبك: «أنشئ مهارة لمراجعة ملفات السجلات».
 
 ### المهارات المضمّنة
@@ -150,8 +152,8 @@ allowed_tools: [list_files, read_csv, calculate_statistics, create_chart, read_s
 
 - **safe**: قراءة/حساب فقط، تُنفذ مباشرة.
 - **confirm**: تحتاج موافقة (`delete_file` دائمًا؛ `write_file`/`write_report` عند الكتابة فوق ملف موجود؛ `run_python` عندما يكون الـ sandbox من نوع subprocess).
-- كل أدوات الملفات مسجونة داخل `WORKSPACE_DIR`؛ محاولات `../` أو المسارات المطلقة تُرفض.
-- `fetch_url` يرفض العناوين المحلية والخاصة (حماية من SSRF).
+- كل أدوات الملفات مسجونة داخل `WORKSPACE_DIR`؛ المسارات المطلقة، `../`، الروابط الرمزية (`symlink`) التي تهرب خارج المساحة، والـ null bytes تُرفض. `list_files` يتجاهل الروابط التي تهرب.
+- `fetch_url`/`web_search` ترفض العناوين المحلية والخاصة (SSRF) — يُفحص كل `hostname` قبل الطلب وبعد كل إعادة توجيه (حتى 5 قفزات): `localhost`، `127.0.0.1`، `0.0.0.0`، الشبكات الخاصة/الحلقة/الرابط-المحلي، واللاحقات `.local`/`.internal`.
 - النموذج لا يرى إلا الأدوات التي تسمح بها المهارات المحمّلة؛ استدعاء أداة غير مسموحة يُعاد كخطأ.
 
 إضافة أداة جديدة:
@@ -268,11 +270,17 @@ docker compose up --build
 |---|---|---|
 | `MODEL_PROVIDER` | `gemini` | `gemini` / `openai` / `mock` |
 | `AGENT_MAX_STEPS` | 12 | أقصى عدد جولات نموذج لكل طلب |
+| `AGENT_MAX_TOOL_CALLS` | 30 | أقصى عدد استدعاءات أدوات لكل طلب |
+| `AGENT_MAX_RUNTIME_SECONDS` | 300 | حد زمني بالثواني لكل طلب |
+| `AGENT_MAX_RESPONSE_TOKENS` | 4096 | سقف توكن الرد (يمرر للنموذج حيثما يُدعم) |
+| `AGENT_MAX_CONSECUTIVE_FAILURES` | 5 | توقف بعد أخطاء أدوات متتالية |
 | `AGENT_MAX_SKILLS` | 3 | أقصى عدد مهارات تُحمّل لكل طلب |
 | `AGENT_VERIFY` | true | تشغيل المراجع على الجواب النهائي |
 | `AGENT_AUTO_APPROVE` | false | **خطر**: تجاوز الموافقات (للأتمتة الموثوقة فقط) |
 | `AGENT_DEFAULT_TOOLS` | `load_skill,memory_search,list_files` | الأدوات عندما لا تُختار أي مهارة |
-| `SANDBOX_BACKEND` | `subprocess` | `subprocess` أو `docker` |
+| `AGENT_MAX_FILE_BYTES` | 5000000 | أقصى حجم ملف يُقرأ |
+| `AGENT_MAX_WRITE_BYTES` | 2000000 | أقصى حجم كتابة |
+| `SANDBOX_BACKEND` | `docker` | `docker` (افتراضي، عزل حقيقي) أو `subprocess` (يطلب موافقة) |
 | `WORKSPACE_DIR` / `SKILLS_DIR` / `DB_PATH` | `workspace` / `skills` / `data/nimna.db` | المسارات |
 
 ---
@@ -280,10 +288,24 @@ docker compose up --build
 ## الأمان وحدود التصميم
 
 - المفتاح المجاني يوفّر قدرة النموذج فقط؛ نظام المهارات والذاكرة والصلاحيات مبني حوله ولا يعتمد على مزود بعينه.
-- `subprocess` sandbox يعزل البيئة والمسار ويحد الموارد لكنه **ليس حدًا أمنيًا** ضد كود خبيث؛ لذلك يتطلب موافقة. استخدم Docker للعزل الحقيقي.
+- `subprocess` sandbox يعزل البيئة والمسار ويحد الموارد لكنه **ليس حدًا أمنيًا**؛ لذلك مصنف `confirm` (يطلب موافقة). الافتراضي الآن `docker` (`--network none`، `--cap-drop ALL`، بلا صلاحيات جديدة، حدود ذاكرة/CPU) وهو **safe**. `nimna doctor` ينبه إن لم يكن Docker متوفرًا.
 - الوكيل لا يرسل ولا يشتري ولا يحذف شيئًا دون موافقة صريحة، والنظام يفرض ذلك برمجيًا لا بالـ prompt فقط.
 - مخرجات الأدوات تُقتطع (`AGENT_TOOL_RESULT_MAX_CHARS`) لحماية نافذة السياق.
 - محتوى الويب غير موثوق؛ تعليمات المهارة `web_research` تطلب من النموذج معاملته كبيانات لا كأوامر.
+
+
+- لا تُسجل الأسرار: كل الحمولات التي تمر عبر `redact_payload`/`MemoryStore.log` تستبدل قيم `api_key`/`secret`/`password`/`token` بـ `***REDACTED***` قبل التدقيق أو عرضها للنموذج (انظر `SECURITY.md`).
+- توقف الحلقة تلقائيًا عند: تكرار نفس استدعاء الأداة 3 مرات بلا تقدم، تكرار نفس نص النموذج 3 مرات، تجاوز `MAX_STEPS`/`MAX_TOOL_CALLS`/`MAX_RUNTIME`، أو 5 أخطاء أدوات متتالية.
+- لا يمكن لمهارة إعلان أداة غير مسجلة — `nimna skills validate` ينبه وruntime يتجاهلها.
+- أوامر التشخيص: `nimna doctor --offline` يتحقق من `.env`، المفاتيح، Docker، صلاحيات `workspace`، اتصال SQLite، وصحة مخططات الأدوات.
+
+---
+
+## الترخيص والأمان
+
+- الترخيص: MIT — انظر `LICENSE` و`NOTICE`.
+- الأمان: `SECURITY.md` يوضح عزل الملفات/الشبكة/الكود والموافقات والحدود.
+- المساهمة: `CONTRIBUTING.md` — كيف تضيف مهارة/أداة وتشغّل `pytest` و`nimna doctor`.
 
 ---
 
@@ -294,7 +316,8 @@ pip install -e ".[dev]"
 cp .env.example .env            # set GEMINI_API_KEY (free) or NVIDIA/OpenAI settings
 nimna ask "analyse sales.csv and write a report"
 nimna serve                     # web UI + REST at :8000
-pytest                          # offline test-suite (mock provider)
+nimna doctor --offline     # diagnose env / keys / docker
+pytest                          # 69 offline tests (mock provider)
 ```
 
 Add a skill: create `skills/<name>/SKILL.md` with front matter (`name`, `description`, `triggers`, `allowed_tools`) and instructions, then `POST /api/skills/reload`. Add a tool: register a Pydantic-typed handler on the `ToolRegistry` and list it in the skills allowed to use it. Swap the model: change `MODEL_PROVIDER` — skills, tools, memory and approvals stay exactly the same.

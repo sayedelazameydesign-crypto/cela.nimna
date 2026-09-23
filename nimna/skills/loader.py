@@ -19,6 +19,9 @@ KEY_ALIASES = {
     "display-name": "display_name",
     "title": "display_name",
     "keywords": "triggers",
+    "risk": "risk_level",
+    "risk-level": "risk_level",
+    "risk_level": "risk_level",
 }
 
 
@@ -102,7 +105,7 @@ def parse_skill_text(text: str, *, path: Path, directory: Path) -> Skill:
                 data["description"] = para
                 break
     known = {"name", "description", "display_name", "version", "triggers", "allowed_tools",
-             "tags", "metadata"}
+             "tags", "risk_level", "metadata"}
     metadata = dict(data.get("metadata") or {})
     for key in list(data.keys()):
         if key not in known:

@@ -2,15 +2,18 @@
 
     nimna chat                      interactive REPL (approvals asked inline)
     nimna ask "..."                 one-shot request
-    nimna skills list|show|validate
-    nimna tools list
+    nimna skills [list|show|validate]   (alias: nimna skills)
+    nimna tools  [list]                 (alias: nimna tools)
     nimna serve [--port 8000]       FastAPI server + web UI
-    nimna approvals list|resolve    handle approvals created through the API
+    nimna approvals [list|resolve]  (alias: nimna resume)
+    nimna resume RUN_ID             resolve a pending run (shorthand)
+    nimna doctor                    diagnose environment / keys / docker / db
 """
 import argparse
 import json
 import sys
 import uuid
+from pathlib import Path
 from typing import Optional
 
 from .config import Settings
@@ -34,9 +37,21 @@ def _settings(args: argparse.Namespace) -> Settings:
 
 def _print_result(result: AgentResult, *, verbose: bool = False) -> None:
     print()
+    if result.pending:
+        # friendly approval preview like the spec example
+        print(f"⚠️  موافقة مطلوبة: {result.pending.tool_name}")
+        print(f"   الوصف: {result.pending.description}")
+        print(f"   الوسائط: {json.dumps(result.pending.tool_call.arguments, ensure_ascii=False)}")
+        target = result.pending.tool_call.arguments.get("path") or result.pending.tool_call.arguments.get("filename") or result.pending.tool_call.arguments.get("url") or ""
+        if target:
+            print(f"   الأثر: سيتم الكتابة/الوصول إلى: {target}")
+        print(f"   الحل: nimna approvals resolve {result.pending.approval_id}  (أو --deny للرفض)")
+        print()
     print(result.reply or result.error or "(no reply)")
     meta = []
     if result.skills_used:
+        meta.append("المهارة: " + ", ".join(result.skills_used))
+        # also print English for CLI users
         meta.append("skills: " + ", ".join(result.skills_used))
     if result.tool_calls:
         meta.append("tools: " + ", ".join(
@@ -54,8 +69,15 @@ def cmd_ask(args: argparse.Namespace) -> int:
     from .bootstrap import build_agent
 
     agent = build_agent(_settings(args), approval_policy=ConsolePrompt())
+    # preview before execution (as requested in review §7)
+    print(f"المهارة المتوقعة: سيختار الوكيل من بين {len(agent.skills)} مهارة")
+    print(f"الأدوات المتاحة: {', '.join(sorted(agent.tools.names()))[:200]}")
+    print(f"الموافقة مطلوبة: {'لا' if agent.settings.auto_approve else 'نعم للأدوات الحساسة'}")
+    print()
     result = agent.run(args.message, session_id=args.session)
     _print_result(result, verbose=args.verbose)
+    if result.status.value == "awaiting_approval":
+        print(f"\nRun suspended. Resolve with: nimna approvals resolve {result.run_id}")
     return 0 if result.status.value != "error" else 1
 
 
@@ -86,18 +108,22 @@ def cmd_chat(args: argparse.Namespace) -> int:
 
 def cmd_skills(args: argparse.Namespace) -> int:
     from .skills.manager import SkillManager
+    from .tools import default_registry
 
     settings = _settings(args)
     manager = SkillManager(settings.skills_dir)
-    if args.skills_cmd == "list":
+    registry = default_registry()
+    cmd = getattr(args, "skills_cmd", None) or "list"
+    if cmd == "list":
         for meta in manager.list():
-            print(f"{meta.name:20s} v{meta.version:8s} {meta.description}")
+            risk = f" [{meta.risk_level}]" if meta.risk_level != "safe" else ""
+            print(f"{meta.name:20s} v{meta.version:8s}{risk:12s} {meta.description}")
             if meta.allowed_tools:
                 print(f"{'':20s} tools: {', '.join(meta.allowed_tools)}")
         for name, error in manager.errors.items():
             print(f"{name:20s} ERROR: {error}", file=sys.stderr)
         return 0
-    if args.skills_cmd == "show":
+    if cmd == "show":
         try:
             skill = manager.get(args.name)
         except KeyError as exc:
@@ -106,8 +132,8 @@ def cmd_skills(args: argparse.Namespace) -> int:
         print(json.dumps(skill.meta.model_dump(), ensure_ascii=False, indent=2))
         print("\n" + skill.instructions)
         return 0
-    if args.skills_cmd == "validate":
-        report = manager.validate_all()
+    if cmd == "validate":
+        report = manager.validate_all(registry_names=set(registry.names()))
         failed = False
         for name, warnings in report.items():
             status = "OK " if not warnings else ("ERR" if any(w.startswith("ERROR") for w in warnings) else "WARN")
@@ -145,14 +171,21 @@ def cmd_approvals(args: argparse.Namespace) -> int:
     from .bootstrap import build_agent
 
     agent = build_agent(_settings(args))
-    if args.approvals_cmd == "list":
-        for item in agent.pending_approvals():
+    cmd = getattr(args, "approvals_cmd", None) or "list"
+    if cmd == "list":
+        pending = agent.pending_approvals()
+        if not pending:
+            print("No pending approvals.")
+            return 0
+        for item in pending:
             state = agent.memory.get_pending(item["id"]) or {}
-            pending = state.get("pending") or {}
-            print(f"{item['id']}  session={item['session_id']}  tool={pending.get('tool_name')}  "
-                  f"{pending.get('summary', '')}")
+            pending_info = state.get("pending") or {}
+            print(f"{item['id']}  session={item['session_id']}  tool={pending_info.get('tool_name')}  "
+                  f"{pending_info.get('summary', '')}")
+            if pending_info.get("tool_call"):
+                print(f"      args: {json.dumps(pending_info['tool_call'].get('arguments', {}), ensure_ascii=False)}")
         return 0
-    if args.approvals_cmd == "resolve":
+    if cmd == "resolve":
         try:
             result = agent.resume(args.run_id, approved=not args.deny, always=args.always)
         except KeyError as exc:
@@ -161,6 +194,120 @@ def cmd_approvals(args: argparse.Namespace) -> int:
         _print_result(result, verbose=args.verbose)
         return 0
     return 2
+
+
+def cmd_resume(args: argparse.Namespace) -> int:
+    # shorthand for `nimna approvals resolve RUN_ID`
+    args.approvals_cmd = "resolve"
+    return cmd_approvals(args)
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    import shutil
+
+    settings = _settings(args)
+    ok = True
+
+    def check(label: str, passed: bool, hint: str = ""):
+        nonlocal ok
+        icon = "✅" if passed else "❌"
+        print(f"{icon} {label}" + (f" – {hint}" if hint and not passed else f" – {hint}" if hint else ""))
+        if not passed:
+            ok = False
+
+    env_file = Path(getattr(args, "env_file", ".env"))
+    check(f"env file {env_file}", env_file.is_file(), "create from .env.example" if not env_file.is_file() else "found")
+
+    # provider key
+    if settings.provider == "gemini":
+        has_key = bool(settings.gemini_api_key)
+        check(f"GEMINI_API_KEY for {settings.gemini_model}", has_key, "set GEMINI_API_KEY in .env – https://aistudio.google.com/apikey")
+        # live ping if key present and requested
+        if has_key and not args.offline:
+            try:
+                from .providers.gemini import GeminiProvider
+                p = GeminiProvider(settings.gemini_api_key, settings.gemini_model, timeout=15, temperature=0)
+                from .providers.base import Message
+                r = p.generate([Message.user("ping")], max_tokens=10)
+                check("Gemini live ping", bool(r.text or r.tool_calls), f"response: {r.text[:60]}")
+            except Exception as exc:
+                check("Gemini live ping", False, str(exc)[:200])
+    elif settings.provider == "openai":
+        has_key = bool(settings.openai_api_key)
+        check(f"OPENAI_API_KEY / NVIDIA_API_KEY for {settings.openai_model}", has_key, f"set key for {settings.openai_base_url}")
+        if has_key and not args.offline:
+            try:
+                from .providers.openai_compat import OpenAICompatibleProvider
+                p = OpenAICompatibleProvider(settings.openai_api_key, settings.openai_base_url, settings.openai_model, timeout=15)
+                from .providers.base import Message
+                r = p.generate([Message.user("ping")], max_tokens=10)
+                check("OpenAI-compatible live ping", bool(r.text or r.tool_calls), f"response: {r.text[:60]}")
+            except Exception as exc:
+                check("OpenAI-compatible live ping", False, str(exc)[:200])
+    else:
+        check(f"provider={settings.provider}", True, "mock mode – no key needed")
+
+    check(f"workspace {settings.workspace_dir}", settings.workspace_dir.exists() or True, "will be created" if not settings.workspace_dir.exists() else "exists")
+    try:
+        settings.ensure_dirs()
+        test = settings.workspace_dir / ".nimna-write-test"
+        test.write_text("ok", encoding="utf-8")
+        test.unlink(missing_ok=True)
+        check("workspace writable", True)
+    except Exception as exc:
+        check("workspace writable", False, str(exc))
+
+    # sqlite
+    try:
+        from .memory.store import MemoryStore
+        m = MemoryStore(settings.db_path if str(settings.db_path) != ":memory:" else ":memory:")
+        m.ensure_session("doctor")
+        m.close()
+        check(f"SQLite {settings.db_path}", True)
+    except Exception as exc:
+        check(f"SQLite {settings.db_path}", False, str(exc))
+
+    # docker
+    has_docker = shutil.which("docker") is not None
+    check(f"Docker (sandbox backend={settings.sandbox_backend})", has_docker or settings.sandbox_backend == "subprocess",
+          "install Docker or set SANDBOX_BACKEND=subprocess" if not has_docker and settings.sandbox_backend == "docker" else "")
+
+    # tools
+    try:
+        from .tools import default_registry
+        reg = default_registry()
+        check(f"tools ({len(reg)} registered)", len(reg) > 0)
+    except Exception as exc:
+        check("tools", False, str(exc))
+
+    # skills
+    try:
+        from .skills.manager import SkillManager
+        mgr = SkillManager(settings.skills_dir)
+        from .tools import default_registry
+        reg = default_registry()
+        report = mgr.validate_all(registry_names=set(reg.names()))
+        errs = [f"{k}: {v}" for k, v in report.items() if any(x.startswith("ERROR") for x in v)]
+        check(f"skills ({len(mgr)} loaded)", not errs, "; ".join(errs) if errs else f"{len(mgr)} OK")
+        warns = sum(1 for v in report.values() for x in v if x.startswith("references unknown"))
+        if warns:
+            print(f"  ↳ {warns} skill(s) reference unknown tools – see: nimna skills validate")
+    except Exception as exc:
+        check("skills", False, str(exc))
+
+    # model schemas
+    try:
+        from .tools import default_registry
+        reg = default_registry()
+        for tool in reg.all():
+            tool.spec()
+        check("tool JSON schemas (Gemini/OpenAI compatible)", True)
+    except Exception as exc:
+        check("tool JSON schemas", False, str(exc))
+
+    print()
+    print("Doctor: " + ("✅ all checks passed" if ok else "❌ some checks failed – see above"))
+    return 0 if ok else 1
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -173,7 +320,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_ask = sub.add_parser("ask", help="one-shot request")
-    p_ask.add_argument("message")
+    p_ask.add_argument("message", help="the user request (Arabic or English)")
     p_ask.add_argument("--session", help="reuse a session id for short-term memory")
     p_ask.set_defaults(func=cmd_ask)
 
@@ -181,40 +328,55 @@ def build_parser() -> argparse.ArgumentParser:
     p_chat.add_argument("--session")
     p_chat.set_defaults(func=cmd_chat)
 
-    p_skills = sub.add_parser("skills", help="inspect installed skills")
-    skills_sub = p_skills.add_subparsers(dest="skills_cmd", required=True)
-    skills_sub.add_parser("list")
-    p_show = skills_sub.add_parser("show")
-    p_show.add_argument("name")
-    skills_sub.add_parser("validate")
+    # `nimna skills` with optional subcommand defaults to list for ergonomics
+    p_skills = sub.add_parser("skills", help="inspect installed skills", aliases=["skill"])
+    p_skills.add_argument("skills_cmd", nargs="?", choices=["list", "show", "validate"], default="list",
+                          help="sub-command (default: list)")
+    p_skills.add_argument("name", nargs="?", help="skill name for 'show'")
     p_skills.set_defaults(func=cmd_skills)
 
-    p_tools = sub.add_parser("tools", help="inspect tools")
-    tools_sub = p_tools.add_subparsers(dest="tools_cmd", required=True)
-    tools_sub.add_parser("list")
+    p_tools = sub.add_parser("tools", help="inspect tools", aliases=["tool"])
+    p_tools.add_argument("tools_cmd", nargs="?", choices=["list"], default="list",
+                         help="sub-command (default: list)")
     p_tools.set_defaults(func=cmd_tools)
 
     p_serve = sub.add_parser("serve", help="run the HTTP API + web UI")
-    p_serve.add_argument("--host")
-    p_serve.add_argument("--port", type=int)
+    p_serve.add_argument("--host", help="override HOST")
+    p_serve.add_argument("--port", type=int, help="override PORT")
     p_serve.set_defaults(func=cmd_serve)
 
-    p_appr = sub.add_parser("approvals", help="handle pending approvals")
-    appr_sub = p_appr.add_subparsers(dest="approvals_cmd", required=True)
-    appr_sub.add_parser("list")
-    p_res = appr_sub.add_parser("resolve")
-    p_res.add_argument("run_id")
-    p_res.add_argument("--deny", action="store_true")
-    p_res.add_argument("--always", action="store_true")
+    p_appr = sub.add_parser("approvals", help="handle pending approvals", aliases=["approval"])
+    p_appr.add_argument("approvals_cmd", nargs="?", choices=["list", "resolve"], default="list",
+                        help="sub-command (default: list)")
+    p_appr.add_argument("run_id", nargs="?", help="run id for 'resolve'")
+    p_appr.add_argument("--deny", action="store_true", help="deny instead of approve")
+    p_appr.add_argument("--always", action="store_true", help="approve and auto-approve this tool for the run")
     p_appr.set_defaults(func=cmd_approvals)
+
+    p_resume = sub.add_parser("resume", help="shorthand for 'approvals resolve'")
+    p_resume.add_argument("run_id", help="run id to resume")
+    p_resume.add_argument("--deny", action="store_true")
+    p_resume.add_argument("--always", action="store_true")
+    p_resume.set_defaults(func=cmd_resume)
+
+    p_doctor = sub.add_parser("doctor", help="diagnose environment, keys, docker, workspace, db, skills")
+    p_doctor.add_argument("--offline", action="store_true", help="skip live provider pings")
+    p_doctor.set_defaults(func=cmd_doctor)
+
     return parser
 
 
 def main(argv: Optional[list[str]] = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    # validate that skills subcommand 'show' got a name
+    if getattr(args, "command", None) == "skills" and getattr(args, "skills_cmd", None) == "show" and not getattr(args, "name", None):
+        parser.error("skills show requires a skill name")
+    if getattr(args, "command", None) == "approvals" and getattr(args, "approvals_cmd", None) == "resolve" and not getattr(args, "run_id", None):
+        parser.error("approvals resolve requires a run_id")
     return args.func(args)
 
 
 if __name__ == "__main__":  # pragma: no cover
+    import sys
     sys.exit(main())

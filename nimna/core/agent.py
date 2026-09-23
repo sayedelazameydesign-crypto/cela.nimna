@@ -13,6 +13,7 @@ needs approval and be resumed later by :meth:`Agent.resume`.
 """
 import json
 import logging
+import time
 import uuid
 from typing import Any, Optional
 
@@ -69,9 +70,12 @@ class Agent:
     # public API
     # ------------------------------------------------------------------
     def run(self, user_message: str, session_id: Optional[str] = None) -> AgentResult:
+        if len(user_message) > self.settings.max_user_message_chars:
+            # truncate rather than reject – keep UX friendly but bounded
+            user_message = user_message[: self.settings.max_user_message_chars] + "\n[... message truncated]"
         session_id = session_id or uuid.uuid4().hex[:12]
         self.memory.ensure_session(session_id)
-        state = RunState(session_id=session_id, user_message=user_message)
+        state = RunState(session_id=session_id, user_message=user_message, started_at=time.perf_counter())
         self._audit(state, "run_started", {"message": user_message[:500]})
         self.memory.add_message(session_id, "user", user_message, {"run_id": state.run_id})
         try:
@@ -89,6 +93,9 @@ class Agent:
         if raw is None:
             raise KeyError(f"no pending approval for run '{run_id}'")
         state = RunState.model_validate(raw)
+        # restore perf counter baseline after deserialization
+        if not state.started_at:
+            state.started_at = time.perf_counter()
         decision = Decision.ALWAYS if (approved and always) else (Decision.APPROVE if approved else Decision.DENY)
         self.memory.resolve_pending(run_id, decision.value)
         self._audit(state, "approval_resolved", {"tool": state.pending.tool_name if state.pending else None,
@@ -179,7 +186,20 @@ class Agent:
     # main loop
     # ------------------------------------------------------------------
     def _drive(self, state: RunState) -> AgentResult:
+        if not state.started_at:
+            state.started_at = time.perf_counter()
         while True:
+            # runtime guard
+            elapsed = time.perf_counter() - state.started_at
+            if elapsed > self.settings.max_runtime_seconds:
+                state.final_text = (
+                    f"توقف التنفيذ بعد {elapsed:.0f} ثانية لتجاوز الحد الأقصى للوقت "
+                    f"({self.settings.max_runtime_seconds} ثانية). "
+                    f"تم تنفيذ {state.tool_call_count} أداة في {state.step} خطوة. حاول تقسيم المهمة."
+                )
+                state.status = RunStatus.DONE
+                self._audit(state, "max_runtime_reached", {"elapsed": elapsed, "steps": state.step})
+                return self._finish(state)
             if state.status == RunStatus.AWAITING_APPROVAL:
                 return self._suspend(state)
             if state.status in {RunStatus.DONE, RunStatus.ERROR}:
@@ -187,19 +207,55 @@ class Agent:
             if state.step >= self.settings.max_steps:
                 last = state.last_assistant()
                 state.final_text = (last.content if last and last.content else "") or (
-                    "I reached the maximum number of steps before finishing. Here is where I stopped."
+                    "Reached the maximum number of steps before finishing. Here is where I stopped."
                 )
                 state.status = RunStatus.DONE
                 self._audit(state, "max_steps_reached", {"steps": state.step})
                 return self._finish(state)
+            if state.tool_call_count >= self.settings.max_tool_calls:
+                state.final_text = (
+                    f"توقفت بعد {state.tool_call_count} استدعاء أداة (الحد {self.settings.max_tool_calls}). "
+                    "الرجاء تبسيط الطلب أو تجزئته."
+                )
+                state.status = RunStatus.DONE
+                self._audit(state, "max_tool_calls_reached", {"tool_calls": state.tool_call_count})
+                return self._finish(state)
+            if state.consecutive_failures >= self.settings.max_consecutive_failures:
+                state.final_text = (
+                    f"توقفت بعد {state.consecutive_failures} أخطاء متتالية للأدوات. راجع المدخلات وحاول مرة أخرى."
+                )
+                state.status = RunStatus.DONE
+                self._audit(state, "max_failures_reached", {"failures": state.consecutive_failures})
+                return self._finish(state)
 
             state.messages[0] = Message.system(self._system_prompt(state))
             specs = self.tools.specs(state.allowed_tools)
-            response = self.provider.generate(state.messages, tools=specs or None)
+            try:
+                response = self.provider.generate(
+                    state.messages, tools=specs or None,
+                    max_tokens=self.settings.max_response_tokens,
+                )
+            except TypeError:
+                # mock provider in tests may not accept max_tokens yet
+                response = self.provider.generate(state.messages, tools=specs or None)
             state.step += 1
             state.add_usage(response.usage)
             self._audit(state, "model_call", {"step": state.step, "tool_calls": [c.name for c in response.tool_calls],
                                               "usage": response.usage, "text_preview": response.text[:200]})
+            # repetition guard on plain text answers
+            if not response.tool_calls:
+                text_norm = response.text.strip()
+                if text_norm and text_norm == state.last_text:
+                    state.repeat_text_count += 1
+                else:
+                    state.repeat_text_count = 0
+                state.last_text = text_norm
+                if state.repeat_text_count >= 2:
+                    state.final_text = text_norm or "Model repeated the same answer; stopping."
+                    state.status = RunStatus.DONE
+                    self._audit(state, "loop_detected", {"reason": "repeated_text"})
+                    return self._finish(state)
+
             state.messages.append(response.to_message())
 
             if not response.tool_calls:
@@ -207,6 +263,8 @@ class Agent:
                     continue
                 state.final_text = response.text.strip()
                 state.status = RunStatus.DONE
+                # success resets failure streak
+                state.consecutive_failures = 0
                 continue
 
             outcome = self._execute_calls(state, start_index=0)
@@ -232,7 +290,11 @@ class Agent:
             "Set ok=false only for real, actionable problems."
         )
         try:
-            review = self.provider.generate([Message.user(prompt)], tools=None, temperature=0.0)
+            try:
+                review = self.provider.generate([Message.user(prompt)], tools=None, temperature=0.0,
+                                                max_tokens=800)
+            except TypeError:
+                review = self.provider.generate([Message.user(prompt)], tools=None, temperature=0.0)
         except ProviderError as exc:
             log.warning("verification skipped: %s", exc)
             return False
@@ -272,15 +334,36 @@ class Agent:
         ctx = self._context(state)
         for index in range(start_index, len(calls)):
             call = calls[index]
+            # loop guards before each call
+            if state.tool_call_count >= self.settings.max_tool_calls:
+                self._record_tool_error(state, call, f"tool call limit {self.settings.max_tool_calls} reached – not executing {call.name}")
+                state.consecutive_failures += 1
+                continue
+            sig = self._signature(call)
+            if sig in state.seen_signatures:
+                # allow one repeat for retry, stop on third identical call
+                occurrences = state.seen_signatures.count(sig)
+                if occurrences >= 2:
+                    self._audit(state, "loop_detected", {"tool": call.name, "signature": sig})
+                    self._record_tool_error(state, call, f"repeated call to '{call.name}' with identical arguments – loop detected, stopping this branch")
+                    state.consecutive_failures += 1
+                    continue
+            state.seen_signatures.append(sig)
+            # cap history length for JSON stability
+            if len(state.seen_signatures) > 100:
+                state.seen_signatures = state.seen_signatures[-60:]
+
             tool = self.tools.get(call.name)
             if tool is None or call.name not in state.allowed_tools:
                 self._record_tool_error(state, call, f"tool '{call.name}' is not available in this turn. "
                                                      f"Available: {', '.join(state.allowed_tools)}")
+                state.consecutive_failures += 1
                 continue
             try:
                 params = tool.validate(call.arguments)
             except ToolValidationError as exc:
                 self._record_tool_error(state, call, str(exc))
+                state.consecutive_failures += 1
                 continue
             risk = tool.effective_risk(params, ctx)
             if risk == "confirm" and tool.name not in state.approved_tools and not self.settings.auto_approve:
@@ -297,10 +380,19 @@ class Agent:
                     return "deferred"
                 if decision == Decision.DENY:
                     self._record_denied(state, call)
+                    state.consecutive_failures += 1
                     continue
                 if decision == Decision.ALWAYS:
                     state.approved_tools.append(tool.name)
+            # approved or safe – run it
             self._run_tool(state, tool, call, ctx, approved=(risk == "confirm") or None)
+            # update counters
+            state.tool_call_count += 1
+            last_record = state.tool_calls[-1] if state.tool_calls else None
+            if last_record and last_record.ok:
+                state.consecutive_failures = 0
+            else:
+                state.consecutive_failures += 1
         return "continue"
 
     def _apply_decision(self, state: RunState, decision: Decision) -> None:
@@ -313,14 +405,23 @@ class Agent:
         state.status = RunStatus.RUNNING
         if decision == Decision.DENY:
             self._record_denied(state, call)
+            state.consecutive_failures += 1
             return
         if decision == Decision.ALWAYS:
             state.approved_tools.append(pending.tool_name)
         tool = self.tools.get(pending.tool_name)
         if tool is None:
             self._record_tool_error(state, call, "tool disappeared before execution")
+            state.consecutive_failures += 1
             return
         self._run_tool(state, tool, call, self._context(state), approved=True)
+        state.tool_call_count += 1
+        state.seen_signatures.append(self._signature(call))
+        last_record = state.tool_calls[-1] if state.tool_calls else None
+        if last_record and last_record.ok:
+            state.consecutive_failures = 0
+        else:
+            state.consecutive_failures += 1
 
     def _run_tool(self, state: RunState, tool: Tool, call: ToolCall, ctx: ToolContext,
                   approved: Optional[bool]) -> None:
@@ -357,6 +458,10 @@ class Agent:
         if len(args) > 300:
             args = args[:300] + "…"
         return f"{call.name}({args})"
+
+    @staticmethod
+    def _signature(call: ToolCall) -> str:
+        return f"{call.name}:{json.dumps(call.arguments, sort_keys=True, ensure_ascii=False)}"
 
     # ------------------------------------------------------------------
     # termination helpers

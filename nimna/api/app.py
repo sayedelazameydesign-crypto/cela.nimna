@@ -72,6 +72,12 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
             "verify": settings.verify,
             "sandbox": settings.sandbox_backend,
             "auto_approve": settings.auto_approve,
+            "limits": {
+                "max_steps": settings.max_steps,
+                "max_tool_calls": settings.max_tool_calls,
+                "max_runtime_seconds": settings.max_runtime_seconds,
+                "max_response_tokens": settings.max_response_tokens,
+            },
         }
 
     @app.get("/api/skills")
@@ -103,6 +109,8 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
         session_id = request.session_id or uuid.uuid4().hex[:12]
         if agent.pending_approvals(session_id):
             raise HTTPException(409, "this session has a pending approval; resolve it first")
+        if len(request.message) > settings.max_user_message_chars:
+            raise HTTPException(413, f"message too long ({len(request.message)} chars); max {settings.max_user_message_chars}")
         return await run_in_threadpool(agent.run, request.message, session_id)
 
     @app.get("/api/approvals")

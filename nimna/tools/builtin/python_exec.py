@@ -14,7 +14,8 @@ class RunPythonParams(BaseModel):
 
 
 def _python_risk(params: BaseModel, ctx: ToolContext) -> Risk:
-    # Docker gives real isolation; a bare subprocess does not, so ask first.
+    # Docker with --network none is real isolation (safe). Bare subprocess
+    # is NOT a security boundary – keep it behind an approval gate.
     return "safe" if ctx.settings.sandbox_backend == "docker" else "confirm"
 
 

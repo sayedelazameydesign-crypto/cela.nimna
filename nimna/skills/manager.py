@@ -125,8 +125,11 @@ class SkillManager:
             text = text[:max_chars] + f"\n\n[... truncated, {len(text) - max_chars} more characters]"
         return text
 
-    def validate_all(self) -> dict[str, list[str]]:
-        """Return {skill_name: [warnings]} for every discovered skill."""
+    def validate_all(self, registry_names: Optional[set[str]] = None) -> dict[str, list[str]]:
+        """Return {skill_name: [warnings]} for every discovered skill.
+
+        When ``registry_names`` is supplied, unknown ``allowed_tools`` are flagged.
+        """
         report: dict[str, list[str]] = {}
         for skill in self._skills.values():
             warnings: list[str] = []
@@ -136,6 +139,12 @@ class SkillManager:
                 warnings.append("empty instructions body")
             if len(skill.instructions) > 15000:
                 warnings.append("instructions exceed 15k characters; move detail into references/")
+            if registry_names is not None:
+                unknown = skill.meta.unknown_tools(registry_names)
+                if unknown:
+                    warnings.append(f"references unknown tools: {', '.join(unknown)} (will be ignored at runtime)")
+            if skill.meta.risk_level == "restricted":
+                warnings.append("skill marked restricted – requires manual review before use")
             report[skill.name] = warnings
         for name, error in self.errors.items():
             report[name] = [f"ERROR: {error}"]

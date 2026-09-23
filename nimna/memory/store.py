@@ -185,6 +185,13 @@ class MemoryStore:
     # -- audit -----------------------------------------------------------
     def log(self, session_id: Optional[str], run_id: Optional[str], event: str,
             payload: Optional[dict[str, Any]] = None) -> None:
+        # never persist raw secrets – redact before storage
+        if payload is not None:
+            try:
+                from ..tools.base import redact_payload  # local import to avoid cycle
+                payload = redact_payload(payload)
+            except Exception:
+                pass
         with self._lock:
             self._conn.execute(
                 "INSERT INTO audit_log(session_id, run_id, event, payload, created_at) VALUES (?,?,?,?,?)",

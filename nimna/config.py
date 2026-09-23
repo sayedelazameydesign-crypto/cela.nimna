@@ -92,9 +92,14 @@ class Settings:
     openai_model: str = "meta/llama-3.3-70b-instruct"
     temperature: float = 0.2
     request_timeout: float = 120.0
+    # token budget forwarded to the model (where the provider supports it)
+    max_response_tokens: int = 4096
 
-    # agent behaviour
+    # agent behaviour – hard limits that kill runaway loops
     max_steps: int = 12
+    max_tool_calls: int = 30
+    max_runtime_seconds: int = 300
+    max_consecutive_failures: int = 5
     max_skills: int = 3
     history_messages: int = 20
     verify: bool = True
@@ -104,13 +109,18 @@ class Settings:
     )
     tool_result_max_chars: int = 12000
 
+    # input / file size caps
+    max_user_message_chars: int = 20000
+    max_file_bytes: int = 5_000_000
+    max_write_bytes: int = 2_000_000
+
     # paths
     skills_dir: Path = Path("skills")
     workspace_dir: Path = Path("workspace")
     db_path: Path = Path("data/nimna.db")
 
-    # python sandbox
-    sandbox_backend: str = "subprocess"  # subprocess | docker
+    # python sandbox – docker is the only real isolation
+    sandbox_backend: str = "docker"  # docker | subprocess
     sandbox_image: str = "python:3.11-slim"
     sandbox_timeout: int = 20
     sandbox_memory_mb: int = 512
@@ -136,7 +146,11 @@ class Settings:
             or "meta/llama-3.3-70b-instruct",
             temperature=_env_float("MODEL_TEMPERATURE", 0.2),
             request_timeout=_env_float("MODEL_TIMEOUT", 120.0),
+            max_response_tokens=_env_int("AGENT_MAX_RESPONSE_TOKENS", 4096),
             max_steps=_env_int("AGENT_MAX_STEPS", 12),
+            max_tool_calls=_env_int("AGENT_MAX_TOOL_CALLS", 30),
+            max_runtime_seconds=_env_int("AGENT_MAX_RUNTIME_SECONDS", 300),
+            max_consecutive_failures=_env_int("AGENT_MAX_CONSECUTIVE_FAILURES", 5),
             max_skills=_env_int("AGENT_MAX_SKILLS", 3),
             history_messages=_env_int("AGENT_HISTORY_MESSAGES", 20),
             verify=_env_bool("AGENT_VERIFY", True),
@@ -145,10 +159,13 @@ class Settings:
                 "AGENT_DEFAULT_TOOLS", ["load_skill", "memory_search", "list_files"]
             ),
             tool_result_max_chars=_env_int("AGENT_TOOL_RESULT_MAX_CHARS", 12000),
+            max_user_message_chars=_env_int("AGENT_MAX_USER_MESSAGE_CHARS", 20000),
+            max_file_bytes=_env_int("AGENT_MAX_FILE_BYTES", 5_000_000),
+            max_write_bytes=_env_int("AGENT_MAX_WRITE_BYTES", 2_000_000),
             skills_dir=Path(_env("SKILLS_DIR", "skills") or "skills"),
             workspace_dir=Path(_env("WORKSPACE_DIR", "workspace") or "workspace"),
             db_path=Path(_env("DB_PATH", "data/nimna.db") or "data/nimna.db"),
-            sandbox_backend=(_env("SANDBOX_BACKEND", "subprocess") or "subprocess").lower(),
+            sandbox_backend=(_env("SANDBOX_BACKEND", "docker") or "docker").lower(),
             sandbox_image=_env("SANDBOX_IMAGE", "python:3.11-slim") or "python:3.11-slim",
             sandbox_timeout=_env_int("SANDBOX_TIMEOUT", 20),
             sandbox_memory_mb=_env_int("SANDBOX_MEMORY_MB", 512),

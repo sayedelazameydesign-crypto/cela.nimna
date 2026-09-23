@@ -70,9 +70,18 @@ def register(registry: ToolRegistry) -> None:
         entries = []
         iterator = root.rglob("*") if params.recursive else root.iterdir()
         for entry in sorted(iterator):
-            if any(part.startswith(".") for part in entry.relative_to(root).parts):
+            try:
+                rel = entry.relative_to(root)
+            except ValueError:
+                continue
+            if any(part.startswith(".") for part in rel.parts):
                 continue
             if not fnmatch.fnmatch(entry.name, params.pattern):
+                continue
+            # ensure each entry is still inside the workspace jail (symlink may point elsewhere)
+            try:
+                ctx.resolve_path(ctx.display_path(entry))
+            except ToolError:
                 continue
             stat = entry.stat()
             entries.append({
@@ -91,8 +100,8 @@ def register(registry: ToolRegistry) -> None:
         if not target.is_file():
             raise ToolError(f"'{params.path}' is not a file")
         raw = target.read_bytes()
-        if len(raw) > 5_000_000:
-            raise ToolError("file is larger than 5 MB; use run_python or csv tools instead")
+        if len(raw) > ctx.settings.max_file_bytes:
+            raise ToolError(f"file is larger than {ctx.settings.max_file_bytes // 1_000_000} MB; use run_python or csv tools instead")
         if target.suffix.lower() not in TEXT_EXTENSIONS and not _is_probably_text(raw[:4096]):
             raise ToolError("file appears to be binary; only text files can be read")
         text = raw.decode("utf-8", errors="replace")
@@ -118,7 +127,7 @@ def register(registry: ToolRegistry) -> None:
             "modified": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(timespec="seconds"),
             "extension": target.suffix.lower(),
         }
-        if target.is_file() and stat.st_size < 5_000_000:
+        if target.is_file() and stat.st_size < ctx.settings.max_file_bytes:
             raw = target.read_bytes()
             if _is_probably_text(raw[:4096]):
                 info["lines"] = raw.count(b"\n") + (1 if raw and not raw.endswith(b"\n") else 0)
@@ -127,12 +136,20 @@ def register(registry: ToolRegistry) -> None:
     @registry.tool("write_file", "Create a text file in the workspace. Overwriting an existing file requires approval.",
                    WriteFileParams, risk_fn=_write_risk, tags=["files", "write"])
     def write_file(params: WriteFileParams, ctx: ToolContext):
+        if len(params.content.encode("utf-8")) > ctx.settings.max_write_bytes:
+            raise ToolError(f"content too large ({len(params.content.encode('utf-8'))} bytes); max is {ctx.settings.max_write_bytes} bytes")
         target = ctx.resolve_path(params.path)
         if target.exists() and not params.overwrite:
             raise ToolError(f"'{params.path}' already exists; set overwrite=true (requires approval)")
         if target.is_dir():
             raise ToolError(f"'{params.path}' is a directory")
+        # re-check jail after resolving parent (handles symlink dirs)
         target.parent.mkdir(parents=True, exist_ok=True)
+        # verify the final path still resolves inside workspace after parent creation
+        resolved = target.resolve()
+        root = ctx.workspace.resolve()
+        if resolved != root and root not in resolved.parents:
+            raise ToolError("write would escape the workspace")
         target.write_text(params.content, encoding="utf-8")
         return {"written": ctx.display_path(target), "bytes": len(params.content.encode("utf-8"))}
 

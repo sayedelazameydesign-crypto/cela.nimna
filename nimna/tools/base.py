@@ -12,6 +12,7 @@ overwriting an existing one requires confirmation).
 """
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -29,6 +30,27 @@ if TYPE_CHECKING:  # pragma: no cover
 log = logging.getLogger(__name__)
 
 Risk = Literal["safe", "confirm"]
+
+# substrings that look like secrets – redacted before logging / showing to the model
+_SECRET_RE = re.compile(r"(api[_-]?key|secret|password|token|bearer)", re.I)
+
+
+def redact_payload(payload: Any) -> Any:
+    if isinstance(payload, dict):
+        out: dict[str, Any] = {}
+        for key, value in payload.items():
+            if _SECRET_RE.search(str(key)):
+                out[key] = "***REDACTED***"
+            elif isinstance(value, (dict, list)):
+                out[key] = redact_payload(value)
+            elif isinstance(value, str) and len(value) > 20 and _SECRET_RE.search(value):
+                out[key] = "***REDACTED***"
+            else:
+                out[key] = redact_payload(value) if isinstance(value, (dict, list)) else value
+        return out
+    if isinstance(payload, list):
+        return [redact_payload(item) for item in payload]
+    return payload
 
 
 class ToolError(Exception):
@@ -55,17 +77,31 @@ class ToolContext:
 
     # -- filesystem jail -------------------------------------------------
     def resolve_path(self, relative: str, *, must_exist: bool = False) -> Path:
-        """Resolve ``relative`` inside the workspace, refusing escapes."""
-        root = self.workspace.resolve()
-        candidate = Path(relative or ".")
+        """Resolve ``relative`` inside the workspace, refusing escapes.
+
+        Rejects absolute paths, ``..`` traversals, and symlink escapes – the
+        resolved target must stay inside the resolved workspace root.
+        """
+        if not relative or not str(relative).strip():
+            raise ToolError("path is required")
+        candidate = Path(str(relative).strip())
+        # Block absolute paths – callers must use workspace-relative paths.
         if candidate.is_absolute():
-            # allow absolute paths only when they already point inside the workspace
-            target = candidate.resolve()
-        else:
+            raise ToolError(f"absolute paths not allowed: '{relative}' – use a workspace-relative path")
+        # Block null bytes and suspicious patterns early
+        if "\x00" in str(relative):
+            raise ToolError("path contains null bytes")
+        root = self.workspace.resolve()
+        # Resolve the candidate against the workspace; resolve() follows symlinks.
+        # Use strict=False so non-existent paths still get normalised.
+        try:
             target = (root / candidate).resolve()
+        except (OSError, RuntimeError) as exc:
+            raise ToolError(f"invalid path '{relative}': {exc}") from exc
+        # Jail check: target must be root or inside root
         if target != root and root not in target.parents:
             raise ToolError(
-                f"path '{relative}' is outside the workspace ({root}); use a relative path"
+                f"path '{relative}' escapes the workspace ({root}); use a relative path inside the workspace"
             )
         if must_exist and not target.exists():
             raise ToolError(f"path '{relative}' does not exist in the workspace")
@@ -125,6 +161,8 @@ def serialize_result(result: Any, max_chars: int = 12000) -> str:
         payload = result.model_dump(mode="json")
     else:
         payload = result
+    # never leak secrets into model history
+    payload = redact_payload(payload)
     text = json.dumps(payload, ensure_ascii=False, default=str)
     if len(text) > max_chars:
         text = json.dumps(

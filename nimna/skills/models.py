@@ -7,11 +7,12 @@ Only the front matter is shown to the planner; the body is loaded on demand
 """
 import re
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
+SEMVER_RE = re.compile(r"^\d+(\.\d+){0,2}([-.+].*)?$")
 
 
 class SkillMeta(BaseModel):
@@ -23,6 +24,7 @@ class SkillMeta(BaseModel):
     allowed_tools: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     references: list[str] = Field(default_factory=list)
+    risk_level: Literal["safe", "confirm", "restricted"] = "safe"
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("name")
@@ -43,6 +45,24 @@ class SkillMeta(BaseModel):
             raise ValueError("description is required")
         return value[:1200]
 
+    @field_validator("version")
+    @classmethod
+    def _check_version(cls, value: str) -> str:
+        value = str(value).strip()
+        if not SEMVER_RE.match(value):
+            raise ValueError(f"version '{value}' should be semver-like (e.g. 1.0.0)")
+        return value
+
+    @field_validator("risk_level", mode="before")
+    @classmethod
+    def _coerce_risk(cls, value: Any) -> str:
+        if value is None or value == "":
+            return "safe"
+        value = str(value).strip().lower()
+        if value not in {"safe", "confirm", "restricted"}:
+            raise ValueError(f"risk_level must be safe | confirm | restricted, got '{value}'")
+        return value
+
     @field_validator("triggers", "allowed_tools", "tags", mode="before")
     @classmethod
     def _coerce_list(cls, value: Any) -> list[str]:
@@ -60,7 +80,11 @@ class SkillMeta(BaseModel):
     def catalog_line(self) -> str:
         triggers = f" | triggers: {', '.join(self.triggers[:8])}" if self.triggers else ""
         tools = f" | tools: {', '.join(self.allowed_tools)}" if self.allowed_tools else ""
-        return f"- {self.name}: {self.description}{triggers}{tools}"
+        risk = f" | risk: {self.risk_level}" if self.risk_level != "safe" else ""
+        return f"- {self.name}: {self.description}{triggers}{tools}{risk}"
+
+    def unknown_tools(self, registry_names: set[str]) -> list[str]:
+        return [t for t in self.allowed_tools if t not in registry_names]
 
 
 class Skill(BaseModel):
@@ -83,7 +107,7 @@ class Skill(BaseModel):
                 "\n\nReference files (load with read_skill_reference when needed): "
                 + ", ".join(self.meta.references)
             )
-        return f"{header}\nversion: {self.meta.version}\n\n{self.instructions.strip()}{refs}"
+        return f"{header}\nversion: {self.meta.version}  risk: {self.meta.risk_level}\n\n{self.instructions.strip()}{refs}"
 
     def resolve_reference(self, relative: str) -> Path:
         base = Path(self.directory).resolve()
