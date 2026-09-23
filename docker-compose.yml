@@ -39,6 +39,25 @@ services:
       - nimna-data:/app/data
       - /var/run/docker.sock:/var/run/docker.sock
 
+  # ── Redis Vision Gateway Cache (profile: infra) ────────────────────────
+  # docker compose --profile infra up -d redis
+  # Requires REDIS_URL=redis://redis:6379/0 inside the nimna service.
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./infra/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - redis-data:/data
+    profiles: ["infra"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 2s
+      retries: 3
+
   # ── Isolated desktop for Computer Control (VNC + noVNC) ────────────────
   # Provides an Ubuntu LXDE desktop that Nimna can see and click.
   # Isolated from the host — only workspace is shared.
@@ -64,3 +83,4 @@ services:
 volumes:
   nimna-data:
   desktop-home:
+  redis-data:

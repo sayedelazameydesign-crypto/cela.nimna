@@ -6,3 +6,5 @@ uvicorn[standard]==0.53.0
 google-genai==2.25.0
 Pillow>=10.0
 pytest==9.1.1
+redis>=5.0.0  # optional: VisionCache backend (fallback to memory if absent)
+prometheus-client>=0.19  # HPA custom metric active_websockets

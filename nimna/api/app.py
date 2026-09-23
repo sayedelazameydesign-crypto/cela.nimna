@@ -65,6 +65,20 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
     @app.get("/api/health")
     def health() -> dict[str, Any]:
         # keep 'verify' as bool for backward compat, add 'verify_detail' with actual checks
+        cache_info: dict[str, Any] = {}
+        try:
+            from nimna.vision.cache import get_vision_cache
+            cache_info = get_vision_cache().stats()
+        except Exception:
+            cache_info = {"enabled": False, "hit_rate": 0.0}
+        anomaly_info: dict[str, Any] = {}
+        try:
+            from security.anomaly import get_detector
+            det = get_detector()
+            # expose pattern count only, no sensitive data
+            anomaly_info = {"enabled": True, "detector": "heuristics-v1"}
+        except Exception:
+            anomaly_info = {"enabled": False}
         return {
             "status": "ok",
             **agent.provider.describe(),
@@ -78,6 +92,8 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
             },
             "sandbox": settings.sandbox_backend,
             "auto_approve": settings.auto_approve,
+            "cache": cache_info,
+            "anomaly": anomaly_info,
             "limits": {
                 "max_steps": settings.max_steps,
                 "max_tool_calls": settings.max_tool_calls,
@@ -85,6 +101,7 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
                 "max_response_tokens": settings.max_response_tokens,
             },
             "port": int(__import__("os").getenv("PORT", "8000")),
+            "infra": {"redis_url": bool(settings.redis_url), "vision_cache_ttl": settings.vision_cache_ttl},
         }
 
     @app.get("/api/skills")

@@ -17,6 +17,17 @@ import time
 import uuid
 from typing import Any, Optional
 
+# Sprint 1 infra: VisionCache (Redis + in-memory) and Anomaly Kill Switch (lazy imports for tests)
+try:
+    from nimna.vision.cache import get_vision_cache  # type: ignore
+except Exception:  # pragma: no cover
+    get_vision_cache = None  # type: ignore
+
+try:
+    from security.anomaly import get_detector  # type: ignore
+except Exception:  # pragma: no cover
+    get_detector = None  # type: ignore
+
 from ..config import Settings
 from ..memory.store import MemoryStore
 from ..providers.base import Message, ModelProvider, ProviderError, ToolCall
@@ -447,6 +458,20 @@ class Agent:
                                                result_preview=result[:300]))
         self._audit(state, "tool_result", {"tool": tool.name, "ok": ok, "duration_ms": duration_ms,
                                            "preview": result[:300]})
+        # -- Heuristics Kill Switch (security/anomaly.py) — real-time ---
+        if tool.name == "shell_execute" and get_detector is not None:
+            try:
+                _det = get_detector()
+                _det.log_call(state.session_id, tool.name, dict(call.arguments), stdout=result[:1000] if ok else "", stderr="" if ok else result[:1000])
+                _kill, _reason = _det.should_kill(state.session_id, recent_logs=result[:2000] if isinstance(result, str) else str(call.arguments)[:1000])
+                if _kill:
+                    self._audit(state, "anomaly_kill", {"reason": _reason, "tool": tool.name})
+                    state.messages.append(Message.user(f"[Kill Switch] تم إيقاف الإجراء المشبوه: {_reason} — تم حظر الجلسة تلقائيا." ))
+                    state.final_text = f"تم إيقاف الجلسة تلقائيا بواسطة نظام الحماية (Heuristics Kill Switch): {_reason}. يرجى مراجعة السجل وتقسيم المهمة إلى خطوات آمنة."
+                    state.status = RunStatus.DONE
+                    return
+            except Exception:
+                pass
         # Vision gateway: after a successful screenshot, inject the image so the
         # next model turn sees the desktop (observe → plan → act loop).
         if tool.name == "take_screenshot" and ok:
@@ -477,54 +502,98 @@ class Agent:
                         # limit to 1.5MB for model (downscale if needed — here just truncate)
                         if len(raw) > 1_500_000:
                             raw = raw[:1_500_000]
-                        b64 = base64.b64encode(raw).decode("ascii")
-                        mime = "image/jpeg" if p.suffix.lower() in {".jpg", ".jpeg"} else "image/png"
-                        # --- visual duplicate detector (break screenshot loops) ---
-                        try:
-                            import hashlib
-                            # lightweight perceptual hash: 16x16 grayscale
+                        _w = int(data.get("width") or 0)
+                        _h = int(data.get("height") or 0)
+                        # --- VisionCache lookup (Redis + fallback, 600s) ---
+                        _cached = None
+                        _vc = None
+                        if get_vision_cache is not None:
                             try:
-                                from PIL import Image
-                                import io
-                                img = Image.open(io.BytesIO(raw)).convert("L").resize((16,16))
-                                h = hashlib.md5(img.tobytes()).hexdigest()[:12]
+                                _vc = get_vision_cache()
+                                _cached = _vc.get(raw, _w, _h)
                             except Exception:
-                                h = hashlib.md5(raw[:4096]).hexdigest()[:12]
-                            state.screenshot_hashes.append(h)
-                            # keep last 10
-                            if len(state.screenshot_hashes) > 10:
-                                state.screenshot_hashes = state.screenshot_hashes[-10:]
-                            # check last 3 identical
-                            if len(state.screenshot_hashes) >= 3 and len(set(state.screenshot_hashes[-3:])) == 1:
-                                state.consecutive_identical_screenshots = state.consecutive_identical_screenshots + 1 if state.consecutive_identical_screenshots else 3
-                            else:
-                                # count consecutive identical from tail
-                                cnt = 1
-                                for i in range(len(state.screenshot_hashes)-1, 0, -1):
-                                    if state.screenshot_hashes[i] == state.screenshot_hashes[i-1]:
-                                        cnt += 1
-                                    else:
-                                        break
-                                state.consecutive_identical_screenshots = cnt if cnt > 1 else 0
-                            # audit
-                            self._audit(state, "vision_hash", {"hash": h, "consecutive": state.consecutive_identical_screenshots})
-                            # if 3 identical, inject warning for the model
-                            if state.consecutive_identical_screenshots >= 3:
-                                warn = (
-                                    "تنبيه: الشاشة لم تتغير منذ 3 محاولات متتالية (hash=%s). "
-                                    "حاول تغيير الاستراتيجية: استخدم shell_execute للتحقق من العمليات الخلفية، "
-                                    "أو get_element_coordinates للعثور على العنصر بدقة، أو قم بالتمرير/فتح قائمة مختلفة."
-                                ) % h
-                                state.messages.append(Message.user(warn))
-                                self._audit(state, "screenshot_loop_detected", {"hash": h, "count": state.consecutive_identical_screenshots})
-                                # reset to avoid spamming every turn (will trigger again if still identical)
-                                state.consecutive_identical_screenshots = 0
-                        except Exception:
-                            pass
-                        # inject as a user message with image + caption
-                        caption = f"[Screenshot: {rel} — {data.get('source','')} — {data.get('width','')}x{data.get('height','')}]"
-                        state.messages.append(Message.user_with_image(caption, b64, mime))
-                        self._audit(state, "vision_injected", {"path": rel, "bytes": len(raw), "mime": mime, "hash": state.screenshot_hashes[-1] if state.screenshot_hashes else None})
+                                _cached = None
+                        if _cached is not None and isinstance(_cached, dict) and "b64" in _cached:
+                            # cache hit — reuse encoded payload
+                            b64 = _cached["b64"]
+                            mime = _cached.get("mime", "image/png")
+                            caption = _cached.get("caption", f"[Screenshot: {rel} — cached]")
+                            h = _cached.get("hash") or ""
+                            if h:
+                                state.screenshot_hashes.append(h)
+                                if len(state.screenshot_hashes) > 10:
+                                    state.screenshot_hashes = state.screenshot_hashes[-10:]
+                                # consecutive identical logic for cached path too
+                                if len(state.screenshot_hashes) >= 3 and len(set(state.screenshot_hashes[-3:])) == 1:
+                                    state.consecutive_identical_screenshots = state.consecutive_identical_screenshots + 1 if state.consecutive_identical_screenshots else 3
+                                else:
+                                    cnt = 1
+                                    for i in range(len(state.screenshot_hashes)-1, 0, -1):
+                                        if state.screenshot_hashes[i] == state.screenshot_hashes[i-1]:
+                                            cnt += 1
+                                        else:
+                                            break
+                                    state.consecutive_identical_screenshots = cnt if cnt > 1 else 0
+                                self._audit(state, "vision_hash", {"hash": h, "consecutive": state.consecutive_identical_screenshots, "cached": True})
+                            state.messages.append(Message.user_with_image(caption, b64, mime))
+                            self._audit(state, "vision_cache_hit", {"path": rel, "bytes": len(raw), "hash": h})
+                            self._audit(state, "vision_injected", {"path": rel, "bytes": len(raw), "mime": mime, "hash": state.screenshot_hashes[-1] if state.screenshot_hashes else None, "cached": True})
+                        else:
+                            b64 = base64.b64encode(raw).decode("ascii")
+                            mime = "image/jpeg" if p.suffix.lower() in {".jpg", ".jpeg"} else "image/png"
+                            # --- visual duplicate detector (break screenshot loops) ---
+                            try:
+                                import hashlib
+                                # lightweight perceptual hash: 16x16 grayscale
+                                try:
+                                    from PIL import Image
+                                    import io
+                                    img = Image.open(io.BytesIO(raw)).convert("L").resize((16,16))
+                                    h = hashlib.md5(img.tobytes()).hexdigest()[:12]
+                                except Exception:
+                                    h = hashlib.md5(raw[:4096]).hexdigest()[:12]
+                                state.screenshot_hashes.append(h)
+                                # keep last 10
+                                if len(state.screenshot_hashes) > 10:
+                                    state.screenshot_hashes = state.screenshot_hashes[-10:]
+                                # check last 3 identical
+                                if len(state.screenshot_hashes) >= 3 and len(set(state.screenshot_hashes[-3:])) == 1:
+                                    state.consecutive_identical_screenshots = state.consecutive_identical_screenshots + 1 if state.consecutive_identical_screenshots else 3
+                                else:
+                                    # count consecutive identical from tail
+                                    cnt = 1
+                                    for i in range(len(state.screenshot_hashes)-1, 0, -1):
+                                        if state.screenshot_hashes[i] == state.screenshot_hashes[i-1]:
+                                            cnt += 1
+                                        else:
+                                            break
+                                    state.consecutive_identical_screenshots = cnt if cnt > 1 else 0
+                                # audit
+                                self._audit(state, "vision_hash", {"hash": h, "consecutive": state.consecutive_identical_screenshots})
+                                # if 3 identical, inject warning for the model
+                                if state.consecutive_identical_screenshots >= 3:
+                                    warn = (
+                                        "تنبيه: الشاشة لم تتغير منذ 3 محاولات متتالية (hash=%s). "
+                                        "حاول تغيير الاستراتيجية: استخدم shell_execute للتحقق من العمليات الخلفية، "
+                                        "أو get_element_coordinates للعثور على العنصر بدقة، أو قم بالتمرير/فتح قائمة مختلفة."
+                                    ) % h
+                                    state.messages.append(Message.user(warn))
+                                    self._audit(state, "screenshot_loop_detected", {"hash": h, "count": state.consecutive_identical_screenshots})
+                                    # reset to avoid spamming every turn (will trigger again if still identical)
+                                    state.consecutive_identical_screenshots = 0
+                            except Exception:
+                                h = ""
+                                pass
+                            # inject as a user message with image + caption
+                            caption = f"[Screenshot: {rel} — {data.get('source','')} — {data.get('width','')}x{data.get('height','')}]"
+                            state.messages.append(Message.user_with_image(caption, b64, mime))
+                            self._audit(state, "vision_injected", {"path": rel, "bytes": len(raw), "mime": mime, "hash": state.screenshot_hashes[-1] if state.screenshot_hashes else None})
+                            # populate cache for next time
+                            if _vc is not None:
+                                try:
+                                    _vc.set(raw, _w, _h, {"b64": b64, "mime": mime, "caption": caption, "hash": state.screenshot_hashes[-1] if state.screenshot_hashes else h})
+                                except Exception:
+                                    pass
             except Exception:
                 # never break the run on vision failure
                 pass

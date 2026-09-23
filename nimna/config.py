@@ -137,6 +137,10 @@ class Settings:
     sandbox_timeout: int = 20
     sandbox_memory_mb: int = 512
 
+    # infra — Vision Gateway cache + scaling
+    redis_url: str | None = None
+    vision_cache_ttl: int = 600
+
     # server
     host: str = "0.0.0.0"
     port: int = 8000
@@ -186,6 +190,8 @@ class Settings:
             sandbox_image=_env("SANDBOX_IMAGE", "python:3.11-slim") or "python:3.11-slim",
             sandbox_timeout=_env_int("SANDBOX_TIMEOUT", 20),
             sandbox_memory_mb=_env_int("SANDBOX_MEMORY_MB", 512),
+            redis_url=_env("REDIS_URL", None),
+            vision_cache_ttl=_env_int("VISION_CACHE_TTL", 600),
             host=_env("HOST", "0.0.0.0") or "0.0.0.0",
             port=_env_int("PORT", 8000),
             log_level=(_env("LOG_LEVEL", "INFO") or "INFO").upper(),
