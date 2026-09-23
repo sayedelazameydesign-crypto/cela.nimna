@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qdrant
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: qdrant}
+  template:
+    metadata:
+      labels: {app: qdrant}
+    spec:
+      containers:
+      - name: qdrant
+        image: qdrant/qdrant:v1.11.0
+        ports: [{containerPort: 6333, name: http}, {containerPort: 6334, name: grpc}]
+        volumeMounts: [{name: storage, mountPath: /qdrant/storage}]
+        resources: {requests: {memory: "256Mi", cpu: "200m"}, limits: {memory: "1Gi", cpu: "1000m"}}
+        readinessProbe: {httpGet: {path: /healthz, port: http}, initialDelaySeconds: 10, periodSeconds: 10}
+        livenessProbe: {httpGet: {path: /healthz, port: http}, initialDelaySeconds: 20, periodSeconds: 20}
+      volumes:
+      - name: storage
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: qdrant
+spec:
+  selector: {app: qdrant}
+  ports:
+  - {name: http, port: 6333, targetPort: 6333}
+  - {name: grpc, port: 6334, targetPort: 6334}
+---
+# for persistence uncomment PVC:
+# ---
+# apiVersion: v1
+# kind: PersistentVolumeClaim
+# metadata:
+#   name: qdrant-data
+# spec:
+#   accessModes: ["ReadWriteOnce"]
+#   resources: {requests: {storage: 5Gi}}

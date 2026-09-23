@@ -21,6 +21,9 @@ spec:
         - {name: PORT, value: "8000"}
         - {name: REDIS_URL, value: "redis://redis:6379/0"}
         - {name: VISION_CACHE_TTL, value: "600"}
+        - {name: QDRANT_URL, value: "http://qdrant:6333"}
+        - {name: EMBEDDING_MODEL, value: "text-embedding-004"}
+        - {name: EMBEDDING_PROVIDER, value: "auto"}
         - {name: SANDBOX_BACKEND, value: "subprocess"}
         - {name: MODEL_PROVIDER, valueFrom: {secretKeyRef: {name: nimna-secrets, key: MODEL_PROVIDER, optional: true}}}
         - {name: GEMINI_API_KEY, valueFrom: {secretKeyRef: {name: nimna-secrets, key: GEMINI_API_KEY, optional: true}}}

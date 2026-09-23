@@ -1,6 +1,6 @@
 # Nimna — وكيل ذكي قابل لإعادة استخدام المهارات (Reusable-Skills Agent)
 
-> **الحالة: Release Candidate — محصّن وفق نطاق الاختبارات الحالية (77 اختبارًا)**
+> **الحالة: Release Candidate Sprint 2 — Vector Memory (Qdrant + fallback, 768-dim) + 25 أداة — 77 اختبارًا**
 > الاختبارات لا تثبت الأمان المطلق. الحاويات تشترك في **نواة المضيف**؛ أبقِ المضيف وDocker محدثين واستخدم **seccomp/AppArmor/SELinux**. لا تستخدم `subprocess` كعزل أمني، ولا تعتبر `mock` دليل اتصال حقيقي.
 
 وكيل عام يعمل فوق **مفتاح Gemini المجاني** (أو NVIDIA NIM أو أي نموذج OpenAI-compatible) بمكتبة مهارات `SKILL.md` قابلة للتبديل:
@@ -77,6 +77,7 @@ nimna/
 │   ├── sandbox.py       # run_python: subprocess (rlimits) أو docker --network none --cap-drop ALL
 │   └── builtin/         # files, csv, python, web (SSRF), reports, memory, skills, computer
 ├── memory/store.py      # SQLite: sessions/messages/memories/audit_log/pending_runs/approvals (TTL, session-scoped, one-shot)
+├── memory/qdrant.py     # Qdrant + fallback (Sprint 2): user_context / execution_history / code_knowledge, hash embeddings 768-dim
 ├── core/
 │   ├── planner.py       # اختيار مهارات (LLM JSON + fallback لفظي عربي/إنجليزي)
 │   ├── agent.py         # حلقة قابلة للتعليق/الاستئناف + Verifier + كاسر حلقة بصري (hash)
@@ -150,7 +151,7 @@ risk_level: safe
 
 ## الأدوات والصلاحيات
 
-`nimna tools` → 22 أداة:
+`nimna tools` → 25 أداة (22 + 3 vector memory):
 
 - **safe**: قراءة/حساب — تنفذ مباشرة.
 - **confirm/restricted**: تحتاج موافقة (تعليق). `delete_file` دائماً؛ `write_file/report` عند الكتابة فوق موجود؛ `run_python` مع `subprocess`؛ كل أدوات `computer_control`/`code_execution`.
@@ -173,6 +174,13 @@ def send_email(p, ctx: ToolContext): return {"sent": True}
 ---
 
 ## الذاكرة وسجل التدقيق
+
+### Vector Memory — Sprint 2 (Qdrant + fallback)
+- **3 collections**: `user_context` (تفضيلات/أنماط), `execution_history` (سجلات Shell للـ Self-Healing), `code_knowledge` (snippets).
+- **Embeddings**: `text-embedding-004` (Gemini) مع fallback محلي hash 768-dim L2-normalized — يعمل بلا Qdrant/بلا مفتاح.
+- **API**: `POST /api/memory/vector/upsert` + `GET /api/memory/vector/search?q=&collections=&limit=` + `GET /api/memory/vector/health` + `GET /api/health` → `memory:{provider, vector_dim, counts}`.
+- **Tools**: `vector_memory_save` / `vector_memory_search` / `vector_memory_health` — للـ LLM والـ Multi-Agent Swarm القادم.
+- **Infra**: `docker compose --profile infra up -d qdrant` (6333/6334) + `k8s/qdrant.yaml` + `QDRANT_URL=http://qdrant:6333` (انظر `infra/qdrant/README.md`). Fallback = In-Memory Cosine (0 فقدان وظيفة).
 
 - **قصيرة:** رسائل الجلسة (`session_id`) تُمرر تلقائياً (`AGENT_HISTORY_MESSAGES`).
 - **دائمة:** `memory_save/search`؛ نوع `preference` يُحقن في prompt.
@@ -301,6 +309,7 @@ docker compose --profile computer up -d desktop    # سطح مكتب معزول 
 | `AGENT_HISTORY_MESSAGES` | 20 | سياق جلسة |
 | `SANDBOX_BACKEND` | `subprocess` | `docker` أو `subprocess` |
 | `WORKSPACE_DIR`/`SKILLS_DIR`/`DB_PATH` | `workspace`/`skills`/`data/nimna.db` | مسارات |
+| `QDRANT_URL` / `EMBEDDING_*` | — / `text-embedding-004` / `768` / `auto` | ذاكرة متجهية (Sprint 2, fallback تلقائي) |
 | `PORT` | 8000 | منفذ `nimna serve` |
 
 ---
@@ -325,7 +334,7 @@ docker compose --profile computer up -d desktop    # سطح مكتب معزول 
 nimna doctor --offline   # .env, مفاتيح, Docker, صلاحيات, SQLite, مخططات الأدوات
 pytest -q                # 77 اختبار (mock) — بلا شبكة
 nimna skills validate    # صياغة SKILL.md + restricted
-nimna tools              # 22 أداة مع risk
+nimna tools              # 25 أداة مع risk ( +3 vector memory)
 curl -s localhost:8001/api/health | jq
 websocat ws://localhost:8001/ws/test
 ```

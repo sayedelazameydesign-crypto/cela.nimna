@@ -75,10 +75,25 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
         try:
             from security.anomaly import get_detector
             det = get_detector()
-            # expose pattern count only, no sensitive data
             anomaly_info = {"enabled": True, "detector": "heuristics-v1"}
         except Exception:
             anomaly_info = {"enabled": False}
+        memory_info: dict[str, Any] = {}
+        try:
+            from nimna.memory.qdrant import get_vector_memory
+            vm = get_vector_memory()
+            h = vm.health()
+            memory_info = {
+                "enabled": h.get("enabled", True),
+                "provider": h.get("provider"),
+                "qdrant_reachable": h.get("qdrant_reachable"),
+                "vector_dim": h.get("vector_dim"),
+                "embedding_model": h.get("embedding_model"),
+                "embedding_provider": h.get("embedding_provider"),
+                "counts": h.get("counts"),
+            }
+        except Exception as _e:
+            memory_info = {"enabled": False, "error": str(_e)[:200]}
         return {
             "status": "ok",
             **agent.provider.describe(),
@@ -94,6 +109,7 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
             "auto_approve": settings.auto_approve,
             "cache": cache_info,
             "anomaly": anomaly_info,
+            "memory": memory_info,
             "limits": {
                 "max_steps": settings.max_steps,
                 "max_tool_calls": settings.max_tool_calls,
@@ -101,7 +117,7 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
                 "max_response_tokens": settings.max_response_tokens,
             },
             "port": int(__import__("os").getenv("PORT", "8000")),
-            "infra": {"redis_url": bool(settings.redis_url), "vision_cache_ttl": settings.vision_cache_ttl},
+            "infra": {"redis_url": bool(settings.redis_url), "vision_cache_ttl": settings.vision_cache_ttl, "qdrant_url": bool(settings.qdrant_url)},
         }
 
     @app.get("/api/skills")
@@ -176,6 +192,46 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
     @app.delete("/api/memories/{memory_id}")
     def delete_memory(memory_id: int) -> dict[str, Any]:
         return {"deleted": agent.memory.delete_memory(memory_id)}
+
+    # -- vector memory (Sprint 2 — Qdrant + fallback) ----------------------
+    class VectorUpsertRequest(BaseModel):
+        collection: str = Field(..., description="user_context | execution_history | code_knowledge")
+        text: str = Field(..., min_length=1, max_length=8000)
+        tags: Optional[list[str]] = None
+        metadata: Optional[dict[str, Any]] = None
+
+    @app.post("/api/memory/vector/upsert")
+    def vector_upsert(req: VectorUpsertRequest) -> dict[str, Any]:
+        try:
+            from nimna.memory.qdrant import get_vector_memory, COLLECTIONS
+            if req.collection not in COLLECTIONS:
+                raise HTTPException(400, f"unknown collection '{req.collection}'; valid: {list(COLLECTIONS)}")
+            vm = get_vector_memory()
+            rid = vm.upsert(req.collection, req.text, metadata=req.metadata, tags=req.tags)
+            return {"id": rid, "collection": req.collection}
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(500, str(exc))
+
+    @app.get("/api/memory/vector/search")
+    def vector_search(q: str, collections: Optional[str] = None, limit: int = 5) -> dict[str, Any]:
+        try:
+            from nimna.memory.qdrant import get_vector_memory
+            vm = get_vector_memory()
+            cols = [c.strip() for c in collections.split(",")] if collections else None
+            results = vm.search(q, collections=cols, limit=min(limit, 20))
+            return {"query": q, "results": results}
+        except Exception as exc:
+            raise HTTPException(500, str(exc))
+
+    @app.get("/api/memory/vector/health")
+    def vector_health() -> dict[str, Any]:
+        try:
+            from nimna.memory.qdrant import get_vector_memory
+            return get_vector_memory().health()
+        except Exception as exc:
+            raise HTTPException(500, str(exc))
 
     # -- computer control (VNC desktop) ----------------------------------
     @app.get("/api/computer/status")

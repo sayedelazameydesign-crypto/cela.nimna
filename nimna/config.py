@@ -141,6 +141,13 @@ class Settings:
     redis_url: str | None = None
     vision_cache_ttl: int = 600
 
+    # vector memory — Qdrant (Sprint 2)
+    qdrant_url: str | None = None
+    qdrant_api_key: str | None = None
+    embedding_model: str = "text-embedding-004"
+    embedding_dim: int = 768
+    embedding_provider: str = "auto"  # auto | gemini | hash
+
     # server
     host: str = "0.0.0.0"
     port: int = 8000
@@ -192,6 +199,11 @@ class Settings:
             sandbox_memory_mb=_env_int("SANDBOX_MEMORY_MB", 512),
             redis_url=_env("REDIS_URL", None),
             vision_cache_ttl=_env_int("VISION_CACHE_TTL", 600),
+            qdrant_url=_env("QDRANT_URL", None),
+            qdrant_api_key=_env("QDRANT_API_KEY", None),
+            embedding_model=_env("EMBEDDING_MODEL", "text-embedding-004") or "text-embedding-004",
+            embedding_dim=_env_int("EMBEDDING_DIM", 768),
+            embedding_provider=(_env("EMBEDDING_PROVIDER", "auto") or "auto").lower(),
             host=_env("HOST", "0.0.0.0") or "0.0.0.0",
             port=_env_int("PORT", 8000),
             log_level=(_env("LOG_LEVEL", "INFO") or "INFO").upper(),

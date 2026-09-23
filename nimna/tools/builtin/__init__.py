@@ -1,6 +1,6 @@
 """Built-in tool packs. Each module exposes ``register(registry)``."""
 from ..base import ToolRegistry
-from . import computer, csv_tools, files, memory_tools, python_exec, reports, skill_tools, web
+from . import computer, csv_tools, files, memory_tools, python_exec, reports, skill_tools, vector_tools, web
 
 PACKS = {
     "files": files,
@@ -9,6 +9,7 @@ PACKS = {
     "web": web,
     "reports": reports,
     "memory": memory_tools,
+    "vector": vector_tools,
     "skills": skill_tools,
     "computer": computer,
 }

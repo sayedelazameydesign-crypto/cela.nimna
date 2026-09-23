@@ -8,3 +8,5 @@ Pillow>=10.0
 pytest==9.1.1
 redis>=5.0.0  # optional: VisionCache backend (fallback to memory if absent)
 prometheus-client>=0.19  # HPA custom metric active_websockets
+qdrant-client>=1.11.0  # optional: Vector Memory (fallback to in-memory cosine)
+numpy>=1.24  # for vector math (optional, hash embedding works without)
