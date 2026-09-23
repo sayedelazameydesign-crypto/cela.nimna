@@ -146,9 +146,23 @@ class Tool:
     risk: Risk = "safe"
     risk_fn: Optional[RiskFn] = None
     tags: list[str] = field(default_factory=list)
+    #: Wire schema override, sent to the model verbatim (after inlining
+    #: ``$defs``) instead of deriving a schema from ``params_model``.
+    #:
+    #: Needed when the authoritative schema comes from somewhere else — an MCP
+    #: server's ``inputSchema``, which since protocol revision 2026-07-28 may
+    #: use any JSON Schema 2020-12 keyword. Reproducing such a schema through a
+    #: pydantic model would silently change it, so the model stays the *local*
+    #: pre-check while this stays the published contract.
+    parameters: Optional[dict[str, Any]] = None
 
     def spec(self) -> ToolSpec:
-        schema = normalize_json_schema(self.params_model.model_json_schema())
+        if self.parameters is not None:
+            schema = normalize_json_schema(
+                dict(self.parameters), keep_defaults=True
+            )
+        else:
+            schema = normalize_json_schema(self.params_model.model_json_schema())
         return ToolSpec(name=self.name, description=self.description, parameters=schema)
 
     def validate(self, arguments: dict[str, Any]) -> BaseModel:

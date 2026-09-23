@@ -188,6 +188,18 @@ def _assert_public_url(url: str) -> None:
         raise ToolError(f"host '{host}' resolves to private address {blocked[0]} – fetching blocked")
 
 
+def assert_public_url(url: str) -> None:
+    """Public entry point to the SSRF guard.
+
+    Other outbound callers (for example the MCP gateway) must refuse private
+    and loopback destinations the same way — and re-check on every request,
+    because a name that resolved publicly at registration can resolve privately
+    later. Exposed as a named function so those callers depend on a supported
+    entry point instead of reaching for ``_assert_public_url``.
+    """
+    _assert_public_url(url)
+
+
 def register(registry: ToolRegistry) -> None:
     @registry.tool("web_search", "Search the web (DuckDuckGo, no API key) and return titles, URLs and snippets.",
                    SearchParams, tags=["web"])
