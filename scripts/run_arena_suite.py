@@ -675,6 +675,44 @@ def run_task(spec: TaskSpec, mode: str) -> dict[str, Any]:
                 row["checks_passed"] = sum(1 for c in checks if c["ok"])
                 row["score"] = round(100.0 * row["checks_passed"] / row["checks_total"], 1) if checks else None
 
+        # P1-T4: checkpoint the run's terminal outcome. Bounded: exactly one
+        # checkpoint per run; the store lives OUTSIDE the observed workspace so
+        # atomic persistence never perturbs the filesystem evidence.
+        if shell_ev:
+            try:
+                from nimna.execution.recovery import CheckpointStore, RecoveryManager
+                mission = f"arena-{spec.id}"
+                ckpt_dir = Path(tempfile.mkdtemp(prefix=f"arena-{spec.id}-ckpt-"))
+                ckpt_manager = RecoveryManager(CheckpointStore(ckpt_dir))
+                ckpt_manager.register(mission)
+                verdict_v = (row.get("verification") or {}).get("verdict")
+                cp = ckpt_manager.checkpoint(
+                    mission, step_id="verify",
+                    observation_fingerprint=shell_ev["after_root_hash"],
+                    evidence_head=shell_ev["audit_hash"],
+                    authorization_state={"granted": bool(capabilities.get("shell_tool")),
+                                         "expires_at": None},
+                    execution_state={"attempts": [{
+                        "step_id": "run", "action_hash": shell_ev["audit_hash"],
+                        "status": "completed", "verified": verdict_v == "PASS",
+                        "evidence_hash": shell_ev["audit_hash"]}]})
+                if verdict_v == "PASS":
+                    ckpt_manager.complete(mission, "deterministic verifier PASS")
+                elif verdict_v == "FAIL":
+                    ckpt_manager.fail(mission, "deterministic verifier FAIL")
+                # else: INCONCLUSIVE / no verify spec ⇒ stays CHECKPOINTED —
+                # diagnosable, never claimed complete without a PASS verdict.
+                row["recovery"] = {
+                    "state": ckpt_manager.state(mission).value,
+                    "checkpoint_id": cp.checkpoint_id,
+                    "state_version": cp.state_version,
+                    "evidence_head": cp.evidence_head,
+                    "observation_fingerprint": cp.observation_fingerprint,
+                }
+            except Exception as exc:
+                row["recovery"] = {"state": "RECOVERY_ERROR",
+                                   "error": f"{exc.__class__.__name__}: {str(exc)[:120]}"}
+
         if mode == "mock":
             row["verdict"] = "MOCKED"  # never PASS: the pipeline was exercised, not the quality
             row["status_detail"] = "mock provider run — deterministic checks only"
@@ -758,6 +796,9 @@ def run_suite(tasks: list[TaskSpec], mode: str, *, ledger_path: Path | None = DE
             "verifier_pass": sum(1 for r in rows if (r.get("verification") or {}).get("verdict") == "PASS"),
             "verifier_fail": sum(1 for r in rows if (r.get("verification") or {}).get("verdict") == "FAIL"),
             "verifier_inconclusive": sum(1 for r in rows if (r.get("verification") or {}).get("verdict") == "INCONCLUSIVE"),
+            "checkpoint_completed": sum(1 for r in rows if (r.get("recovery") or {}).get("state") == "COMPLETED"),
+            "checkpoint_failed": sum(1 for r in rows if (r.get("recovery") or {}).get("state") == "FAILED"),
+            "checkpoint_diagnosable": sum(1 for r in rows if (r.get("recovery") or {}).get("state") == "CHECKPOINTED"),
         },
         "regressions": regressions,
     }
@@ -812,6 +853,9 @@ def render_markdown(report: dict[str, Any]) -> str:
                 f"fs: Δ{fs['delta_changes']} {str(fs['before_root_hash'])[7:19]}→{str(fs['after_root_hash'])[7:19]}"
                 f" ev:{str(fs['audit_hash'])[7:23]}"
             )
+        rec = row.get("recovery")
+        if rec:
+            notes.append(f"ckpt {rec['state']}:{str(rec.get('checkpoint_id', ''))[5:17]}")
         if row.get("previous_score") is not None and row.get("score") is not None:
             delta = round(row["score"] - row["previous_score"], 1)
             notes.append(f"prev {row['previous_score']} ({'+' if delta >= 0 else ''}{delta})")
@@ -844,6 +888,12 @@ def render_markdown(report: dict[str, Any]) -> str:
         lines += [
             f"**Verifier (P1-T3, deterministic — no LLM):** PASS `{summary.get('verifier_pass', 0)}` · "
             f"FAIL `{summary.get('verifier_fail', 0)}` · INCONCLUSIVE `{summary.get('verifier_inconclusive', 0)}`",
+            "",
+        ]
+    if any(r.get("recovery") for r in report["rows"]):
+        lines += [
+            f"**Checkpoint (P1-T4, atomic store):** COMPLETED `{summary.get('checkpoint_completed', 0)}` · "
+            f"FAILED `{summary.get('checkpoint_failed', 0)}` · diagnosable CHECKPOINTED `{summary.get('checkpoint_diagnosable', 0)}`",
             "",
         ]
     if report["regressions"]:

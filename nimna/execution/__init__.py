@@ -12,9 +12,24 @@ from .observation import (
     WorkspaceObserver,
 )
 from .verification import CheckResult, DeterministicVerifier, SpecError, Verdict, VerificationReport
+from .recovery import (
+    Checkpoint,
+    CheckpointStore,
+    CorruptedCheckpoint,
+    IllegalTransition,
+    MissingCheckpoint,
+    RecoveryAction,
+    RecoveryManager,
+    RecoveryState,
+    RecoveryOutcome,
+    UnknownMission,
+)
 
 __all__ = [
     "Change", "ChangeKind", "FileEntry", "FilesystemDelta",
     "ObservationScope", "ScopeError", "Snapshot", "WorkspaceObserver",
     "CheckResult", "DeterministicVerifier", "SpecError", "Verdict", "VerificationReport",
+    "Checkpoint", "CheckpointStore", "CorruptedCheckpoint", "IllegalTransition",
+    "MissingCheckpoint", "RecoveryAction", "RecoveryManager", "RecoveryState",
+    "RecoveryOutcome", "UnknownMission",
 ]

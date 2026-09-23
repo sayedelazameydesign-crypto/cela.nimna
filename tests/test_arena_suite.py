@@ -278,3 +278,63 @@ def test_repo_version_from_env_or_git(monkeypatch):
 def yaml_dump(data: dict) -> str:
     import yaml
     return yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
+
+
+SHELL_TASK = {
+    "id": "demo-shell-check",
+    "category": "coding",
+    "prompt": "create out/result.txt via the shell and verify it",
+    "requires": ["shell_tool"],
+    "allowed_tools": ["write_file", "run_command"],
+    "mock_skills": ["shell_execution"],
+    "mock_script": [
+        {"tool": "run_command",
+         "arguments": {"command": "mkdir -p out && printf 'FizzBuzz' > out/result.txt",
+                       "purpose": "create the artifact for real"}},
+    ],
+    "mock_final": "created out/result.txt via run_command",
+    "expected_artifacts": [{"path": "out/result.txt", "contains": "FizzBuzz"}],
+    "verify": [
+        {"kind": "file_exists", "path": "out/result.txt"},
+        {"kind": "content_matches", "path": "out/result.txt", "contains": "FizzBuzz"},
+        {"kind": "exit_code", "equals": 0},
+    ],
+}
+
+
+def test_checkpoint_wiring_records_terminal_state_with_evidence(tmp_path: Path, monkeypatch):
+    """P1-T4: every shell-executing run gets exactly one atomic checkpoint whose
+    evidence head is the audit chain hash and whose fingerprint is the observed
+    after-root-hash. Verifier PASS ⇒ COMPLETED (CHECKPOINT → FAILURE? NO)."""
+    monkeypatch.setenv("SHELL_TOOL_ENABLED", "1")
+    spec = rs.TaskSpec.from_dict(dict(SHELL_TASK), source="inline")
+    report = rs.run_suite([spec], "mock", ledger_path=None)
+    row = report["rows"][0]
+    assert row["verification"]["verdict"] == "PASS"
+    rec = row["recovery"]
+    assert rec["state"] == "COMPLETED"
+    assert rec["checkpoint_id"].startswith("ckpt_") and len(rec["checkpoint_id"]) == 29
+    assert rec["state_version"] == 1
+    # evidence chain: checkpoint head == fs evidence audit hash, fingerprint == after root hash
+    assert rec["evidence_head"] == row["fs_evidence"]["audit_hash"]
+    assert rec["observation_fingerprint"] == row["fs_evidence"]["after_root_hash"]
+    assert report["summary"]["checkpoint_completed"] == 1
+    assert report["summary"]["checkpoint_failed"] == 0
+
+
+def test_checkpoint_fail_path_and_markdown_lines(tmp_path: Path, monkeypatch):
+    """Verifier FAIL ⇒ mission FAILED in the checkpoint store (never silently
+    completed), and the markdown carries the Checkpoint summary line."""
+    monkeypatch.setenv("SHELL_TOOL_ENABLED", "1")
+    spec = rs.TaskSpec.from_dict({**SHELL_TASK,
+                                  "verify": [{"kind": "file_exists", "path": "out/never.txt"}]},
+                                 source="inline")
+    report = rs.run_suite([spec], "mock", ledger_path=None)
+    row = report["rows"][0]
+    assert row["verification"]["verdict"] == "FAIL"
+    assert row["recovery"]["state"] == "FAILED"
+    assert report["summary"]["checkpoint_failed"] == 1
+    assert report["summary"]["checkpoint_completed"] == 0
+    markdown = rs.render_markdown(report)
+    assert "**Checkpoint (P1-T4, atomic store):**" in markdown
+    assert "ckpt FAILED:" in markdown

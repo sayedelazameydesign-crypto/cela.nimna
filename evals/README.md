@@ -71,6 +71,15 @@ python scripts/run_arena_suite.py --mode mock --strict
 | `recovered` | مهمة اصطدمت بفشل ثم أكملت بفحوص 100% (مثل `code-05`) |
 | `mean_wall_ms` | متوسط زمن الجدار للمهام |
 
+**Baseline v5 (P1-T1..T3 + P1-T4 Checkpoint/Recovery، وضع mock، `SHELL_TOOL_ENABLED=1`):**
+9 ran / 2 skipped / 0 error / mean 55.6 · **Verifier: PASS 2 · FAIL 0 · INCONCLUSIVE 0** ·
+**Checkpoint: COMPLETED 2 · FAILED 0 · diagnosable 0** — كل صف shell يحمل
+`ckpt STATE:id`، والـ checkpoint مرتبط بـ evidence head (هاش سلسلة الـ audit) +
+fingerprint (after-root-hash): code-01 `ckpt COMPLETED` (fp `sha256:c9425def3b7f…`)
+وcode-05 `ckpt COMPLETED` (fp `sha256:02f57fc9b5e6…`). المخزن ذرّي وخارج مساحة
+العمل المُراقبة — البصمات before/after مطابقة لـ v4 (لا انحراف). راجع
+`ledger/BASELINE-mock.md` و`BASELINE-mock.json`.
+
 **Baseline v4 (P1-T1 Shell + P1-T2 Observation + P1-T3 Verifier، وضع mock، `SHELL_TOOL_ENABLED=1`):**
 9 ran / 2 skipped / 0 error / mean 55.6 · **Verifier (حتمي): PASS 2 · FAIL 0 ·
 INCONCLUSIVE 0** — code-01 **6/6** (وجود الملف + المحتوى + exit 0 + مشاهدة الدلتا +

@@ -391,6 +391,43 @@ Evidence لا claim، Recovery bounded) ونضيف طبقة واحدة جديد�
 > - الاختبارات: `tests/test_verification.py` (18) + اختبارات تكامل العدّاء (2) =
 >   **184 passed**.
 
+### P1-T4 — Checkpoint/Recovery → **منفَّذة كـ Primitive مستقلة** ✅
+
+> **✅ الحالة: نُفِّذت** — Checkpoint مستقل (ليس ShellResult إضافياً) + آلة حالات
+> صريحة + استئناف ببوابات evidence بالترتيب. لا Browser/MCP/Multi-Agent/LLM
+> Recovery/Self-Modification هنا.
+
+- **`nimna/execution/recovery.py`:** `Checkpoint` (checkpoint_id `ckpt_`+hex24,
+  mission_id, step_id, state_version, created_at, plan_state, authorization_state,
+  execution_state, observation_fingerprint, evidence_head, resumable) +
+  `CheckpointStore` + `RecoveryManager` + `RecoveryState`/`RecoveryAction`.
+- **Persistence ذرّي:** build → validate → persist → fsync → acknowledge؛ الملف
+  يُكتب tmp ثم `os.replace` + fsync للمجلد؛ envelope يحمل `payload_sha256` —
+  ملف مبتور أو معدَّل = `CorruptedCheckpoint` (لا يُستخدم للاستئناف أبداً)؛
+  ملفات tmp الناقصة ياخترها الـ store بلا اعتبار؛ checkpoint غير صالح لا يُكتب أصلاً.
+- **آلة الحالات:** RUNNING/CHECKPOINTED/FAILED/RECOVERING/RESUMED/COMPLETED/ABORTED
+  مع `LEGAL_TRANSITIONS` — FAILED→RECOVERING→RESUMED نعم؛ COMPLETED/ABORTED نهائيتان
+  (لا RESUMED منهما إلا بإعادة تشغيل صريحة خلف `allow_replay` تحديداً إلى RECOVERING)؛
+  CHECKPOINTED→CHECKPOINTED (لقطة أحدث تلغي الأقدم) وCHECKPOINTED→COMPLETED
+  (مسار النجاح في حلقة المالك: CHECKPOINT → FAILURE? NO → COMPLETE).
+- **بوابات الاستئناف بالترتيب (9):** تحميل (لا checkpoint = رفض "crash قبل
+  checkpoint لا يُدَّعى"، تلف = RECOVERY_ERROR) → تبنٍّ بعد crash → شرعية الانتقال →
+  `resumable` → **kill-switch** → **authorization** (granted=false / منتهية /
+  مشوّهة = رفض) → **evidence chain** (evidence_head مختلف = رفض) →
+  **fingerprint** (تغيّر العالم = REQUIRES_REOBSERVATION ثم
+  `confirm_reobservation`؛ رفض إعادة المشاهدة = FAILED) → **idempotency ledger**
+  (attempt مكتمل+مُتحقق = skip، غير مكتمل = recheck) — لا "أظن أن الخطوة نجحت".
+- **Arena:** كل تشغيل shell يحصل على checkpoint واحد ذرّي (المخزن **خارج** مساحة
+  العمل المُراقبة فلا يفسد الـ evidence): Verifier PASS ⇒ COMPLETED، FAIL ⇒
+  FAILED، INCONCLUSIVE ⇒ CHECKPOINTED قابل للتشخيص (لا يُدَّعى مكتمل). التقرير
+  يعرض **ckpt STATE:id** لكل صف وسطر
+  **Checkpoint (P1-T4, atomic store): COMPLETED/FAILED/diagnosable** في الملخص.
+- **الحَكَم الطفري 6/6:** تجاهل حالة checkpoint (1) — إعادة تنفيذ خطوة مكتملة (1)
+  — قبول stale (1) — قبول تالف (1) — قبول عدم تطابق evidence (1) — استئناف رغم
+  authorization=false (1): كلها تكسر الاختبارات.
+- الاختبارات: `tests/test_recovery.py` (17) + اختبارا تكامل العدّاء (2) =
+  **203 passed**.
+
 ### P1-T3 — Git آمن
 - `git_tool.py`: `git_status/git_diff/git_add/git_commit/git_log` فقط — registry-level deny لأي subcommand آخر (لا push/remote/reset/clean)، هوية commit من env مُعلن، رسالة commit تُسجل في audit.
 - **Evidence:** اختبار deny شامل + اختبار دورة commit محلية داخل workspace + صف مصفوفة.
