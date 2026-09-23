@@ -32,8 +32,9 @@
 6. [تبديل المزود: Gemini / NVIDIA / غيرهما](#تبديل-المزود)
 7. [واجهة REST](#واجهة-rest)
 8. [Docker](#docker)
-9. [الإعدادات](#الإعدادات)
-10. [الأمان وحدود التصميم](#الأمان-وحدود-التصميم)
+9. [لوحة التحكم والكمبيوتر الحقيقي](#لوحة-التحكم-والكمبيوتر-الحقيقي)
+10. [الإعدادات](#الإعدادات)
+11. [الأمان وحدود التصميم](#الأمان-وحدود-التصميم)
 
 ---
 
@@ -138,20 +139,25 @@ allowed_tools: [list_files, read_csv, calculate_statistics, create_chart, read_s
 
 ### المهارات المضمّنة
 
-| المهارة | الغرض | الأدوات |
-|---|---|---|
-| `csv_analysis` | فحص CSV، إحصاءات، تجميع، رسم بياني | read_csv, calculate_statistics, create_chart |
-| `report_writer` | تقرير Markdown منظم في `reports/` | write_report |
-| `web_research` | بحث (DuckDuckGo بلا مفتاح) + قراءة صفحات + مصادر | web_search, fetch_url |
-| `python_executor` | تشغيل سكربتات قصيرة في بيئة معزولة | run_python |
-| `file_analysis` | استعراض وقراءة وتلخيص الملفات النصية | list_files, read_file, file_info |
-| `skill_author` | تأليف مهارة جديدة بصيغة SKILL.md | write_file, list_skills |
+| المهارة | الغرض | الأدوات | المستوى |
+|---|---|---|---|
+| `csv_analysis` | فحص CSV، إحصاءات، تجميع، رسم بياني | read_csv, calculate_statistics, create_chart | safe |
+| `report_writer` | تقرير Markdown منظم في `reports/` | write_report | safe/confirm |
+| `web_research` | بحث (DuckDuckGo بلا مفتاح) + قراءة صفحات + مصادر | web_search, fetch_url | safe |
+| `python_executor` | تشغيل سكربتات قصيرة في بيئة معزولة | run_python | safe/confirm |
+| `file_analysis` | استعراض وقراءة وتلخيص الملفات النصية | list_files, read_file, file_info | safe |
+| `skill_author` | تأليف مهارة جديدة بصيغة SKILL.md | write_file, list_skills | safe |
+| `computer_control` | **التحكم في سطح مكتب معزول (VNC)** — تصفح، نقر، كتابة، أوامر | take_screenshot, mouse_click, type_text, shell_execute | **restricted** |
 
 ---
 
 ## الأدوات والصلاحيات
 
-`nimna tools list` يعرض 17 أداة مع مستوى الخطورة:
+`nimna tools list` يعرض 21 أداة (17 سابقًا + 4 للكمبيوتر) مع مستوى الخطورة:
+
+> **جديد: 4 أدوات للكمبيوتر** — `take_screenshot` (safe) و`mouse_click`/`type_text`/`shell_execute` (confirm/restricted) — تعمل عبر حاوية VNC معزولة، مع موافقة بصرية بنقطة حمراء في Mirror View.
+
+`nimna tools list` التفصيلي:
 
 - **safe**: قراءة/حساب فقط، تُنفذ مباشرة.
 - **confirm**: تحتاج موافقة (`delete_file` دائمًا؛ `write_file`/`write_report` عند الكتابة فوق ملف موجود؛ `run_python` عندما يكون الـ sandbox من نوع subprocess).
@@ -266,6 +272,52 @@ docker compose --profile local-sandbox up --build   # يشغل nimna-sandbox م�
 - **تحذير صريح:** تركيب `/var/run/docker.sock` يمنح الحاوية تحكمًا شبه كامل بالمضيف (يمكنها إنشاء حاويات بصلاحيات عالية، حتى لو بوضع القراءة فقط) ويلغي عزل الـ sandbox — الوصول إلى الـ socket يعادل عمليًا صلاحيات واسعة جدًا على المضيف، وحتى التركيب بوضع القراءة فقط ليس عزلًا كافيًا. لذلك **الخدمة الافتراضية `nimna` لا تركّب الـ socket** وتعمل بـ `SANDBOX_BACKEND=subprocess` (يطلب موافقة). `local-sandbox` **خيار تطوير واضح فقط** — يجب ألا يكون متاحًا في أمر نشر اعتيادي أو CI غير موثوق. استخدم الخدمة `nimna-sandbox` ذات الـ profile فقط للتطوير المحلي على جهاز لا يحتوي بيانات حساسة، أو شغّل Nimna خارج Docker واجعل `run_python` يستخدم Docker Engine، أو استخدم proxy محدود الصلاحيات / Podman / خدمة sandbox منفصلة — انظر `SECURITY.md` و`docker-compose.yml`.
 - عند استخدام الـ profile، يعمل `run_python` داخل `python:3.11-slim` بلا شبكة (`--network none`)، بحدود ذاكرة/CPU/عمليات، وكل الصلاحيات محذوفة (`--cap-drop ALL` + `--security-opt no-new-privileges`)، ويصبح مصنفًا **safe** (لا يحتاج موافقة).
 - **الإنتاج الموصى به:** استخدم **Docker rootless** أو **Podman** مع مستخدم غير `root`، وحدود CPU والذاكرة، و`cap-drop=ALL` و`no-new-privileges` وملف **seccomp** أو **AppArmor/SELinux** مناسب. وضع rootless يقلل أثر اختراق الحاوية مقارنةً بـ Docker daemon يعمل بصلاحيات root.
+
+### تشغيل سطح المكتب المعزول
+```bash
+docker compose --profile computer up -d desktop
+# افتح http://localhost:6901  (كلمة المرور: nimna)
+# أو شاهد Mirror View في لوحة Nimna على http://localhost:8000
+nimna ask "التقط صورة للشاشة وأخبرني ماذا ترى"
+```
+
+---
+
+## لوحة التحكم والكمبيوتر الحقيقي
+
+> تحويل Nimna من “شات بوت” إلى **موظف رقمي** تراه يعمل أمامك — يلاحظ → يخطط → ينفذ → يتحقق بصريًا.
+
+### 1) مهارة `computer_control` (مستوى `restricted`)
+- **البنية:** حاوية Docker معزولة `dorowu/ubuntu-desktop-lxde-vnc:focal` (Ubuntu + LXDE + VNC + noVNC) — لا تلمس مضيفك أبدًا.
+- **الأدوات:** `take_screenshot` (آمن، يلتقط PNG ويحفظه في `workspace/.screenshots/` ويعيده base64 لبوابة الرؤية)، `mouse_click(x,y)`، `type_text(text, submit)`، `shell_execute(command)` — الثلاثة الأخيرة تتطلب موافقة بصرية (نقطة حمراء + زر موافقة/رفض فوق Mirror View).
+- **الحلقة:** `take_screenshot` → يحلل الصورة (Gemini vision) → يحدد إحداثيات الزر → `mouse_click` (بموافقة) → `take_screenshot` للتحقق → يكرر. كل خطوة مسجلة في `audit_log`.
+
+```markdown
+---
+name: computer_control
+risk_level: restricted
+allowed_tools: [take_screenshot, mouse_click, type_text, shell_execute]
+---
+لاحظ → خطط (جملة واحدة + إحداثيات) → نفّذ أداة واحدة → تحقق بلقطة جديدة
+```
+
+### 2) لوحة التحكم — Agent Dashboard (غير ممل)
+- **سلسلة الأفكار القابلة للطي:** بطاقات `🧭 الخطة المقترحة` و`🔗 سلسلة التنفيذ` و`سبب اختيار المهارات` — بدلاً من إخفاء التفكير، اعرضه مع نبض (Pulse) بجانب الأداة النشطة (“🌐 جاري البحث…”).
+- **مؤشرات حية:** WebSocket (`/ws/{session_id}`) يبث حالة “يفكر…”، “يختار المهارة…”، “ينفذ الأداة…” دون تحديث الصفحة.
+- **Mirror View (المرآة):** نافذة بث حي لسطح المكتب (noVNC iframe أو صورة لقطة) في يمين الشاشة. عند `mouse_click` تظهر نقطة حمراء متوهجة في الإحداثيات المطلوبة قبل التنفيذ.
+- **النتائج الغنية:** تقارير Markdown تُصيّر بجداول تفاعلية ورسوم `Chart.js` مباشرة، مع معاينة الملفات في **مستعرض ملفات** جانبي (`/api/workspace/files`).
+- **الموافقة البصرية:** بدلاً من نص فقط، ترى أثر الأداة على الشاشة وتوافق بـ [موافقة/رفض/دائمة] فوق الصورة.
+
+### 3) بوابة الرؤية (Vision Gateway)
+- `GeminiProvider` الآن يدعم `images: [{data: base64, mime_type}]` — تُحول إلى `Part.from_bytes` (Gemini) أو `image_url` (OpenAI-compatible). بعد كل `take_screenshot` يحقن الوكيل تلقائيًا صورة اللقطة كرسالة `user_with_image` ليحللها النموذج بصريًا في الدور التالي.
+- تفعيل: `COMPUTER_ENABLED=true` + `docker compose --profile computer up -d desktop` — في الوضع المحاكي (بدون الحاوية) يعيد الوكيل صورة مولدة بـ Pillow مع شبكة إحداثيات للاختبار.
+
+### 4) كيف تنفذ تقنيًا
+- **الواجهة:** `nimna/api/static/index.html` أصبحت لوحة تحكم بثلاثة أعمدة (مهارات/محادثة مع بطاقات قابلة للطي/مرآة+ملفات) مع `WebSocket` + `marked` + `Chart.js`، مع الحفاظ على REST كسقوط احتياطي.
+- **الخلفية:** `POST /api/chat` كما كان، plus `GET /api/computer/status`, `GET /api/computer/screenshot`, `GET /api/workspace/files`, `WebSocket /ws/{session_id}`.
+- **خريطة التطوير:** 1) حاوية VNC → 2) مهارة `computer_control` → 3) واجهة المرآة وبطاقات التفكير → 4) الموافقة البصرية.
+
+> جرب: `nimna ask "افتح المتصفح في الكمبيوتر وابحث عن الطقس"` — سترى الوكيل يلتقط صورة، يخطط، يطلب موافقتك بنقطة حمراء، ثم يتأكد بلقطة جديدة.
 
 ---
 

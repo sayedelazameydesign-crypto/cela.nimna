@@ -18,7 +18,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
@@ -146,6 +146,125 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
     @app.delete("/api/memories/{memory_id}")
     def delete_memory(memory_id: int) -> dict[str, Any]:
         return {"deleted": agent.memory.delete_memory(memory_id)}
+
+    # -- computer control (VNC desktop) ----------------------------------
+    @app.get("/api/computer/status")
+    def computer_status() -> dict[str, Any]:
+        import os, pathlib
+        enabled = os.getenv("COMPUTER_ENABLED", "").lower() in {"1","true","yes","on"}
+        vnc_host = os.getenv("COMPUTER_VNC_HOST") or os.getenv("DESKTOP_VNC_URL") or ""
+        # check latest screenshot
+        latest = None
+        try:
+            ws = pathlib.Path(settings.workspace_dir)
+            latest_file = ws / ".screenshots" / "_latest.json"
+            if latest_file.is_file():
+                import json
+                latest = json.loads(latest_file.read_text(encoding="utf-8"))
+        except Exception:
+            latest = None
+        # check if desktop container is reachable (best-effort)
+        desktop_reachable = False
+        try:
+            import httpx
+            # try noVNC URL
+            for url in [os.getenv("DESKTOP_VNC_URL", ""), "http://localhost:6901", "http://desktop:6901"]:
+                if not url:
+                    continue
+                try:
+                    r = httpx.get(url, timeout=1.0)
+                    if r.status_code < 500:
+                        desktop_reachable = True
+                        break
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return {
+            "enabled": enabled or bool(vnc_host),
+            "vnc_url": vnc_host or "http://localhost:6901",
+            "desktop_reachable": desktop_reachable,
+            "latest_screenshot": latest,
+            "skill_available": "computer_control" in agent.skills.names(),
+            "tools": [x for x in agent.tools.describe() if x["name"] in {"take_screenshot","mouse_click","type_text","shell_execute"}],
+        }
+
+    @app.get("/api/computer/screenshot")
+    def computer_screenshot() -> dict[str, Any]:
+        import pathlib, base64, json
+        ws = pathlib.Path(settings.workspace_dir)
+        candidates = sorted((ws / ".screenshots").glob("screenshot-*.png"), reverse=True) if (ws / ".screenshots").exists() else []
+        if not candidates:
+            raise HTTPException(404, "no screenshots yet — call take_screenshot first or enable computer profile")
+        latest = candidates[0]
+        try:
+            data = latest.read_bytes()
+            b64 = base64.b64encode(data).decode("ascii")
+            return {"path": f".screenshots/{latest.name}", "bytes": len(data), "image_b64": b64, "mime": "image/png"}
+        except Exception as exc:
+            raise HTTPException(500, str(exc))
+
+    @app.get("/api/workspace/files")
+    def workspace_files(path: str = ".", pattern: str = "*", limit: int = 100) -> dict[str, Any]:
+        import fnmatch, pathlib
+        ws = pathlib.Path(settings.workspace_dir)
+        root = (ws / path).resolve()
+        try:
+            root.relative_to(ws.resolve())
+        except ValueError:
+            raise HTTPException(403, "outside workspace")
+        if not root.exists():
+            raise HTTPException(404, f"not found: {path}")
+        entries = []
+        it = root.rglob("*") if pattern == "**" else root.iterdir()
+        for e in sorted(it)[:limit]:
+            try:
+                e.relative_to(ws.resolve())
+            except ValueError:
+                continue
+            entries.append({"name": e.name, "path": str(e.relative_to(ws)), "is_dir": e.is_dir(), "size": e.stat().st_size if e.is_file() else 0})
+        return {"path": path, "entries": entries}
+
+    # -- websocket (live dashboard) --------------------------------------
+    @app.websocket("/ws/{session_id}")
+    async def ws_dashboard(websocket: WebSocket, session_id: str):
+        await websocket.accept()
+        try:
+            await websocket.send_json({"type": "hello", "session_id": session_id, "provider": agent.provider.describe()})
+            while True:
+                data = await websocket.receive_json()
+                # expected {message: str, session_id?: str}
+                msg = (data.get("message") or "").strip()
+                if not msg:
+                    await websocket.send_json({"type": "error", "detail": "empty message"})
+                    continue
+                sid = data.get("session_id") or session_id
+                # run agent in threadpool to avoid blocking
+                from fastapi.concurrency import run_in_threadpool
+                # notify live status
+                await websocket.send_json({"type": "status", "status": "thinking", "message": "يفكر..."})
+                try:
+                    result = await run_in_threadpool(agent.run, msg, sid)
+                except Exception as exc:
+                    await websocket.send_json({"type": "error", "detail": str(exc)})
+                    continue
+                # send result as JSON (AgentResult is pydantic)
+                try:
+                    payload = result.model_dump(mode="json")
+                except Exception:
+                    payload = {"reply": str(result), "status": "done"}
+                await websocket.send_json({"type": "result", "result": payload})
+                # if awaiting approval, also send pending card
+                if payload.get("status") == "awaiting_approval":
+                    await websocket.send_json({"type": "approval", "pending": payload.get("pending")})
+        except WebSocketDisconnect:
+            pass
+        except Exception as exc:
+            try:
+                await websocket.send_json({"type": "error", "detail": str(exc)})
+            except Exception:
+                pass
+            await websocket.close()
 
     return app
 

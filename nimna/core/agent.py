@@ -447,6 +447,37 @@ class Agent:
                                                result_preview=result[:300]))
         self._audit(state, "tool_result", {"tool": tool.name, "ok": ok, "duration_ms": duration_ms,
                                            "preview": result[:300]})
+        # Vision gateway: after a successful screenshot, inject the image so the
+        # next model turn sees the desktop (observe → plan → act loop).
+        if tool.name == "take_screenshot" and ok:
+            try:
+                import base64, json
+                data = json.loads(result) if result else {}
+                # the tool returns {"path": " .screenshots/...", ...} — path is display_path
+                rel = data.get("path") or ""
+                # resolve inside workspace
+                if rel:
+                    # display_path is relative like ".screenshots/xxx.png" or "reports/..."
+                    p = (ctx.workspace / rel).resolve()
+                    # ensure still inside workspace
+                    try:
+                        p.relative_to(ctx.workspace.resolve())
+                    except ValueError:
+                        p = None
+                    if p and p.is_file():
+                        raw = p.read_bytes()
+                        # limit to 1.5MB for model (downscale if needed — here just truncate)
+                        if len(raw) > 1_500_000:
+                            raw = raw[:1_500_000]
+                        b64 = base64.b64encode(raw).decode("ascii")
+                        mime = "image/jpeg" if p.suffix.lower() in {".jpg", ".jpeg"} else "image/png"
+                        # inject as a user message with image + caption
+                        caption = f"[Screenshot: {rel} — {data.get('source','')} — {data.get('width','')}x{data.get('height','')}]"
+                        state.messages.append(Message.user_with_image(caption, b64, mime))
+                        self._audit(state, "vision_injected", {"path": rel, "bytes": len(raw), "mime": mime})
+            except Exception:
+                # never break the run on vision failure
+                pass
 
     def _record_tool_error(self, state: RunState, call: ToolCall, message: str) -> None:
         payload = serialize_result({"error": message})

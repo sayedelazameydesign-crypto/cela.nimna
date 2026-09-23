@@ -39,5 +39,28 @@ services:
       - nimna-data:/app/data
       - /var/run/docker.sock:/var/run/docker.sock
 
+  # ── Isolated desktop for Computer Control (VNC + noVNC) ────────────────
+  # Provides an Ubuntu LXDE desktop that Nimna can see and click.
+  # Isolated from the host — only workspace is shared.
+  #   docker compose --profile computer up -d desktop
+  #   open http://localhost:6901  (password: nimna, if set)
+  # Nimna's Mirror View will show the same desktop via noVNC.
+  desktop:
+    image: dorowu/ubuntu-desktop-lxde-vnc:focal
+    ports:
+      - "6901:80"
+    environment:
+      - RESOLUTION=1280x800
+      - VNC_PASSWORD=nimna
+      - LANGUAGE=ar
+    volumes:
+      - ./workspace:/home/ubuntu/workspace:rw
+      - desktop-home:/home/ubuntu
+    shm_size: 1gb
+    profiles: ["computer"]
+    restart: unless-stopped
+    # no need for privileged; keep it isolated
+
 volumes:
   nimna-data:
+  desktop-home:

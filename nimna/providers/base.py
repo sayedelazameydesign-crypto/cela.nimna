@@ -38,6 +38,9 @@ class Message(BaseModel):
     # provider specific payload for faithful replay (e.g. Gemini `Content`
     # including thought signatures). JSON serialisable.
     raw: Optional[dict[str, Any]] = None
+    # Vision gateway — base64 images attached to this turn (Gemini/OpenAI multimodal).
+    # Each entry: {"data": "<base64>", "mime_type": "image/png"}
+    images: list[dict[str, str]] = Field(default_factory=list)
 
     @classmethod
     def system(cls, content: str) -> "Message":
@@ -46,6 +49,10 @@ class Message(BaseModel):
     @classmethod
     def user(cls, content: str) -> "Message":
         return cls(role="user", content=content)
+
+    @classmethod
+    def user_with_image(cls, content: str, image_b64: str, mime_type: str = "image/png") -> "Message":
+        return cls(role="user", content=content, images=[{"data": image_b64, "mime_type": mime_type}])
 
     @classmethod
     def assistant(cls, content: str = "", tool_calls: Optional[list[ToolCall]] = None,

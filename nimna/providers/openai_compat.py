@@ -59,6 +59,20 @@ class OpenAICompatibleProvider(ModelProvider):
     # -- conversion ------------------------------------------------------
     @staticmethod
     def _to_wire(msg: Message) -> dict[str, Any]:
+        # Vision gateway: if images are attached, encode as OpenAI image_url parts
+        if getattr(msg, "images", None):
+            parts: list[dict[str, Any]] = []
+            if msg.content:
+                parts.append({"type": "text", "text": msg.content})
+            for img in msg.images or []:
+                b64 = img.get("data", "")
+                mime = img.get("mime_type", "image/png")
+                # data URL
+                url = f"data:{mime};base64,{b64}"
+                parts.append({"type": "image_url", "image_url": {"url": url}})
+            if msg.role == "tool":
+                return {"role": "tool", "tool_call_id": msg.tool_call_id, "content": parts if parts else msg.content}
+            return {"role": msg.role, "content": parts}
         if msg.role == "tool":
             return {"role": "tool", "tool_call_id": msg.tool_call_id, "content": msg.content}
         if msg.role == "assistant":

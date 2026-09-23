@@ -50,6 +50,13 @@ within 72 hours and to ship a fix within 14 days.
 - An optional service `nimna-sandbox` with `profiles: ["local-sandbox"]` mounts the socket and sets `SANDBOX_BACKEND=docker`. **Mounting the socket grants the container near-host control (can create arbitrary privileged containers) and is equivalent to very broad host privileges — even read-only mount is not sufficient isolation.** It is a **development-only** option and **must not** be available in a normal deployment or untrusted CI. Never use `--profile local-sandbox` on a machine with sensitive data.
 - Alternatives: run Nimna outside Docker and let `run_python` use the host's Docker Engine, or use a least-privilege socket proxy / Podman / separate sandbox service.
 
+## Computer control — isolated desktop (VNC)
+- **Isolation:** `docker compose --profile computer up -d desktop` runs an Ubuntu LXDE desktop (`dorowu/ubuntu-desktop-lxde-vnc:focal`, 1280x800, noVNC on `:6901`) isolated from the host. Only `workspace` is shared (`/home/ubuntu/workspace`). Never runs on the host directly.
+- **Tools:** `take_screenshot` is `safe` (read-only, saves to `workspace/.screenshots/` and feeds Vision Gateway); `mouse_click`, `type_text`, `shell_execute` are `confirm` and `restricted` — each suspends the run and requires visual approval with a red dot on the Mirror View.
+- **Vision Gateway:** After each `take_screenshot`, the agent injects the image as `Message.user_with_image` (base64, `image/png`) so Gemini (`Part.from_bytes`) or OpenAI (`image_url`) can see the desktop. Images are capped at ~1.5 MB and never logged in full in audit (only path + preview).
+- **Network:** Desktop has no access to host secrets; VNC password `nimna` is for noVNC only. If `COMPUTER_ENABLED` is not set, tools run in simulated mode (Pillow-generated placeholder) so the loop can be tested without the container.
+- **Anti-abuse:** `shell_execute` blocks `rm -rf /`, `mkfs`, fork-bombs, etc., even inside the container; every click/typing/command is audit-logged with `approved` and `purpose`.
+
 ## Approvals
 - Risk `confirm` tools (`delete_file`, overwriting `write_file`/`write_report`,
   `run_python` in subprocess mode, etc.) suspend the run and require an

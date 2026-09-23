@@ -82,9 +82,28 @@ class GeminiProvider(ModelProvider):
                 continue
             flush_tool_parts()
             if msg.role == "user":
-                contents.append(
-                    t.Content(role="user", parts=[t.Part.from_text(text=msg.content or " ")])
-                )
+                parts = []
+                # Vision gateway: attach base64 images before text
+                for img in getattr(msg, "images", None) or []:
+                    try:
+                        import base64
+                        data = base64.b64decode(img.get("data", ""))
+                        mime = img.get("mime_type", "image/png")
+                        # google-genai 0.2+ uses Part.from_bytes
+                        if hasattr(t.Part, "from_bytes"):
+                            parts.append(t.Part.from_bytes(data=data, mime_type=mime))
+                        elif hasattr(t.Part, "from_image_bytes"):
+                            parts.append(t.Part.from_image_bytes(data=data, mime_type=mime))
+                        else:
+                            # fallback: inline_data
+                            parts.append(t.Part.from_bytes(data=data, mime_type=mime))
+                    except Exception:
+                        continue
+                if msg.content:
+                    parts.append(t.Part.from_text(text=msg.content))
+                if not parts:
+                    parts.append(t.Part.from_text(text=" "))
+                contents.append(t.Content(role="user", parts=parts))
             elif msg.role == "assistant":
                 content = None
                 if msg.raw:
