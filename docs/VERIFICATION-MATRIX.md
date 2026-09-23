@@ -19,6 +19,11 @@
 | G11 Browser live | explicit opt-in smoke with real key | external account | BLOCKED unless enabled | run id + provider evidence |
 | G12 Production sandbox | Docker/microVM security review | deployment | PARTIAL until external sandbox | `SECURITY.md` |
 | G13 Release integrity | manifest + lock + SBOM + provenance | CI/release | PLANNED | release workflow |
+| G14 MCP contract | `pytest -q tests/test_mcp_gateway.py -k "build_request or parse_response or discover"` | offline | PASS | envelope/`_meta`/error-allocation assertions |
+| G15 MCP header agreement | `pytest -q tests/test_mcp_gateway.py -k "header"` | offline | PASS | header/body mismatch + injection tests |
+| G16 MCP transport binding | `pytest -q tests/test_mcp_gateway.py -k "sse or 202 or legacy"` | `httpx.MockTransport` | PASS / MOCKED | no session header, no initialize, no resumability |
+| G17 MCP governance | `pytest -q tests/test_mcp_gateway.py -k "denied or approval or scope or audited"` | offline | PASS | policy denial + audit chain assertions |
+| G18 MCP live server | explicit opt-in smoke against a real MCP endpoint | external server | BLOCKED | not implemented; `initialize`-based revisions are refused |
 
 ## Interpretation
 

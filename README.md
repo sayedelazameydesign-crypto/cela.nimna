@@ -384,6 +384,21 @@ Mission Runtime
 `Retry-After`، ويوقف المتصفح المملوك داخل `finally` عبر V4 stop endpoint.
 التفاصيل في [`docs/browser_use_v4.md`](docs/browser_use_v4.md).
 
+### MCP Gateway (اختياري ومحكوم — `partial`)
+
+طبقة عقود وحدود وسياسة في `nimna/mcp/` تستهدف إصدار MCP **`2026-07-28`**، وهو
+إصدار **stateless**: لا `initialize` ولا `Mcp-Session-Id` ولا إعادة إرسال؛ كل طلب
+يحمل نسخته وقدراته في `_meta`. الترويسات المطلوبة (`MCP-Protocol-Version`,
+`Mcp-Method`, `Mcp-Name`) تُتحقَّق مقابل الـbody قبل الإرسال، والاتصال بأي خادم
+معطّل افتراضياً (`MCP_ENABLED=false`). كل نداء يمر بنطاق القدرات، وسياسة
+`PolicyEngine`، وفحص SSRF متجدد، ويُسجَّل كحدث تدقيق.
+
+**حدود هذا العمل صريحة:** الأدوات البعيدة **لا تُسجَّل بعد** في `default_registry()`،
+فالنموذج لا يستدعيها اليوم؛ ولا يوجد اختبار تكامل مع خادم MCP حقيقي (كل الاختبارات
+عبر `httpx.MockTransport` وتساوي `MOCKED`). لذلك الصف في `docs/CAPABILITY-MATRIX.md`
+هو `partial` لا `implemented`. التفاصيل في
+[`docs/mcp-gateway.md`](docs/mcp-gateway.md).
+
 Endpoints الجديدة:
 
 | Endpoint | الغرض |

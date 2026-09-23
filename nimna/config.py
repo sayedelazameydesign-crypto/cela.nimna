@@ -171,6 +171,14 @@ class Settings:
     browser_use_reasoning_effort: str | None = None
     browser_use_max_spend_usd: float = 0.0
 
+    # governed MCP gateway.  Disabled by default: enabling it is what allows
+    # Nimna to contact an external MCP server at all, and every server entry
+    # additionally requires its own credential unless it opts out explicitly.
+    mcp_enabled: bool = False
+    mcp_servers: str | None = None  # comma-separated server names from env
+    mcp_max_response_bytes: int = 8 * 1024 * 1024
+    mcp_allow_private_networks: bool = False
+
     # vector memory — Qdrant (Sprint 2)
     qdrant_url: str | None = None
     qdrant_api_key: str | None = None
@@ -249,6 +257,10 @@ class Settings:
             browser_use_poll_interval=_env_float("BROWSER_USE_POLL_INTERVAL", 2.0),
             browser_use_reasoning_effort=_env("BROWSER_USE_REASONING_EFFORT", None),
             browser_use_max_spend_usd=_env_float("BROWSER_USE_MAX_SPEND_USD", 0.0),
+            mcp_enabled=_env_bool("MCP_ENABLED", False),
+            mcp_servers=_env("MCP_SERVERS", None),
+            mcp_max_response_bytes=_env_int("MCP_MAX_RESPONSE_BYTES", 8 * 1024 * 1024),
+            mcp_allow_private_networks=_env_bool("MCP_ALLOW_PRIVATE_NETWORKS", False),
             qdrant_url=_env("QDRANT_URL", None),
             qdrant_api_key=_env("QDRANT_API_KEY", None),
             embedding_model=_env("EMBEDDING_MODEL", "text-embedding-004") or "text-embedding-004",
