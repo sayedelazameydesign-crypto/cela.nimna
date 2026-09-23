@@ -94,8 +94,8 @@ pytest -q tests/test_evaluate_arena.py
 |---|---|
 | `PASS` / `FAIL` | ردّ حقيقي من `ARENA_API_URL` (`status`/`verdict` + `score` اختياري) |
 | `SKIPPED` | لا يوجد `ARENA_API_URL`/`ARENA_API_KEY` أو `ARENA_EVAL_MODE=offline` |
-| `MOCKED` | `ARENA_EVAL_MODE=mock` — لاختبار خط الأنابيب فقط |
-| `ERROR` | الـ API مضبوط لكن الاتصال/الردّ فشل — يُبلَّغ استشارياً ولا يُحوَّل إلى PASS |
+| `MOCKED` | `ARENA_EVAL_MODE=mock` — لاختبار خط الأنابيب فقط؛ يبدأ التقرير بلافتة تحذير ⚠️ قبل أي مقياس |
+| `ERROR` | الـ API مضبوط لكن الاتصال/الردّ فشل — لافتة تحذير ⚠️ في أعلى التقرير، يُبلَّغ استشارياً ولا يُحوَّل إلى PASS |
 | `UNKNOWN` | ردّ JSON بلا حالة مفهومة |
 
 ### إشارات المخاطر (Risk signals)

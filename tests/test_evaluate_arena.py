@@ -106,10 +106,20 @@ def test_benchmark_is_skipped_without_api_and_never_claims_pass():
     assert "`main`" in markdown and "`abc123`" in markdown
 
 
-def test_mock_mode_is_labelled_mocked():
+def test_mock_mode_is_labelled_mocked_with_top_banner():
     report = ev.build_report(SAMPLE_DIFF, env={"ARENA_EVAL_MODE": "mock"})
     assert report["benchmark"]["status"] == "MOCKED"
     assert report["benchmark"]["mode"] == "mock"
+    markdown = ev.render_markdown(report)
+    banner_at = markdown.index("> ⚠️ **MOCKED RUN")
+    table_at = markdown.index("| المقياس")
+    assert banner_at < table_at  # the warning precedes every metric
+    assert "ليست نتيجة تقييم حقيقية" in markdown
+
+
+def test_real_and_skipped_runs_have_no_warning_banner():
+    skipped = ev.render_markdown(ev.build_report(SAMPLE_DIFF, env={}))
+    assert "> ⚠️" not in skipped
 
 
 def test_empty_diff_reports_no_changes():
@@ -220,6 +230,9 @@ def test_remote_benchmark_failure_is_reported_as_error_not_pass(monkeypatch):
     report = ev.build_report(SAMPLE_DIFF, env=env)
     assert report["benchmark"]["status"] == "ERROR"
     assert "secret-key-value-123" not in json.dumps(report)
+    markdown = ev.render_markdown(report)
+    assert markdown.index("> ⚠️ **Arena API ERROR") < markdown.index("| المقياس")
+    assert "secret-key-value-123" not in markdown
 
 
 def test_cli_writes_markdown_and_json_outputs(tmp_path: Path):

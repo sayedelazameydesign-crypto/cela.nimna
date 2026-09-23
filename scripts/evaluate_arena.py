@@ -442,6 +442,19 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"**Arena mode:** `{bench['mode']}`"
     )
     lines.append("")
+    # Banner first, so a MOCKED / ERROR run can never be skimmed as a real verdict.
+    if bench["status"] == "MOCKED":
+        lines += [
+            "> ⚠️ **MOCKED RUN — ليست نتيجة تقييم حقيقية.** `ARENA_EVAL_MODE=mock` يختبر خط الأنابيب فقط؛ "
+            "لا تستخدم هذا التقرير كمقياس جودة أو كدليل نجاح.",
+            "",
+        ]
+    elif bench["status"] == "ERROR":
+        lines += [
+            f"> ⚠️ **Arena API ERROR — لا يوجد حكم (verdict).** {bench.get('detail') or ''} "
+            "المقاييس والإشارات أدناه من الفحص الثابت فقط.",
+            "",
+        ]
 
     if totals["files"] == 0:
         lines.append("لا توجد تعديلات لفحصها (No Diff found).")
