@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nimna – وكيل المهارات</title>
+<style>
+  :root { --bg:#0f1419; --panel:#161c24; --border:#263040; --text:#e6edf3; --muted:#8b98a8; --accent:#3fb950; --warn:#d29922; --danger:#f85149; --chip:#1f2a38; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family: system-ui, "Segoe UI", Tahoma, sans-serif; background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; }
+  header { padding:12px 20px; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:16px; background:var(--panel); }
+  header h1 { font-size:18px; margin:0; }
+  header .meta { color:var(--muted); font-size:13px; }
+  header .meta b { color:var(--text); }
+  main { flex:1; display:grid; grid-template-columns: 300px 1fr; min-height:0; }
+  aside { border-inline-end:1px solid var(--border); padding:14px; overflow:auto; background:var(--panel); }
+  aside h2 { font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:14px 0 8px; }
+  .skill { padding:8px 10px; border:1px solid var(--border); border-radius:8px; margin-bottom:8px; font-size:13px; }
+  .skill b { display:block; margin-bottom:3px; }
+  .skill .desc { color:var(--muted); }
+  .chips { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
+  .chip { background:var(--chip); border-radius:999px; padding:1px 8px; font-size:11px; color:var(--muted); }
+  .chip.ok { color:var(--accent); } .chip.err { color:var(--danger); } .chip.skill { color:#79c0ff; }
+  section.chat { display:flex; flex-direction:column; min-height:0; }
+  #log { flex:1; overflow:auto; padding:20px; display:flex; flex-direction:column; gap:12px; }
+  .msg { max-width:80%; padding:10px 14px; border-radius:12px; white-space:pre-wrap; line-height:1.5; font-size:14px; }
+  .msg.user { align-self:flex-start; background:#1f6feb33; border:1px solid #1f6feb66; }
+  .msg.assistant { align-self:flex-end; background:var(--panel); border:1px solid var(--border); }
+  .msg.system { align-self:center; color:var(--muted); font-size:12px; background:transparent; }
+  .msg .extra { margin-top:8px; border-top:1px dashed var(--border); padding-top:6px; }
+  .approval { align-self:center; width:min(640px, 90%); border:1px solid var(--warn); border-radius:12px; padding:14px; background:#d2992214; }
+  .approval h3 { margin:0 0 6px; font-size:15px; color:var(--warn); }
+  .approval pre { background:#0b0f14; padding:8px; border-radius:8px; overflow:auto; font-size:12px; direction:ltr; text-align:left; }
+  .approval .actions { display:flex; gap:8px; margin-top:8px; }
+  form { display:flex; gap:8px; padding:12px 20px; border-top:1px solid var(--border); background:var(--panel); }
+  textarea { flex:1; resize:none; height:56px; padding:10px; border-radius:10px; border:1px solid var(--border); background:var(--bg); color:var(--text); font:inherit; }
+  button { border:none; border-radius:10px; padding:10px 16px; cursor:pointer; font:inherit; background:#238636; color:#fff; }
+  button.secondary { background:var(--chip); color:var(--text); }
+  button.danger { background:var(--danger); }
+  button:disabled { opacity:.5; cursor:wait; }
+  .spinner { color:var(--muted); font-size:13px; align-self:flex-end; }
+  details summary { cursor:pointer; color:var(--muted); font-size:12px; }
+  details pre { direction:ltr; text-align:left; font-size:11px; background:#0b0f14; padding:8px; border-radius:8px; overflow:auto; max-height:200px; }
+  @media (max-width: 800px) { main { grid-template-columns:1fr; } aside { display:none; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>🧩 Nimna – وكيل قابل لإعادة استخدام المهارات</h1>
+  <span class="meta" id="meta">…</span>
+  <span style="flex:1"></span>
+  <button class="secondary" id="newSession">جلسة جديدة</button>
+</header>
+<main>
+  <aside>
+    <h2>المهارات المثبتة</h2>
+    <div id="skills"></div>
+    <h2>الأدوات</h2>
+    <div id="tools" class="chips"></div>
+  </aside>
+  <section class="chat">
+    <div id="log"></div>
+    <form id="form">
+      <textarea id="input" placeholder="مثال: حلّل ملف sales.csv وأنشئ لي تقريرًا" required></textarea>
+      <button id="send" type="submit">إرسال</button>
+    </form>
+  </section>
+</main>
+<script>
+const $ = (s) => document.querySelector(s);
+const log = $('#log');
+let sessionId = localStorage.getItem('nimna.session') || null;
+let pendingCard = null;
+
+function addMsg(role, text, extra) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + role;
+  div.setAttribute('dir', 'auto');
+  div.textContent = text;
+  if (extra) div.appendChild(extra);
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+  return div;
+}
+
+function chips(items, cls) {
+  const wrap = document.createElement('div');
+  wrap.className = 'chips';
+  for (const it of items) {
+    const c = document.createElement('span');
+    c.className = 'chip ' + (cls || (it.ok === false ? 'err' : 'ok'));
+    c.textContent = typeof it === 'string' ? it : `${it.name}${it.approved === false ? ' (denied)' : ''}${it.duration_ms ? ' · ' + it.duration_ms + 'ms' : ''}`;
+    wrap.appendChild(c);
+  }
+  return wrap;
+}
+
+function renderResult(res) {
+  if (pendingCard) { pendingCard.remove(); pendingCard = null; }
+  if (res.session_id) { sessionId = res.session_id; localStorage.setItem('nimna.session', sessionId); }
+  if (res.status === 'awaiting_approval' && res.pending) {
+    const card = document.createElement('div');
+    card.className = 'approval';
+    card.innerHTML = `<h3>⚠️ الوكيل يطلب موافقتك</h3>
+      <div>الأداة: <b>${res.pending.tool_name}</b> — ${res.pending.description || ''}</div>
+      <pre>${JSON.stringify(res.pending.tool_call.arguments, null, 2)}</pre>
+      <div class="actions">
+        <button data-d="approve">موافقة</button>
+        <button data-d="always" class="secondary">موافقة دائمة لهذه الأداة</button>
+        <button data-d="deny" class="danger">رفض</button>
+      </div>`;
+    card.querySelectorAll('button').forEach(b => b.addEventListener('click', () => resolveApproval(res.pending.approval_id, b.dataset.d)));
+    log.appendChild(card); pendingCard = card; log.scrollTop = log.scrollHeight;
+    return;
+  }
+  const extra = document.createElement('div');
+  extra.className = 'extra';
+  if (res.skills_used && res.skills_used.length) { extra.appendChild(document.createTextNode('المهارات: ')); extra.appendChild(chips(res.skills_used, 'skill')); }
+  if (res.tool_calls && res.tool_calls.length) { extra.appendChild(document.createTextNode('الأدوات: ')); extra.appendChild(chips(res.tool_calls)); }
+  if (res.selection_reason) { const s = document.createElement('div'); s.className = 'chip'; s.textContent = 'سبب الاختيار: ' + res.selection_reason; extra.appendChild(s); }
+  const d = document.createElement('details');
+  d.innerHTML = `<summary>تفاصيل التشغيل (${res.steps} خطوة، ${res.usage && res.usage.total_tokens ? res.usage.total_tokens + ' token' : 'بدون بيانات'})</summary><pre>${JSON.stringify(res, null, 2)}</pre>`;
+  extra.appendChild(d);
+  addMsg(res.status === 'error' ? 'system' : 'assistant', res.reply || res.error || '(no reply)', extra);
+}
+
+async function post(url, body) {
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.detail || r.statusText);
+  return data;
+}
+
+async function send(message) {
+  const btn = $('#send'); btn.disabled = true;
+  addMsg('user', message);
+  const spin = addMsg('spinner', 'يفكّر…'); spin.className = 'spinner';
+  try { renderResult(await post('/api/chat', { message, session_id: sessionId })); }
+  catch (e) { addMsg('system', 'خطأ: ' + e.message); }
+  finally { spin.remove(); btn.disabled = false; }
+}
+
+async function resolveApproval(id, decision) {
+  if (pendingCard) pendingCard.querySelectorAll('button').forEach(b => b.disabled = true);
+  try { renderResult(await post('/api/approvals/' + id, { approved: decision !== 'deny', always: decision === 'always' })); }
+  catch (e) { addMsg('system', 'خطأ: ' + e.message); }
+}
+
+$('#form').addEventListener('submit', (ev) => { ev.preventDefault(); const t = $('#input'); const v = t.value.trim(); if (!v) return; t.value = ''; send(v); });
+$('#input').addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); $('#form').requestSubmit(); } });
+$('#newSession').addEventListener('click', () => { sessionId = null; localStorage.removeItem('nimna.session'); log.innerHTML = ''; addMsg('system', 'بدأت جلسة جديدة'); });
+
+async function boot() {
+  try {
+    const h = await (await fetch('/api/health')).json();
+    $('#meta').innerHTML = `المزود: <b>${h.provider}</b> · النموذج: <b>${h.model}</b> · ${h.skills} مهارة · ${h.tools} أداة · sandbox: ${h.sandbox}`;
+    if (h.provider === 'mock') addMsg('system', 'يعمل الآن بمزود وهمي (mock). ضع GEMINI_API_KEY أو OPENAI_API_KEY في ملف .env للحصول على إجابات حقيقية.');
+    const s = await (await fetch('/api/skills')).json();
+    $('#skills').innerHTML = s.skills.map(k => `<div class="skill"><b>${k.name}</b><span class="desc">${k.description}</span>
+      <div class="chips">${(k.allowed_tools || []).map(t => `<span class="chip">${t}</span>`).join('')}</div></div>`).join('') || '<div class="skill">لا توجد مهارات</div>';
+    const t = await (await fetch('/api/tools')).json();
+    $('#tools').innerHTML = t.tools.map(x => `<span class="chip" title="${x.description}">${x.name}${String(x.risk).startsWith('confirm') ? ' ⚠️' : ''}</span>`).join('');
+    if (sessionId) {
+      const m = await (await fetch('/api/sessions/' + sessionId + '/messages')).json();
+      for (const msg of m.messages) addMsg(msg.role, msg.content);
+      const p = await (await fetch('/api/approvals?session_id=' + sessionId)).json();
+      if (p.pending.length) addMsg('system', 'توجد موافقة معلّقة في هذه الجلسة. أرسل رسالة جديدة بعد حلّها أو ابدأ جلسة جديدة.');
+    }
+  } catch (e) { $('#meta').textContent = 'تعذر الاتصال بالخادم: ' + e.message; }
+}
+boot();
+</script>
+</body>
+</html>

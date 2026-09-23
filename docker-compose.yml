@@ -1,0 +1,21 @@
+services:
+  nimna:
+    build: .
+    image: nimna-agent:latest
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env                      # copy .env.example -> .env and add your key
+    environment:
+      # inside the container use the subprocess sandbox (default) or mount the
+      # docker socket below and set SANDBOX_BACKEND=docker for container isolation
+      SANDBOX_BACKEND: ${SANDBOX_BACKEND:-subprocess}
+    volumes:
+      - ./skills:/app/skills:ro    # add a folder -> new skill (POST /api/skills/reload)
+      - ./workspace:/app/workspace
+      - nimna-data:/app/data
+      # - /var/run/docker.sock:/var/run/docker.sock   # only for SANDBOX_BACKEND=docker
+    restart: unless-stopped
+
+volumes:
+  nimna-data:
