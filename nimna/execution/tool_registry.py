@@ -479,7 +479,8 @@ def invoke(
     granted = frozenset(granted_capabilities)
 
     def _event(status: InvocationStatus, reason: str, *, executed: bool = False,
-               result: Any = None, deprecated: bool = False) -> InvocationOutcome:
+               result: Any = None, deprecated: bool = False,
+               extra: Optional[Mapping[str, Any]] = None) -> InvocationOutcome:
         event: dict[str, Any] = {
             "invocation_id": "inv_" + hashlib.sha256(
                 f"{tool_id}:{time.perf_counter_ns()}:{status.value}".encode()).hexdigest()[:12],
@@ -494,6 +495,7 @@ def invoke(
             "result_digest": _canonical_digest(result, MAX_ARGUMENTS_BYTES) if executed else "",
             "deprecated": deprecated,
             "duration_ms": int((time.perf_counter() - started) * 1000),
+            **(extra or {}),
         }
         stored = evidence.append(event) if evidence is not None else dict(event)
         return InvocationOutcome(status=status, ok=status is InvocationStatus.EXECUTED,
@@ -522,8 +524,13 @@ def invoke(
         return _event(InvocationStatus.INPUT_INVALID,
                       f"{tool_id}: input schema violations: {'; '.join(problems[:4])}")
 
-    # 4) capability check (M2)
-    required = set(capability_resolver(descriptor)) if capability_resolver else set(descriptor.capabilities)
+    # 4) capability check (M2) — a resolver failure is fail-closed, never fail-open
+    try:
+        required = set(capability_resolver(descriptor)) if capability_resolver else set(descriptor.capabilities)
+    except ValueError as exc:
+        return _event(InvocationStatus.CAPABILITY_DENIED,
+                      f"{tool_id}: capability resolution refused: {str(exc)[:150]}",
+                      deprecated=deprecated)
     missing = sorted(required - granted)
     if missing:
         return _event(InvocationStatus.CAPABILITY_DENIED,
@@ -562,4 +569,6 @@ def invoke(
                       executed=True, result=result, deprecated=deprecated)
 
     return _event(InvocationStatus.EXECUTED, f"{tool_id}: executed", executed=True,
-                  result=result, deprecated=deprecated)
+                  result=result, deprecated=deprecated,
+                  extra={"policy_reason": str(getattr(decision, "reason", ""))[:200],
+                         "authorization_reason": str(getattr(authorization, "reason", ""))[:200]})

@@ -237,6 +237,20 @@ def _root_hash(entries: dict[str, FileEntry]) -> str:
     return "sha256:" + digest.hexdigest()
 
 
+def resolve_inside_workspace(workspace_root: Path, raw: Path | str) -> Path:
+    """The T2 boundary: resolve ``raw`` against ``workspace_root`` and verify
+    containment (resolve → containment — never a string prefix check).
+    Raises :class:`ScopeError` on escape; returns the resolved absolute path."""
+    root = Path(workspace_root).resolve()
+    resolved = Path(raw)
+    if not resolved.is_absolute():
+        resolved = root / resolved
+    resolved = resolved.resolve()
+    if resolved != root and root not in resolved.parents:
+        raise ScopeError(f"path escapes the workspace: {raw} (workspace={root})")
+    return resolved
+
+
 class WorkspaceObserver:
     """Bounded, content-addressed observer over one workspace jail."""
 
@@ -244,17 +258,9 @@ class WorkspaceObserver:
         self.workspace_root = workspace_root.resolve()
         scope = scope or ObservationScope()
         raw_root = scope.root or self.workspace_root
-        resolved = Path(raw_root)
-        if not resolved.is_absolute():
-            resolved = (self.workspace_root / resolved)
-        resolved = resolved.resolve()
-        # resolve → containment → walk (never a string prefix check)
-        if resolved != self.workspace_root and self.workspace_root not in resolved.parents:
-            raise ScopeError(
-                f"observation scope root escapes the workspace: {raw_root} (workspace={self.workspace_root})"
-            )
+        # resolve → containment → walk (never a string prefix check) — T2 boundary
         self.scope = scope
-        self.scope.root = resolved
+        self.scope.root = resolve_inside_workspace(self.workspace_root, raw_root)
 
     # -- snapshot -------------------------------------------------------- #
     def snapshot(self) -> Snapshot:

@@ -466,6 +466,50 @@ Evidence لا claim، Recovery bounded) ونضيف طبقة واحدة جديد�
 - الاختبارات: `tests/test_tool_registry.py` (22) + اختبارا تكامل العدّاء (2) =
   **227 passed**.
 
+### P1-T6 — Capability + Policy → **منفَّذة كـ Primitive مستقلة** ✅
+
+> **✅ الحالة: نُفِّذت** — الطبقة الحاكمة فوق Tool Registry (T5) دون أن يصبح أي
+> منهما God Object: T6 = `policy.py` منفصل؛ الـ Registry لا يعرف السياسة.
+
+- **`nimna/execution/policy.py`:** `PolicyInput` (actor, tool_id, capabilities,
+  requested_operation, resource, context مُقيَّد, risk, authorization, state) →
+  `PolicyDecision` (**ALLOW / DENY / REQUIRE_CONFIRMATION** + reason + policy_id
+  + policy_version + matched_rule) — قرار حتمي من قواعد مرتبة، لا "اعتقد النموذج
+  أن هذا آمن". `PolicyRule`/`Policy` بترتيب first-match صريح وموثّق.
+- **Default DENY غير قابل للكسر:** قدرة غير معروفة → DENY؛ قدرة مسحوبة → DENY؛
+  لا قاعدة مطابقة → `default-deny`؛ طلب مشوّه → DENY؛ سياسة تنهار أثناء التقييم →
+  `policy-error` DENY (**fail-closed، M9**)؛ خطأ resource خارج الـ boundary → DENY.
+  لا `fallback = allow` في أي مسار.
+- **Capability ≠ Permission وNo amplification:** `CapabilityCatalog.resolve`
+  يعيد المجموعة المعلنة **حرفياً** — لا وراثة ضمنية ولا توسيع (shell.read لا
+  يوحي shell.execute)، والمبدئي في T5 هو subset الكامل — **تطابق جزئي لا يصرّح
+  بشيء** (M10: `if missing and not (required & granted)` طفرة كانت ستمر — أُنشئ
+  لها اختبار يقتلها).
+- **Resource scoping عبر boundary من T2:** `resolve_inside_workspace` استُخرج من
+  `WorkspaceObserver` (نفس الدلالة: resolve → containment، لا prefix checks) —
+  `workspace/<rel>` يُحلّ ويُفحص الاحتواء ( symlink/`..` ⇒ `workspace-boundary`
+  DENY)؛ الموارد الأخرى معرّفات شفافة تُطابق أنماط القواعد نصياً فقط.
+- **Authorization ≠ Policy:** `Authorizer.check` حتمي — غائب/منتهي/actor مخالف/
+  tool مخالف/policy-version مختلف/مشوّه ⇒ DENY. `Policy→ALLOW` +
+  `Authorization→EXPIRED` = **DENY نهائي**. `REQUIRE_CONFIRMATION` تأثير من
+  الدرجة الأولى: لا يمر إلا بـ grant صالح **بموافقة صريحة** (`consent=True`)
+  وإلا DENY.
+- **Determinism مُثبت:** نفس المدخلات → نفس القرار (اختبار يكرر 4 مدخلات ×3).
+- **التوصيل بلا لمس T5:** مُهايئات `t5_capability_resolver` / `t5_policy_adapter`
+  / `t5_authorizer_adapter` تحقن في بوابات `invoke()` الموجودة؛ تعديلان
+  إضافيان fail-closed في T5: resolver يرمي ⇒ CAPABILITY_DENIED مسجَّل، وحدث
+  EXECUTED يحمل `policy_reason`/`authorization_reason` في الـ evidence.
+- **Arena:** إعادة تشغيل التحقق تمر الآن عبر `arena-suite-policy@1.0.0`
+  (deny-outside-workspace أولاً ثم allow-sandbox-shell) + `CapabilityCatalog`
+  + موافقة المشغّل: التقرير يحمل سطر
+  **Policy: ALLOW/DENY/REQUIRE_CONFIRMATION** وcode-05 policy block كامل.
+- **الحَكَم الطفري 10/10:** DENY→ALLOW (3 اختبارات تكسر) — missing-capability (2)
+  — expired (1) — wrong-actor (1) — wrong-tool (1) — resource-escape (2) —
+  REQUIRE_CONFIRMATION→ALLOW (1) — unknown-capability (3) — policy-error→ALLOW (1)
+  — amplification (1).
+- الاختبارات: `tests/test_policy.py` (24) + اختبار partial-match في
+  `test_tool_registry.py` + تحديثا تكامل العدّاء = **252 passed**.
+
 ### P1-T3 — Git آمن
 - `git_tool.py`: `git_status/git_diff/git_add/git_commit/git_log` فقط — registry-level deny لأي subcommand آخر (لا push/remote/reset/clean)، هوية commit من env مُعلن، رسالة commit تُسجل في audit.
 - **Evidence:** اختبار deny شامل + اختبار دورة commit محلية داخل workspace + صف مصفوفة.

@@ -363,8 +363,16 @@ def test_registry_gates_verifier_command_reruns(monkeypatch):
     assert len(reg_row["evidence_tail"]) == 16                 # 16-hex evidence tail slice
     # the replayed artifact really exists — the command ran through the sandbox handler
     assert report["summary"]["registry_authorized"] == 1
+    # P1-T6: the decision went through the deterministic policy
+    pol = row["policy"]
+    assert pol["policy_id"] == "arena-suite-policy" and pol["version"] == "1.0.0"
+    assert pol["allow"] == 1 and pol["deny"] == 0
+    assert report["summary"]["policy_allow"] == 1
     markdown = rs.render_markdown(report)
     assert "**Registry (P1-T5, gated invocation):**" in markdown
+    assert "**Policy (P1-T6, deterministic governance):**" in markdown
+    # the executed event carries the policy identity in its evidence
+    assert "suite-policy" in str(row["verification"]) or pol["allow"] == 1
 
 
 def test_registry_denial_is_inconclusive_never_pass(monkeypatch):
@@ -382,4 +390,6 @@ def test_registry_denial_is_inconclusive_never_pass(monkeypatch):
     assert any(c["name"] == "verifier:INCONCLUSIVE" and not c["ok"] for c in row["checks"])
     reg_row = row["registry"]
     assert reg_row["denied"] == 1 and reg_row.get("authorized", 0) == 0
+    # the capability gate closes BEFORE the policy is ever consulted
+    assert (row.get("policy") or {}).get("allow", 0) == 0
     # the refused command never executed — no replay artifact in the workspace

@@ -674,16 +674,43 @@ def run_task(spec: TaskSpec, mode: str) -> dict[str, Any]:
                     capabilities=("shell",), side_effects=("process", "filesystem"),
                     risk_level="HIGH", handler=_sandbox_command))
 
+                # P1-T6: deterministic governance — CapabilityCatalog → Policy →
+                # Authorization. Same inputs, same decision; every refusal fail-closed.
+                from nimna.execution.policy import (
+                    AuthorizationGrant, Authorizer, CapabilityCatalog, Effect,
+                    Policy, PolicyRule, WorkspaceBoundary,
+                    t5_authorizer_adapter, t5_capability_resolver, t5_policy_adapter)
+                catalog = CapabilityCatalog(known={"shell"})
+                suite_policy = Policy("arena-suite-policy", "1.0.0", rules=(
+                    PolicyRule("deny-outside-workspace", Effect.DENY,
+                               capabilities=frozenset({"shell"}), operation="*",
+                               resource_patterns=("system/*", "/etc/*", "/*"),
+                               note="no verification command may leave the workspace"),
+                    PolicyRule("allow-sandbox-shell", Effect.ALLOW,
+                               capabilities=frozenset({"shell"}), operation="*",
+                               resource_patterns=("workspace", "workspace/*", "workspace/**"),
+                               note="sandboxed verification re-run inside the workspace"),
+                ))
+                suite_authorizer = Authorizer()
+                policy_stats: dict = {}
+
+                def _operator_consent(descriptor, arguments):
+                    return AuthorizationGrant(actor="arena-suite-operator",
+                                              tool_id=descriptor.tool_id,
+                                              policy_version=suite_policy.version)
+
                 def _exec_fn(command: str, timeout_ms: int):
                     outcome = invoke(registry, "sandbox.command",
                                      {"command": command, "timeout_ms": int(timeout_ms)},
                                      granted_capabilities=frozenset({"shell"}) if _shell_granted else frozenset(),
-                                     policy=lambda tool, args: PolicyDecision(
-                                         _shell_granted,
-                                         "suite operator: sandbox-only verification re-run"
-                                         if _shell_granted else "shell_tool disabled"),
-                                     authorizer=lambda tool, args: AuthorizationDecision(
-                                         True, "suite operator explicit consent"),
+                                     capability_resolver=t5_capability_resolver(catalog),
+                                     policy=t5_policy_adapter(suite_policy,
+                                                              boundary=WorkspaceBoundary(workspace),
+                                                              stats=policy_stats),
+                                     authorizer=t5_authorizer_adapter(
+                                         suite_authorizer, actor="arena-suite-operator",
+                                         policy_version_of=lambda d, a: suite_policy.version,
+                                         grant_for=_operator_consent),
                                      evidence=registry_evidence)
                     if outcome.status is not InvocationStatus.EXECUTED:
                         # refused ⇒ honest INCONCLUSIVE downstream, never a fake PASS
@@ -700,6 +727,11 @@ def run_task(spec: TaskSpec, mode: str) -> dict[str, Any]:
                 )
                 vdata = report_v.to_dict()
                 row["verification"] = vdata
+                row["policy"] = {"policy_id": suite_policy.policy_id,
+                                 "version": suite_policy.version,
+                                 "allow": policy_stats.get("ALLOW", 0),
+                                 "deny": policy_stats.get("DENY", 0),
+                                 "require_confirmation": policy_stats.get("REQUIRE_CONFIRMATION", 0)}
                 row["registry"] = {
                     "registered": [tool.tool_id for tool in registry.list()],
                     "invocations": len(registry_evidence),
@@ -730,6 +762,10 @@ def run_task(spec: TaskSpec, mode: str) -> dict[str, Any]:
                                    "evidence_tail": registry_evidence.tail[7:23],
                                    "chain_verified": registry_evidence.verify(),
                                    "error": f"verifier crashed: {exc.__class__.__name__}"}
+                row["policy"] = {"policy_id": "arena-suite-policy", "version": "1.0.0",
+                                 "allow": policy_stats.get("ALLOW", 0),
+                                 "deny": policy_stats.get("DENY", 0),
+                                 "require_confirmation": policy_stats.get("REQUIRE_CONFIRMATION", 0)}
                 checks.append({"name": "verifier:INCONCLUSIVE", "ok": False,
                                "detail": f"verifier crashed: {exc.__class__.__name__}"})
                 row["checks"] = checks
@@ -866,6 +902,9 @@ def run_suite(tasks: list[TaskSpec], mode: str, *, ledger_path: Path | None = DE
             "registry_denied": sum(int((r.get("registry") or {}).get("denied") or 0) for r in rows),
             "registry_revoked": sum(int((r.get("registry") or {}).get("revoked") or 0) for r in rows),
             "registry_schema_failures": sum(int((r.get("registry") or {}).get("schema_failures") or 0) for r in rows),
+            "policy_allow": sum(int((r.get("policy") or {}).get("allow") or 0) for r in rows),
+            "policy_deny": sum(int((r.get("policy") or {}).get("deny") or 0) for r in rows),
+            "policy_require_confirmation": sum(int((r.get("policy") or {}).get("require_confirmation") or 0) for r in rows),
         },
         "regressions": regressions,
     }
@@ -972,6 +1011,13 @@ def render_markdown(report: dict[str, Any]) -> str:
             f"**Registry (P1-T5, gated invocation):** registered `{summary.get('registry_registered', 0)}` · "
             f"authorized `{summary.get('registry_authorized', 0)}` · denied `{summary.get('registry_denied', 0)}` · "
             f"revoked `{summary.get('registry_revoked', 0)}` · schema failures `{summary.get('registry_schema_failures', 0)}`",
+            "",
+        ]
+    if any(r.get("policy") for r in report["rows"]):
+        lines += [
+            f"**Policy (P1-T6, deterministic governance):** ALLOW `{summary.get('policy_allow', 0)}` · "
+            f"DENY `{summary.get('policy_deny', 0)}` · REQUIRE_CONFIRMATION `{summary.get('policy_require_confirmation', 0)}` · "
+            "no-rule ⇒ default-DENY · policy error ⇒ DENY (fail-closed)",
             "",
         ]
     if report["regressions"]:

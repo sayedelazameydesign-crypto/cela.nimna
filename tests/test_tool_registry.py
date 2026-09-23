@@ -359,3 +359,18 @@ def test_replace_keeps_discovery_consistent(registry: ToolRegistry):
     assert tool.version == "2.0.0" and tool.capabilities == ("text", "io")
     assert registry.tools_requiring("io") == ["echo"]
     assert [t.tool_id for t in registry.list()] == ["echo"]       # discovery stays stable
+
+
+def test_partial_capability_match_authorizes_nothing(registry):
+    """M10: needing {text, io} while granted only {text} is a DENY — a partial
+    match between granted and required authorizes nothing (no amplification)."""
+    import pytest as _pytest
+    reg = ToolRegistry()
+    reg.register(make_descriptor(capabilities=("text", "io")))
+    outcome = call(reg, granted_capabilities=frozenset({"text"}))   # partial: 1 of 2
+    assert outcome.status is InvocationStatus.CAPABILITY_DENIED
+    assert outcome.executed is False and outcome.ok is False
+    assert "io" in outcome.reason                                   # the missing one is named
+    full = call(reg, granted_capabilities=frozenset({"text", "io"}))
+    assert full.status is InvocationStatus.EXECUTED                 # only the full set passes
+    del _pytest
