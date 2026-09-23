@@ -1,8 +1,8 @@
 {
   "version": 1,
   "mode": "mock",
-  "repo_version": "f5cc23a",
-  "generated_at": "2026-09-23T17:09:57+00:00",
+  "repo_version": "5a91256",
+  "generated_at": "2026-09-23T17:28:29+00:00",
   "rows": [
     {
       "task_id": "arabic-01-market-brief",
@@ -30,9 +30,21 @@
         "web_research"
       ],
       "requires": [],
-      "run_id": "79264cd5edbd435f",
-      "ts": "2026-09-23T17:09:57+00:00",
-      "repo_version": "f5cc23a",
+      "metrics": {
+        "wall_ms": 10,
+        "tool_calls": 0,
+        "failed_tool_calls": 0,
+        "failed_shell_commands": 0,
+        "shell_executions": 0,
+        "shell_denials": 0,
+        "evidence_complete": 0,
+        "evidence_completeness": null,
+        "recovered": false,
+        "verified": false
+      },
+      "run_id": "e51d0f0839484ec2",
+      "ts": "2026-09-23T17:28:28+00:00",
+      "repo_version": "5a91256",
       "previous_score": null
     },
     {
@@ -61,25 +73,37 @@
         "web_research"
       ],
       "requires": [],
-      "run_id": "59d7990f5caa4035",
-      "ts": "2026-09-23T17:09:57+00:00",
-      "repo_version": "f5cc23a",
+      "metrics": {
+        "wall_ms": 7,
+        "tool_calls": 0,
+        "failed_tool_calls": 0,
+        "failed_shell_commands": 0,
+        "shell_executions": 0,
+        "shell_denials": 0,
+        "evidence_complete": 0,
+        "evidence_completeness": null,
+        "recovered": false,
+        "verified": false
+      },
+      "run_id": "f481f207783d4130",
+      "ts": "2026-09-23T17:28:28+00:00",
+      "repo_version": "5a91256",
       "previous_score": null
     },
     {
       "task_id": "code-01-fizzbuzz-module",
       "category": "coding",
-      "title": "Create a fizzbuzz module",
+      "title": "Create a fizzbuzz module and verify it via shell",
       "mode": "mock",
       "verdict": "MOCKED",
-      "score": 50.0,
-      "checks_passed": 1,
+      "score": 100.0,
+      "checks_passed": 2,
       "checks_total": 2,
       "checks": [
         {
           "name": "artifact:src/fizzbuzz.py",
-          "ok": false,
-          "detail": "missing"
+          "ok": true,
+          "detail": "contains ok"
         },
         {
           "name": "reply contains 'fizzbuzz'",
@@ -90,15 +114,31 @@
       "secret_hits": [],
       "model": "mock",
       "status_detail": "mock provider run — deterministic checks only",
-      "tools_called": [],
-      "skills_used": [
-        "report_writer",
-        "skill_author"
+      "tools_called": [
+        "write_file",
+        "run_command"
       ],
-      "requires": [],
-      "run_id": "82922647a0814907",
-      "ts": "2026-09-23T17:09:57+00:00",
-      "repo_version": "f5cc23a",
+      "skills_used": [
+        "shell_execution"
+      ],
+      "requires": [
+        "shell_tool"
+      ],
+      "metrics": {
+        "wall_ms": 32,
+        "tool_calls": 2,
+        "failed_tool_calls": 0,
+        "failed_shell_commands": 0,
+        "shell_executions": 1,
+        "shell_denials": 0,
+        "evidence_complete": 1,
+        "evidence_completeness": 100.0,
+        "recovered": false,
+        "verified": true
+      },
+      "run_id": "691364e4fd8548c3",
+      "ts": "2026-09-23T17:28:28+00:00",
+      "repo_version": "5a91256",
       "previous_score": null
     },
     {
@@ -132,9 +172,21 @@
         "file_analysis"
       ],
       "requires": [],
-      "run_id": "92d147c4aa0747a9",
-      "ts": "2026-09-23T17:09:57+00:00",
-      "repo_version": "f5cc23a",
+      "metrics": {
+        "wall_ms": 7,
+        "tool_calls": 0,
+        "failed_tool_calls": 0,
+        "failed_shell_commands": 0,
+        "shell_executions": 0,
+        "shell_denials": 0,
+        "evidence_complete": 0,
+        "evidence_completeness": null,
+        "recovered": false,
+        "verified": true
+      },
+      "run_id": "dba99c534db241fd",
+      "ts": "2026-09-23T17:28:28+00:00",
+      "repo_version": "5a91256",
       "previous_score": null
     },
     {
@@ -168,9 +220,21 @@
         "csv_analysis"
       ],
       "requires": [],
-      "run_id": "d642d793d72f4eae",
-      "ts": "2026-09-23T17:09:57+00:00",
-      "repo_version": "f5cc23a",
+      "metrics": {
+        "wall_ms": 8,
+        "tool_calls": 0,
+        "failed_tool_calls": 0,
+        "failed_shell_commands": 0,
+        "shell_executions": 0,
+        "shell_denials": 0,
+        "evidence_complete": 0,
+        "evidence_completeness": null,
+        "recovered": false,
+        "verified": false
+      },
+      "run_id": "c8ea5f3c895e49bd",
+      "ts": "2026-09-23T17:28:29+00:00",
+      "repo_version": "5a91256",
       "previous_score": null
     },
     {
@@ -199,9 +263,73 @@
         "computer_control"
       ],
       "requires": [],
-      "run_id": "5b0d39a44b2c4217",
-      "ts": "2026-09-23T17:09:57+00:00",
-      "repo_version": "f5cc23a",
+      "metrics": {
+        "wall_ms": 8,
+        "tool_calls": 0,
+        "failed_tool_calls": 0,
+        "failed_shell_commands": 0,
+        "shell_executions": 0,
+        "shell_denials": 0,
+        "evidence_complete": 0,
+        "evidence_completeness": null,
+        "recovered": false,
+        "verified": true
+      },
+      "run_id": "998ecc6fab2b4666",
+      "ts": "2026-09-23T17:28:29+00:00",
+      "repo_version": "5a91256",
+      "previous_score": null
+    },
+    {
+      "task_id": "code-05-shell-fix-retry",
+      "category": "coding",
+      "title": "Diagnose a crashing script via shell and fix it",
+      "mode": "mock",
+      "verdict": "MOCKED",
+      "score": 100.0,
+      "checks_passed": 2,
+      "checks_total": 2,
+      "checks": [
+        {
+          "name": "artifact:scripts_src/result.txt",
+          "ok": true,
+          "detail": "contains ok"
+        },
+        {
+          "name": "reply contains 'result.txt'",
+          "ok": true,
+          "detail": "ok"
+        }
+      ],
+      "secret_hits": [],
+      "model": "mock",
+      "status_detail": "mock provider run — deterministic checks only",
+      "tools_called": [
+        "run_command",
+        "write_file",
+        "run_command"
+      ],
+      "skills_used": [
+        "shell_execution"
+      ],
+      "requires": [
+        "shell_tool"
+      ],
+      "metrics": {
+        "wall_ms": 52,
+        "tool_calls": 3,
+        "failed_tool_calls": 0,
+        "failed_shell_commands": 1,
+        "shell_executions": 2,
+        "shell_denials": 0,
+        "evidence_complete": 2,
+        "evidence_completeness": 100.0,
+        "recovered": true,
+        "verified": true
+      },
+      "run_id": "5dc1d0de478e4975",
+      "ts": "2026-09-23T17:28:29+00:00",
+      "repo_version": "5a91256",
       "previous_score": null
     },
     {
@@ -235,9 +363,21 @@
         "skill_author"
       ],
       "requires": [],
-      "run_id": "55ad3bfc061a48af",
-      "ts": "2026-09-23T17:09:57+00:00",
-      "repo_version": "f5cc23a",
+      "metrics": {
+        "wall_ms": 7,
+        "tool_calls": 0,
+        "failed_tool_calls": 0,
+        "failed_shell_commands": 0,
+        "shell_executions": 0,
+        "shell_denials": 0,
+        "evidence_complete": 0,
+        "evidence_completeness": null,
+        "recovered": false,
+        "verified": false
+      },
+      "run_id": "0e38476bc1714f0c",
+      "ts": "2026-09-23T17:28:29+00:00",
+      "repo_version": "5a91256",
       "previous_score": null
     },
     {
@@ -266,9 +406,21 @@
         "file_analysis"
       ],
       "requires": [],
-      "run_id": "e1af43f73c584f20",
-      "ts": "2026-09-23T17:09:57+00:00",
-      "repo_version": "f5cc23a",
+      "metrics": {
+        "wall_ms": 7,
+        "tool_calls": 0,
+        "failed_tool_calls": 0,
+        "failed_shell_commands": 0,
+        "shell_executions": 0,
+        "shell_denials": 0,
+        "evidence_complete": 0,
+        "evidence_completeness": null,
+        "recovered": false,
+        "verified": false
+      },
+      "run_id": "4c95a8df52254ce1",
+      "ts": "2026-09-23T17:28:29+00:00",
+      "repo_version": "5a91256",
       "previous_score": null
     },
     {
@@ -289,9 +441,10 @@
       "requires": [
         "network"
       ],
-      "run_id": "1058025e27f44f39",
-      "ts": "2026-09-23T17:09:57+00:00",
-      "repo_version": "f5cc23a",
+      "metrics": {},
+      "run_id": "6e89f1fb6fe640c2",
+      "ts": "2026-09-23T17:28:29+00:00",
+      "repo_version": "5a91256",
       "previous_score": null
     },
     {
@@ -312,19 +465,29 @@
       "requires": [
         "network"
       ],
-      "run_id": "0003b08728ea4330",
-      "ts": "2026-09-23T17:09:57+00:00",
-      "repo_version": "f5cc23a",
+      "metrics": {},
+      "run_id": "7d30a7e749c94783",
+      "ts": "2026-09-23T17:28:29+00:00",
+      "repo_version": "5a91256",
       "previous_score": null
     }
   ],
   "summary": {
-    "tasks": 10,
-    "ran": 8,
+    "tasks": 11,
+    "ran": 9,
     "skipped": 2,
     "error": 0,
-    "mean_score": 43.8,
-    "secret_hits": 0
+    "mean_score": 55.6,
+    "secret_hits": 0,
+    "verified": 4,
+    "tool_calls": 5,
+    "failed_tool_calls": 0,
+    "failed_commands": 1,
+    "security_denials": 0,
+    "shell_executions": 3,
+    "evidence_completeness": 100.0,
+    "recovered_tasks": 1,
+    "mean_wall_ms": 15.3
   },
   "regressions": []
 }

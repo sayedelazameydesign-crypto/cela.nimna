@@ -40,6 +40,8 @@ python scripts/run_arena_suite.py --mode mock --strict
 | `must_include` / `must_not_include` | — | فحص كلمات على الردّ النهائي |
 | `judge_rubric` | ✓ | معايير حَكَم الـ LLM — **محجوزة لـ P5**، لا تُستخدم اليوم ولا يُخترع لها رقم |
 | `allowed_tools` | — | توثيقي: الأدوات المتوقعة للمهمة |
+| `requires` | — | `shell_tool` يجعل المهمة `SKIPPED` ما لم يُضبط `SHELL_TOOL_ENABLED` |
+| `mock_skills` / `mock_script` / `mock_final` | — | سيناريو حتمي لوضع mock: اختيار مهارة + استدعاء أدوات فعلي خطوة بخطوة + ردّ نهائي — يمكّن قياس «Agent + Tool» دون مفاتيح (الحكم يبقى `MOCKED`) |
 
 ## مفردات النتيجة (نفس عقد الأمانة في المستودع)
 
@@ -54,9 +56,29 @@ python scripts/run_arena_suite.py --mode mock --strict
 استخدامها من `scripts/evaluate_arena.py`). الـ ledger يقارن كل تشغيل بآخر نتيجة
 لنفس المهمة والوضع ويضع علامة **regression** عند التراجع.
 
+## مقاييس قبل/بعد (P1-T1: Baseline vs Agent+Shell)
+
+تُستخرج من الـ audit الحقيقي لا من الانطباعات، وتظهر في التقرير و`summary`:
+
+| Metric | الصيغة |
+|---|---|
+| `verified` | مهام اكتملت بفحوص حتمية 100% |
+| `tool_calls` / `failed_tool_calls` | استدعاءات الأدوات / أخطاء التسجيل أو التحقق |
+| `shell_executions` / `failed_commands` | تنفيذات `run_command` الموثّقة / ما انتهى `NONZERO_EXIT\|TIMEOUT\|SANDBOX_ERROR` |
+| `security_denials` | أحداث `shell_denied` (DENIED/POLICY_BLOCKED/CONFIRMATION_REQUIRED) |
+| `evidence_completeness` | % تنفيذات shell التي حملت Evidence كامل العقد (12 مفتاحاً) |
+| `recovered` | مهمة اصطدمت بفشل ثم أكملت بفحوص 100% (مثل `code-05`) |
+| `mean_wall_ms` | متوسط زمن الجدار للمهام |
+
+**Baseline v2 (Agent+Shell، وضع mock، `SHELL_TOOL_ENABLED=1`):** 9 ran / 2 skipped /
+0 error / mean 55.6 / evidence completeness 100% / `code-01` قفزت 50.0 → **100.0**
+بتنفيذ shell فعلي، و`code-05` (فشل→إصلاح→نجاح) 100.0. راجع
+`ledger/BASELINE-mock.md` و`BASELINE-mock.json`.
+
 ## قواعد ثابتة
 
 1. لا يُضاف سطر `PASS` في وضع mock أبداً (اختبارات `tests/test_arena_suite.py` تمنعه).
 2. كل مهمة جديدة تحتاج `judge_rubric` من اليوم الأول (شرط P5).
+3. مهام `run_command` تتطلب `requires: [shell_tool]` — والتعليق على الأداة لا يعني توفرها (DENIED).
 3. أي سرّ يظهر في مخرجات مهمة = فشل فحص + صف مميّز في التقرير (القيمة لا تُعرض).
 4. P5 يضيف: تشغيل live ميزانياً، حَكَم rubric عبر `run_llm_judge`، وworkflow دوري.

@@ -54,15 +54,17 @@ def test_task_schema_validation_accepts_minimal_and_rejects_bad_input():
 
 def test_builtin_tasks_all_parse_unique_and_complete():
     specs = rs.load_tasks(REPO / "evals" / "tasks")
-    assert len(specs) == 10
+    assert len(specs) == 11
     ids = [s.id for s in specs]
-    assert len(set(ids)) == 10
+    assert len(set(ids)) == 11
     by_category = {s.category for s in specs}
     assert by_category <= rs.CATEGORIES
     assert {"coding", "web", "data", "arabic_long"} <= by_category
     for spec in specs:
         assert spec.judge_rubric.strip(), f"{spec.id} must carry a judge rubric for P5"
         assert spec.prompt.strip() and spec.max_steps <= 60
+        for step in spec.mock_script:
+            assert step["tool"] and isinstance(step["arguments"], dict)
 
 
 def test_mock_run_end_to_end_is_mocked_with_real_check_score():

@@ -66,6 +66,8 @@ TASK_KNOWN_KEYS = {
     "id", "title", "category", "prompt", "requires", "allowed_tools",
     "max_steps", "max_tool_calls", "timeout_s", "seed_files",
     "expected_artifacts", "must_include", "must_not_include", "judge_rubric",
+    # mock-mode scripting: deterministic tool exercises for the pipeline lab
+    "mock_skills", "mock_script", "mock_final",
 }
 VERDICT_ICON = {"PASS": "✅", "FAIL": "❌", "MOCKED": "🧪", "SKIPPED": "⏭️", "ERROR": "⚠️"}
 
@@ -105,6 +107,9 @@ class TaskSpec:
     must_include: list[str] = field(default_factory=list)
     must_not_include: list[str] = field(default_factory=list)
     judge_rubric: str = ""
+    mock_skills: list[str] = field(default_factory=list)
+    mock_script: list[dict[str, Any]] = field(default_factory=list)
+    mock_final: str = ""
     source: str = ""
 
     @classmethod
@@ -149,6 +154,14 @@ class TaskSpec:
         bad = set(requires) - known_requires
         if bad:
             raise SuiteError(f"{source}: unknown requires {sorted(bad)} (known: {sorted(known_requires)})")
+        mock_script: list[dict[str, Any]] = []
+        for step in (data.get("mock_script") or []):
+            if not isinstance(step, dict) or not str(step.get("tool") or "").strip():
+                raise SuiteError(f"{source}: mock_script steps need a 'tool' name")
+            if len(mock_script) >= 12:
+                raise SuiteError(f"{source}: mock_script is capped at 12 steps")
+            mock_script.append({"tool": str(step["tool"]),
+                                "arguments": dict(step.get("arguments") or {})})
         return cls(
             id=task_id, category=category, prompt=prompt,
             title=str(data.get("title") or task_id),
@@ -161,6 +174,9 @@ class TaskSpec:
             must_include=[str(t) for t in (data.get("must_include") or [])],
             must_not_include=[str(t) for t in (data.get("must_not_include") or [])],
             judge_rubric=str(data.get("judge_rubric") or ""),
+            mock_skills=[str(s) for s in (data.get("mock_skills") or [])],
+            mock_script=mock_script,
+            mock_final=str(data.get("mock_final") or ""),
             source=source,
         )
 
@@ -328,6 +344,7 @@ def capability_map(settings: Any) -> dict[str, bool]:
 def _build_agent(mode: str, spec: TaskSpec, workspace: Path):
     from nimna.config import Settings
     from nimna.core.agent import Agent
+    from nimna.providers.base import ModelResponse, ToolCall
     from nimna.core.approval import DeferToClient
     from nimna.memory import MemoryStore
     from nimna.providers import MockProvider
@@ -341,10 +358,24 @@ def _build_agent(mode: str, spec: TaskSpec, workspace: Path):
     settings.max_steps = spec.max_steps
     settings.max_tool_calls = spec.max_tool_calls
     settings.max_runtime_seconds = spec.timeout_s
+    settings.verify = False  # the suite measures the pipeline, not the verify pass
     if mode == "mock":
         settings.provider = "mock"
         settings.sandbox_backend = "subprocess"
         provider = MockProvider()
+        if spec.mock_script or spec.mock_skills:
+            # Scripted pipeline: skills selection -> one tool call per step -> final.
+            import json as _json
+            responses: list[Any] = [
+                _json.dumps({"skills": list(spec.mock_skills), "reason": "suite-script", "plan": []})
+            ]
+            for step in spec.mock_script:
+                responses.append(
+                    ModelResponse(text="", tool_calls=[ToolCall(name=step["tool"], arguments=dict(step["arguments"]))])
+                )
+            responses.append(spec.mock_final or "تم تنفيذ المهمة.")
+            provider.queue(*responses)
+        # else: empty queue -> the descriptive default answer (legacy behaviour)
     else:
         from nimna.providers import create_provider
         provider = create_provider(settings)
@@ -400,6 +431,50 @@ def _run_checks(spec: TaskSpec, workspace: Path, reply: str) -> tuple[list[dict[
     return checks, secret_hits
 
 
+def _now_perf() -> float:
+    import time
+    return time.perf_counter()
+
+
+_SHELL_EVIDENCE_KEYS = {"tool", "command_hash", "cwd", "policy", "authorization",
+                        "started_at", "duration_ms", "exit_code", "stdout_hash",
+                        "stderr_hash", "filesystem_delta", "status"}
+
+
+def _shell_metrics(agent: Any, session_id: str, result: Any, row: dict[str, Any], wall_ms: int) -> dict[str, Any]:
+    """Before/after metrics (P1 contract §8) — derived from the real audit trail.
+
+    completed/verified derive from deterministic checks; security_denials and
+    evidence completeness come from shell_denied/shell_evidence audit events;
+    recovered = the task hit a failure yet still finished with a perfect score.
+    """
+    try:
+        events = agent.memory.get_audit(session_id, limit=400)
+    except Exception:
+        events = []
+    shell_exec = [e for e in events if e.get("event") == "shell_evidence"]
+    shell_denied = [e for e in events if e.get("event") == "shell_denied"]
+    complete = sum(1 for e in shell_exec if _SHELL_EVIDENCE_KEYS <= set(e.get("payload") or {}))
+    failed_shell = sum(1 for e in shell_exec
+                       if (e.get("payload") or {}).get("status") in {"NONZERO_EXIT", "TIMEOUT", "SANDBOX_ERROR"})
+    tool_calls = list(getattr(result, "tool_calls", []) or [])
+    failed_calls = sum(1 for c in tool_calls if not getattr(c, "ok", True))
+    score = row.get("score")
+    ran_ok = row["verdict"] in {"MOCKED", "PASS"}
+    return {
+        "wall_ms": wall_ms,
+        "tool_calls": len(tool_calls),
+        "failed_tool_calls": failed_calls,
+        "failed_shell_commands": failed_shell,
+        "shell_executions": len(shell_exec),
+        "shell_denials": len(shell_denied),
+        "evidence_complete": complete,
+        "evidence_completeness": round(100.0 * complete / len(shell_exec), 1) if shell_exec else None,
+        "recovered": bool(ran_ok and score == 100.0 and (failed_calls or shell_denied or failed_shell)),
+        "verified": bool(ran_ok and score == 100.0),
+    }
+
+
 def run_task(spec: TaskSpec, mode: str) -> dict[str, Any]:
     """Run one task end-to-end and return an honest row dict."""
     row: dict[str, Any] = {
@@ -408,6 +483,7 @@ def run_task(spec: TaskSpec, mode: str) -> dict[str, Any]:
         "checks_total": None, "checks": [], "secret_hits": [], "model": None,
         "status_detail": "", "tools_called": [], "skills_used": [],
         "requires": spec.requires,
+        "metrics": {},
     }
     try:
         from nimna.core.state import RunStatus
@@ -455,12 +531,20 @@ def run_task(spec: TaskSpec, mode: str) -> dict[str, Any]:
             return row
         row["model"] = getattr(provider, "model", None) or getattr(provider, "name", None)
 
+        started = _now_perf()
         try:
             result = agent.run(spec.prompt, session_id=f"arena-{spec.id}")
+            # The suite is the lab operator: it grants pending approvals (bounded),
+            # which exercises the real suspend/resume machinery deterministically.
+            resumes = 0
+            while getattr(result, "status", None) == RunStatus.AWAITING_APPROVAL and resumes <= len(spec.mock_script) + 2:
+                result = agent.resume(result.run_id, True)
+                resumes += 1
         except Exception as exc:
             row["verdict"] = "ERROR"
             row["status_detail"] = f"agent crashed: {exc.__class__.__name__}: {str(exc)[:200]}"
             return row
+        wall_ms = int((_now_perf() - started) * 1000)
 
         if getattr(result, "status", None) == RunStatus.AWAITING_APPROVAL:
             row["verdict"] = "ERROR"
@@ -482,6 +566,7 @@ def run_task(spec: TaskSpec, mode: str) -> dict[str, Any]:
         else:
             row["verdict"] = "PASS" if not secret_hits and row["checks_passed"] == row["checks_total"] else "FAIL"
             row["status_detail"] = "live run — deterministic checks only (LLM judge arrives in P5)"
+        row["metrics"] = _shell_metrics(agent, f"arena-{spec.id}", result, row, wall_ms)
         return row
     except SuiteError as exc:
         row["verdict"] = "ERROR"
@@ -525,6 +610,10 @@ def run_suite(tasks: list[TaskSpec], mode: str, *, ledger_path: Path | None = DE
         and r["score"] < r["previous_score"] - SCORE_EPSILON
     ]
     scores = [r["score"] for r in rows if r["score"] is not None]
+    metrics = [r["metrics"] for r in rows if r.get("metrics")]
+    shell_exec_total = sum(m["shell_executions"] for m in metrics)
+    ev_total = sum(m["evidence_complete"] for m in metrics)
+    walls = [m["wall_ms"] for m in metrics if m["wall_ms"]]
     return {
         "version": REPORT_VERSION,
         "mode": mode,
@@ -538,6 +627,16 @@ def run_suite(tasks: list[TaskSpec], mode: str, *, ledger_path: Path | None = DE
             "error": sum(1 for r in rows if r["verdict"] == "ERROR"),
             "mean_score": round(sum(scores) / len(scores), 1) if scores else None,
             "secret_hits": sum(len(r.get("secret_hits") or []) for r in rows),
+            # before/after metrics (P1 contract §8)
+            "verified": sum(1 for m in metrics if m["verified"]),
+            "tool_calls": sum(m["tool_calls"] for m in metrics),
+            "failed_tool_calls": sum(m["failed_tool_calls"] for m in metrics),
+            "failed_commands": sum(m["failed_shell_commands"] for m in metrics),
+            "security_denials": sum(m["shell_denials"] for m in metrics),
+            "shell_executions": shell_exec_total,
+            "evidence_completeness": round(100.0 * ev_total / shell_exec_total, 1) if shell_exec_total else None,
+            "recovered_tasks": sum(1 for m in metrics if m["recovered"]),
+            "mean_wall_ms": round(sum(walls) / len(walls), 1) if walls else None,
         },
         "regressions": regressions,
     }
@@ -564,9 +663,10 @@ def render_markdown(report: dict[str, Any]) -> str:
             "حكم الـ LLM-as-a-Judge على الـ rubric يُضاف في P5.",
             "",
         ]
+    shell_flag = (os.getenv("SHELL_TOOL_ENABLED", "").strip().lower() in {"1", "true", "yes", "on"})
     lines.append(
         f"**Repo:** `{report['repo_version']}` · **Tasks:** `{summary['tasks']}` · "
-        f"**Generated:** `{report['generated_at']}`"
+        f"**Generated:** `{report['generated_at']}` · **run_command:** `{'enabled' if shell_flag else 'disabled'}`"
     )
     lines.append("")
     lines += [
@@ -596,6 +696,13 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"**Summary:** ran `{summary['ran']}` · skipped `{summary['skipped']}` · "
         f"error `{summary['error']}` · mean check-score `{summary['mean_score']}` · "
         f"secret hits `{summary['secret_hits']}` · regressions `{len(report['regressions'])}`",
+        "",
+        f"**Metrics:** verified `{summary.get('verified', '—')}/{summary['ran']}` · "
+        f"tool calls `{summary.get('tool_calls', '—')}` (failed `{summary.get('failed_tool_calls', '—')}`) · "
+        f"shell executions `{summary.get('shell_executions', '—')}` (failed commands `{summary.get('failed_commands', '—')}`) · "
+        f"security denials `{summary.get('security_denials', '—')}` · "
+        f"evidence completeness `{summary.get('evidence_completeness', '—')}`% · "
+        f"recovered `{summary.get('recovered_tasks', '—')}` · mean wall `{summary.get('mean_wall_ms', '—')}`ms",
         "",
     ]
     if report["regressions"]:

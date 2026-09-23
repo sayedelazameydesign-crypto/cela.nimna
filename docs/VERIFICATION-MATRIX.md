@@ -21,6 +21,7 @@
 | G13 Release integrity | manifest + lock + SBOM + provenance | CI/release | PLANNED | release workflow |
 | G14 PR diff evaluation | `python scripts/evaluate_arena.py --diff_file changes.diff` | offline (static) / remote Arena opt-in / LLM judge opt-in | PASS (report) · benchmark SKIPPED unless `ARENA_API_URL`+`ARENA_API_KEY` · judge SKIPPED unless `OPENAI_API_KEY` (verdict advisory; `MOCKED`/`ERROR` get a top banner) | workflow `arena_diff_eval.yml`, `tests/test_evaluate_arena.py`, PR comment + artifact |
 | G15 Arena task suite (agent benchmark) | `python scripts/run_arena_suite.py --mode mock` | offline (MockProvider) / live opt-in | report + ledger rows · verdicts `MOCKED` (banner, never PASS) · `SKIPPED` for missing capabilities (network/shell) · regression flag vs ledger | `evals/tasks/` (10), `evals/ledger/BASELINE-mock.md`, `tests/test_arena_suite.py` |
+| G16 Shell execution primitive | `pytest -q tests/test_shell_tool.py` | offline (subprocess sandbox) | 7 statuses contract · DENIED when `SHELL_TOOL_ENABLED=false` · POLICY_BLOCKED for network/admin/destructive/escape classes pre-execution · CONFIRMATION_REQUIRED without consent · evidence events in the SHA-256 chain (`shell_evidence`/`shell_denied`) · DENIED→SUCCESS and CONFIRMATION_REQUIRED→SUCCESS mutations are test-breaking | `nimna/tools/builtin/shell.py`, `tests/test_shell_tool.py`, `skills/shell_execution/` |
 
 ## Interpretation
 

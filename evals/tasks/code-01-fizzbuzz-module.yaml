@@ -1,16 +1,43 @@
-# Arena task — coding: create a small module with a deterministic API.
+# Arena task — coding: create a module AND verify it through the shell (Agent + Shell).
+# P1 contract §8: this task is the before/after probe for the run_command primitive.
 id: code-01-fizzbuzz-module
-title: "Create a fizzbuzz module"
+title: "Create a fizzbuzz module and verify it via shell"
 category: coding
 prompt: >-
-  أنشئ ملفاً جديداً باسم fizzbuzz.py داخل مجلد src يحتوي دالة
-  fizzbuzz(n) تُعيد قائمة النتائج من 1 إلى n مع قواعد Fizz وBuzz،
-  ثم اطبع أول 15 نتيجة.
-requires: []
-allowed_tools: ["write_file", "run_python", "list_files", "load_skill"]
+  أنشئ ملفاً باسم src/fizzbuzz.py يحتوي دالة fizzbuzz(n)، ثم تحقق أنه يعمل
+  فعلاً بتشغيله عبر الطرفية وأخبرني بالمخرجات.
+requires: ["shell_tool"]
+allowed_tools: ["write_file", "run_command", "list_files", "load_skill"]
 max_steps: 12
 max_tool_calls: 20
 timeout_s: 180
+mock_skills: ["shell_execution"]
+mock_script:
+  - tool: write_file
+    arguments:
+      path: src/fizzbuzz.py
+      content: |
+        def fizzbuzz(n):
+            out = []
+            for i in range(1, n + 1):
+                if i % 15 == 0:
+                    out.append("FizzBuzz")
+                elif i % 3 == 0:
+                    out.append("Fizz")
+                elif i % 5 == 0:
+                    out.append("Buzz")
+                else:
+                    out.append(str(i))
+            return out
+        
+        
+        if __name__ == "__main__":
+            print(" ".join(fizzbuzz(15)))
+  - tool: run_command
+    arguments:
+      command: python3 src/fizzbuzz.py
+      purpose: تشغيل الوحدة للتحقق من مخرجاتها
+mock_final: "تم إنشاء src/fizzbuzz.py وتشغيله عبر الطرفية بنجاح: 1 2 Fizz 4 Buzz Fizz 7 8 Fizz Buzz 11 Fizz 13 14 FizzBuzz"
 expected_artifacts:
   - path: src/fizzbuzz.py
     contains: "def fizzbuzz"
@@ -18,5 +45,5 @@ must_include: ["fizzbuzz"]
 must_not_include: []
 judge_rubric: |-
   1) الملف src/fizzbuzz.py موجود وفيه الدالة المطلوبة بتوقيع صحيح.
-  2) منطق Fizz/Buzz صحيح عند n=15 (3->Fizz, 5->Buzz, 15->FizzBuzz).
-  3) لا أكواد ينفذها الاستيراد مباشرة دون حماية __main__ إن كان الطباعة مطلوبة.
+  2) الوكيل شغّل الملف فعلاً عبر run_command (دليل shell_evidence في الـ audit).
+  3) مخرجات n=15 صحيحة (3->Fizz, 5->Buzz, 15->FizzBuzz).

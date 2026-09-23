@@ -153,7 +153,7 @@ risk_level: safe
 
 ## الأدوات والصلاحيات
 
-`nimna tools` → 26 أداة (22 + 3 vector memory + Browser Use V4):
+`nimna tools` → 26 أداة (22 + 3 vector memory + Browser Use V4) + `run_command` (طرفية داخل الحوزة، opt-in عبر `SHELL_TOOL_ENABLED` — evidence موقّع وdefault-deny):
 
 - **safe**: قراءة/حساب — تنفذ مباشرة.
 - **confirm/restricted**: تحتاج موافقة (تعليق). `delete_file` دائماً؛ `write_file/report` عند الكتابة فوق موجود؛ `run_python` مع `subprocess`؛ كل أدوات `computer_control`/`code_execution`.
@@ -342,7 +342,7 @@ docker compose --profile computer up -d desktop    # سطح مكتب معزول 
 nimna doctor --offline   # .env, مفاتيح, Docker, صلاحيات, SQLite, مخططات الأدوات
 pytest -q                # 83 اختبار (mock) — بلا شبكة
 nimna skills validate    # صياغة SKILL.md + restricted
-nimna tools              # 26 أداة مع risk ( +3 vector memory + Browser Use V4)
+nimna tools              # 26 أداة مع risk ( +3 vector memory + Browser Use V4 + run_command gated)
 curl -s localhost:8001/api/health | jq
 websocat ws://localhost:8001/ws/test
 ```

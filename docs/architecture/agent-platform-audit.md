@@ -284,10 +284,50 @@ Evidence لا claim، Recovery bounded) ونضيف طبقة واحدة جديد�
 - `evals/ledger/` SQLite: run_id, task_id, mode, model, score, verdict, ts, repo_version.
 - **Evidence:** `tests/test_arena_suite.py` (تحليل YAML، عدّاء mock، بلافتات، ledger)؛ `python scripts/run_arena_suite.py --mode mock` يعمل ويطبع baseline؛ صف G15 في المصفوفتين.
 
-### P1-T1 — أداة Shell
-- `nimna/tools/builtin/shell.py`: `run_command(command, timeout_s≤60, background=false)` — تنفيذ داخل sandbox backend الحالي (subprocess الآن)، cwd=workspace jail، اقتصاص مخرجات (stdout/stderr)، ختم زمني، risk=`confirm` افتراضياً + `effective_risk` يرفع إلى `dangerous` لأنماط (`rm -rf /`, `sudo`, `curl|sh` — يتكامل مع `security/anomaly.py`).
-- تسجيل في bootstrap + policy row + `SHELL_TOOL_ENABLED=false` افتراضياً.
-- **Evidence:** اختبارات: عقد التسجيل، رفض خارج jail، timeout، اقتصاص، أنماط deny، audit event `tool.call.shell`؛ تحديث CAPABILITY/VERIFICATION rows؛ مهمة Arena برمجية (P0.5) تُعاد فتُقاس.
+### P1-T1 — أداة Shell → **منفَّذة كـ `run_command` (أول لبنة Execution Fabric)** ✅
+
+> **✅ الحالة: نُفِّذت بعقد أصغر وأشد من التذكرة الأصلية** (عقد المالك، محفوظ حرفياً):
+> ليس `Agent → subprocess.run()` بل السلسلة
+> `parse → normalize → classify → policy → confirmation → sandbox → evidence`.
+>
+> - **الأداة:** `nimna/tools/builtin/shell.py` باسم `run_command` (`shell_execute` محجوز
+>   أصلاً لحاوية الـ desktop في `computer.py`)، مُبوَّبة بـ `SHELL_TOOL_ENABLED=false`
+>   افتراضياً: معطّلة تعني **غير مسجَّلة أصلاً** + `DENIED` حتى لو استُدعيت مباشرة —
+>   لا fallback-execute أبداً.
+> - **الحالات السبعة:** `SUCCESS / NONZERO_EXIT / TIMEOUT / DENIED /
+>   CONFIRMATION_REQUIRED / POLICY_BLOCKED / SANDBOX_ERROR` — لا boolean.
+> - **الأمن قبل التنفيذ:** التصنيف (`shell.execute/write/network/admin/destructive/escape`)
+>   عبر shlex-parse ثم قرار PolicyEngine؛ الـ blacklist إشارة فقط — الحدود الحقيقية
+>   هي: العلم + حوزة workspace + السياسة + الموافقة + الـ sandbox (env مُنقَّح، rlimits،
+>   قصّ مخرجات بالبايت، kill لـ process group عند المهلة).
+> - **Confirmation ≠ Sandbox:** طبقتان منفصلتان — المختبر/النداء المباشر يمرّ بـ
+>   `CONFIRMATION_REQUIRED` صريح، وداخل الوكيل تعمل بوابة الموافقات الموجودة
+>   (suspend/resume) قبل الأداة؛ و`auto_approve` لا يتجاوز default-deny (مُختبَر).
+> - **Evidence لكل عملية:** `shell_evidence` / `shell_denied` في سلسلة الهاش —
+>   `command_hash` (الأمر الخام لا يُطبع أبداً)، `stdout_hash/stderr_hash`، delta للملفات،
+>   `env_keys` أسماءً فقط (قيم البيئة لا تُسجَّل مطلقاً).
+> - **الحَكَم الطفري:** `DENIED→SUCCESS` كسر اختبارين، `CONFIRMATION_REQUIRED→SUCCESS`
+>   كسر اختباراً، تزييف `PASS` في وضع mock كسرت اختبارين (3/3 مكتشفة).
+> - **اختبارات عدائية:** 22 اختباراً — كل بنود العقد الإحدى عشرة + تدفق الوكيل الكامل
+>   (تعليق → موافقة → تنفيذ) + منع تجاوز السياسة حتى مع موافقة كاملة.
+>
+> **قياس قبل/بعد (P0.5 baseline vs Agent+Shell، وضع mock — MOcketed دائماً):**
+>
+> | Metric | Before (P0.5) | After (P1-T1) |
+> |---|---|---|
+> | tasks ran | 8 | 9 (+code-05 recovery task) |
+> | code-01 (probe) | 50.0 | **100.0** عبر تنفيذ shell فعلي |
+> | verified tasks | 2/8 | **3/9** |
+> | tool calls | 0 | 5 (منها 3 تنفيذات shell موثّقة) |
+> | failed commands | 0 | 1 موثّق بصدق (NONZERO_EXIT في code-05) |
+> | evidence completeness | — | **100%** |
+> | security denials | 0 | 0 (المسارات العدائية مغطاة باختبارات منفصلة) |
+>
+> **الخطة الفرعية المحدَّثة للمرحلة P1 (عقد المالك — تحل قائمة P1 القديمة):**
+> `P1-T1 Shell ✅ → P1-T2 Filesystem Delta/Observation (النسخة الدنيا موجودة داخل
+> ShellResult وتُعمَّم هنا) → P1-T3 Verifier → P1-T4 Checkpoint+Recovery →
+> P1-T5 Tool Registry → P1-T6 Capability/Policy Gate → P1-T7 Browser → P1-T8 MCP`،
+> ثم `P2 Planning+Memory+Context → P3 Multi-agent → P4 Self-improvement`.
 
 ### P1-T2 — تحرير وبحث
 - `edit.py`: `edit_file(path, old_text, new_text, expect_once=true)` — فشل صريح إذا old_text غير موجود/متكرر؛ `apply_patch(diff)` بتحقق مسارات داخل jail؛ حد ملف 1MB.

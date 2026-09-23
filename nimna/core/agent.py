@@ -594,7 +594,7 @@ class Agent:
         self._audit(state, "tool_result", {"tool": tool.name, "ok": ok, "duration_ms": duration_ms,
                                            "preview": result[:300]})
         # -- Heuristics Kill Switch (security/anomaly.py) — real-time ---
-        if tool.name == "shell_execute" and get_detector is not None:
+        if tool.name in {"shell_execute", "run_command"} and get_detector is not None:
             try:
                 _det = get_detector()
                 _det.log_call(state.session_id, tool.name, dict(call.arguments), stdout=result[:1000] if ok else "", stderr="" if ok else result[:1000])
