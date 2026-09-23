@@ -41,7 +41,7 @@ class ToolCallRecord(BaseModel):
 
 
 class RunState(BaseModel):
-    run_id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
+    run_id: str = Field(default_factory=lambda: uuid.uuid4().hex)  # 128-bit (32 hex chars), non-guessable
     session_id: str
     user_message: str
     messages: list[Message] = Field(default_factory=list)

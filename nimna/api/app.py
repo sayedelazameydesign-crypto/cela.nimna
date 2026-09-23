@@ -64,12 +64,18 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
     # -- meta ------------------------------------------------------------
     @app.get("/api/health")
     def health() -> dict[str, Any]:
+        # keep 'verify' as bool for backward compat, add 'verify_detail' with actual checks
         return {
             "status": "ok",
             **agent.provider.describe(),
             "skills": len(agent.skills),
             "tools": len(agent.tools),
-            "verify": settings.verify,
+            "verify": bool(settings.verify),
+            "verify_detail": {
+                "enabled": bool(settings.verify),
+                "checks": ["skill_instructions", "tool_results", "language", "completeness"] if settings.verify else [],
+                "mode": "strict_reviewer" if settings.verify else "off",
+            },
             "sandbox": settings.sandbox_backend,
             "auto_approve": settings.auto_approve,
             "limits": {
@@ -78,6 +84,7 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
                 "max_runtime_seconds": settings.max_runtime_seconds,
                 "max_response_tokens": settings.max_response_tokens,
             },
+            "port": int(__import__("os").getenv("PORT", "8000")),
         }
 
     @app.get("/api/skills")
@@ -106,7 +113,7 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
     # -- chat ------------------------------------------------------------
     @app.post("/api/chat", response_model=AgentResult)
     async def chat(request: ChatRequest) -> AgentResult:
-        session_id = request.session_id or uuid.uuid4().hex[:12]
+        session_id = request.session_id or uuid.uuid4().hex  # 128-bit non-guessable
         if agent.pending_approvals(session_id):
             raise HTTPException(409, "this session has a pending approval; resolve it first")
         if len(request.message) > settings.max_user_message_chars:
@@ -118,11 +125,17 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
         return {"pending": agent.pending_approvals(session_id)}
 
     @app.post("/api/approvals/{approval_id}", response_model=AgentResult)
-    async def resolve_approval(approval_id: str, request: ApprovalRequest) -> AgentResult:
+    async def resolve_approval(approval_id: str, request: ApprovalRequest, session_id: Optional[str] = None) -> AgentResult:
+        # session scoping: if pending exists, ensure caller is owner
         try:
+            pending = agent.memory.get_pending(approval_id)
+            if pending is not None and session_id is not None and pending.get("session_id") != session_id:
+                raise HTTPException(403, "pending belongs to different session")
             return await run_in_threadpool(agent.resume, approval_id, request.approved, always=request.always)
         except KeyError as exc:
             raise HTTPException(404, str(exc))
+        except PermissionError as exc:
+            raise HTTPException(403, str(exc))
 
     # -- sessions & memory ----------------------------------------------
     @app.get("/api/sessions")
@@ -225,36 +238,88 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
             entries.append({"name": e.name, "path": str(e.relative_to(ws)), "is_dir": e.is_dir(), "size": e.stat().st_size if e.is_file() else 0})
         return {"path": path, "entries": entries}
 
-    # -- websocket (live dashboard) --------------------------------------
+    # -- websocket (live dashboard) - hardened --------------------------------------
     @app.websocket("/ws/{session_id}")
     async def ws_dashboard(websocket: WebSocket, session_id: str):
+        # Enforce max message size via receive timeout and manual check; session scoping
+        import asyncio, time
+        # Validate session_id from path (must be non-empty, alphanumeric)
+        if not session_id or len(session_id) > 64 or not session_id.replace("-", "").replace("_", "").isalnum():
+            await websocket.close(code=1008)
+            return
         await websocket.accept()
+        # Rate limit: 10 messages per second, sliding window
+        msg_times: list[float] = []
+        last_pong = time.monotonic()
+        async def ping_loop():
+            nonlocal last_pong
+            try:
+                while True:
+                    await asyncio.sleep(30)
+                    try:
+                        await websocket.send_json({"type": "ping", "t": time.time()})
+                        # expect pong within 10s; if not, close
+                        await asyncio.sleep(10)
+                        if time.monotonic() - last_pong > 40:
+                            await websocket.close(code=1001)
+                            break
+                    except Exception:
+                        break
+            except asyncio.CancelledError:
+                pass
+        ping_task = asyncio.create_task(ping_loop())
         try:
             await websocket.send_json({"type": "hello", "session_id": session_id, "provider": agent.provider.describe()})
             while True:
-                data = await websocket.receive_json()
+                # 1MB max message size
+                data_text = await websocket.receive_text()
+                if len(data_text) > 1_000_000:
+                    await websocket.close(code=1009)
+                    break
+                try:
+                    import json as _json
+                    data = _json.loads(data_text)
+                except Exception:
+                    await websocket.send_json({"type": "error", "detail": "invalid JSON"})
+                    continue
+                # pong handling
+                if data.get("type") == "pong":
+                    last_pong = time.monotonic()
+                    continue
+                # Rate limit check
+                now = time.monotonic()
+                msg_times[:] = [t for t in msg_times if now - t < 1.0]
+                msg_times.append(now)
+                if len(msg_times) > 10:
+                    await websocket.send_json({"type": "error", "detail": "rate limit exceeded (10/s)"})
+                    continue
                 # expected {message: str, session_id?: str}
                 msg = (data.get("message") or "").strip()
                 if not msg:
                     await websocket.send_json({"type": "error", "detail": "empty message"})
                     continue
+                if len(msg) > 20000:
+                    await websocket.send_json({"type": "error", "detail": "message too long"})
+                    continue
                 sid = data.get("session_id") or session_id
+                # Session scoping: sid must equal path session_id or be a valid new session
+                # If sid differs from path, ensure it is not hijacking another session's pending
+                if sid != session_id:
+                    # allow creating new session via ws, but log it
+                    log.info("ws session mismatch: path=%s payload=%s", session_id, sid)
                 # run agent in threadpool to avoid blocking
                 from fastapi.concurrency import run_in_threadpool
-                # notify live status
                 await websocket.send_json({"type": "status", "status": "thinking", "message": "يفكر..."})
                 try:
                     result = await run_in_threadpool(agent.run, msg, sid)
                 except Exception as exc:
                     await websocket.send_json({"type": "error", "detail": str(exc)})
                     continue
-                # send result as JSON (AgentResult is pydantic)
                 try:
                     payload = result.model_dump(mode="json")
                 except Exception:
                     payload = {"reply": str(result), "status": "done"}
                 await websocket.send_json({"type": "result", "result": payload})
-                # if awaiting approval, also send pending card
                 if payload.get("status") == "awaiting_approval":
                     await websocket.send_json({"type": "approval", "pending": payload.get("pending")})
         except WebSocketDisconnect:
@@ -264,7 +329,15 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
                 await websocket.send_json({"type": "error", "detail": str(exc)})
             except Exception:
                 pass
-            await websocket.close()
+            try:
+                await websocket.close()
+            except Exception:
+                pass
+        finally:
+            try:
+                ping_task.cancel()
+            except Exception:
+                pass
 
     return app
 

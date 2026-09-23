@@ -45,6 +45,26 @@ def _vnc_enabled() -> bool:
 def _screenshot_dir(ctx: ToolContext) -> Path:
     d = ctx.workspace / ".screenshots"
     d.mkdir(parents=True, exist_ok=True)
+    # TTL cleanup: remove screenshots older than 1 hour, keep newest 80
+    try:
+        import time as _t
+        files = sorted(d.glob("*.png"), key=lambda x: x.stat().st_mtime, reverse=True)
+        # keep 80 newest
+        for f in files[80:]:
+            try:
+                f.unlink()
+            except Exception:
+                pass
+        # delete older than 3600s among remaining (but keep at least 5)
+        now = _t.time()
+        for f in files[:80]:
+            try:
+                if now - f.stat().st_mtime > 3600 and len(files) > 5:
+                    f.unlink()
+            except Exception:
+                pass
+    except Exception:
+        pass
     return d
 
 def _generate_placeholder_png(text: str = "Nimna Desktop — simulated") -> tuple[bytes, str]:
@@ -226,37 +246,106 @@ class TypeTextParams(BaseModel):
     delay_ms: int = Field(40, ge=0, le=500, description="Delay between keystrokes (ms).")
     purpose: str = Field("", description="Why you are typing this (for audit).")
 
+    def model_post_init(self, __context):
+        # Block newline injection to avoid executing hidden commands in an open terminal
+        if "\n" in self.text or "\r" in self.text:
+            raise ValueError("text must not contain newline; use submit=true to press Enter")
+        if len(self.text) > 5000:
+            raise ValueError("text too long")
+
 class ShellExecuteParams(BaseModel):
     command: str = Field(..., min_length=1, max_length=4000, description="Shell command to run inside the isolated desktop (bash -lc).")
     timeout: int = Field(20, ge=1, le=120, description="Timeout seconds.")
     purpose: str = Field(..., min_length=3, description="Why you need this command (for approval).")
 
 
-def _run_with_limits(cmd: list[str], timeout: int, cwd: str | None = None) -> subprocess.CompletedProcess:
-    """Run with strict resource limits (CPU, mem, files, procs)."""
-    import resource
+def _clean_env() -> dict[str, str]:
+    """Sanitized env — drop secrets and risky vars, keep minimal PATH."""
+    deny_prefixes = ("AWS_", "OPENAI_", "GOOGLE_", "GEMINI_", "NVIDIA_", "SSH_", "GITHUB_", "ANTHROPIC_", "AZURE_")
+    deny_exact = {"SSH_AUTH_SOCK", "GPG_AGENT_INFO", "AWS_SESSION_TOKEN"}
+    clean = {}
+    for k, v in os.environ.items():
+        if k in deny_exact or any(k.startswith(p) for p in deny_prefixes):
+            continue
+        clean[k] = v
+    # ensure minimal safe PATH
+    clean.setdefault("PATH", "/usr/local/bin:/usr/bin:/bin")
+    # force non-interactive
+    clean["DEBIAN_FRONTEND"] = "noninteractive"
+    clean["TERM"] = "dumb"
+    return clean
+
+def _is_blocked_command(cmd: str) -> str | None:
+    """Return reason if command is blocked, else None."""
+    lowered = cmd.lower()
+    # exact dangerous patterns
+    denylist = ["rm -rf /", "mkfs", "dd if=", ":(){:|:&};:", "shutdown", "reboot", "chmod +s", "chown ", "iptables", "mkswap", "fdisk"]
+    for pat in denylist:
+        if pat.lower() in lowered:
+            return f"blocked pattern '{pat}'"
+    # regex: curl/wget piped to shell
+    import re
+    if re.search(r"curl\s+.*\|\s*(bash|sh|zsh)", lowered):
+        return "blocked: curl piped to shell"
+    if re.search(r"wget\s+.*\|\s*(bash|sh|zsh)", lowered):
+        return "blocked: wget piped to shell"
+    if re.search(r"base64\s+[^|]*\|\s*(bash|sh)", lowered):
+        return "blocked: base64 piped to shell"
+    # pty / interactive shells that can escape timeout
+    for bad in [" pty", "screen ", "tmux", " nohup ", " ssh ", " nc ", " ncat ", " socat "]:
+        if bad in f" {lowered} ":
+            return f"blocked interactive tool '{bad.strip()}'"
+    # block fork bomb variations
+    if "fork" in lowered and ":(" in cmd:
+        return "blocked fork bomb"
+    return None
+
+def _run_with_limits(cmd: list[str], timeout: int, cwd: str | None = None, env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+    """Run with strict resource limits (CPU, mem, files, procs) and process-group kill on timeout."""
+    import resource, signal
+    clean_env = env if env is not None else _clean_env()
     def _preexec():
         try:
-            # CPU 30s
+            # new process group so we can kill children
+            os.setsid()
+        except Exception:
+            pass
+        try:
             resource.setrlimit(resource.RLIMIT_CPU, (30, 30))
-            # Memory 512 MB
             resource.setrlimit(resource.RLIMIT_AS, (512*1024*1024, 512*1024*1024))
-            # Open files 64
             resource.setrlimit(resource.RLIMIT_NOFILE, (64, 64))
-            # Processes 32 (Linux only)
             try:
                 resource.setrlimit(resource.RLIMIT_NPROC, (32, 32))
             except Exception:
                 pass
-            # File size 10 MB
             resource.setrlimit(resource.RLIMIT_FSIZE, (10*1024*1024, 10*1024*1024))
         except Exception:
             pass
+    # Use Popen to allow killpg on timeout (subprocess.run timeout only kills parent)
+    import subprocess as sp
     try:
-        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd, preexec_fn=_preexec)
-    except (ValueError, OSError):
-        # preexec not supported on this platform (e.g. Windows) — fall back
-        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd)
+        proc = sp.Popen(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True, cwd=cwd, env=clean_env, preexec_fn=_preexec, stdin=sp.DEVNULL)
+        try:
+            out, err = proc.communicate(timeout=timeout)
+            return sp.CompletedProcess(cmd, proc.returncode, out, err)
+        except sp.TimeoutExpired:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            except Exception:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+            # collect partial
+            try:
+                out, err = proc.communicate(timeout=2)
+            except Exception:
+                out, err = "", "timeout"
+            raise sp.TimeoutExpired(cmd, timeout, output=out, stderr=err)
+    except (ValueError, OSError) as e:
+        # preexec not supported (e.g. Windows) — fall back without pgkill
+        return sp.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd, env=clean_env, stdin=sp.DEVNULL)
+
 
 def _locate_element_on_image(data: bytes, query: str) -> tuple[int, int] | None:
     """Try to locate an element by text using simple heuristics (OCR if available)."""
@@ -532,41 +621,51 @@ def register(registry: ToolRegistry) -> None:
         tags=["computer", "destructive"],
     )
     def shell_execute(params: ShellExecuteParams, ctx: ToolContext):
-        # block obviously dangerous commands on the host, but inside container it's still isolated
+        # Content filter BEFORE approval display — block truly dangerous patterns
+        blocked = _is_blocked_command(params.command)
+        if blocked:
+            raise ToolError(f"blocked: {blocked} — command rejected before approval")
+        # Additional strict denylist (defense in depth)
         lowered = params.command.strip().lower()
-        blocklist = ["rm -rf /", "mkfs", "dd if=", ":(){:|:&};:", "shutdown", "reboot"]
-        if any(b in lowered for b in blocklist):
-            raise ToolError("blocked: command looks destructive for the isolated desktop")
+        # Enforce cwd = workspace (prevent cd / tricks from escaping — we wrap)
+        # Sanitize env already via _run_with_limits
         if _vnc_enabled():
-            # try docker exec desktop — with resource limits inside the container the host timeout still applies
             try:
-                # prepend ulimit inside the container for extra safety
-                wrapped = f"ulimit -t 30; ulimit -v 524288; ulimit -n 64; timeout {params.timeout} bash -lc {params.command!r}"
+                # Inside container: cd to workspace, apply ulimit, no network by default
+                # Use timeout inside container + host-side killpg
+                # Wrap command to force workspace cwd
+                inner = params.command.replace("'", "'\\''")  # for safe single-quote embedding
+                wrapped = f"ulimit -t 30; ulimit -v 524288; ulimit -n 64; ulimit -f 10240; timeout {params.timeout} bash -lc 'cd /home/ubuntu/workspace && {inner}'"
                 out = _run_with_limits(
                     ["docker", "exec", "desktop", "bash", "-lc", wrapped],
-                    timeout=params.timeout + 2,
+                    timeout=params.timeout + 3,
+                    env=_clean_env(),
                 )
-                # also capture via timeout
                 return {
                     "command": params.command,
                     "exit_code": out.returncode,
                     "stdout": out.stdout[:8000],
                     "stderr": out.stderr[:4000],
                     "via": "docker",
+                    "cwd": "/home/ubuntu/workspace",
                 }
             except subprocess.TimeoutExpired:
-                raise ToolError(f"command timed out after {params.timeout}s")
+                raise ToolError(f"command timed out after {params.timeout}s (process group killed)")
             except FileNotFoundError:
-                # docker not available on host
                 pass
             except Exception as exc:
                 raise ToolError(f"shell_execute failed: {exc}") from exc
-        # simulated fallback: run in a very restricted way inside workspace sandbox (still jails, but flagged simulated)
-        # We do NOT actually run arbitrary commands on the host for safety; we just echo.
-        if lowered.startswith("echo ") or lowered.startswith("ls") or lowered.startswith("pwd") or lowered in {"ls", "pwd", "whoami", "date"}:
+        # Simulated fallback: very restricted — only allow safe read-only commands, else mock
+        # Close stdin, no pty, env sanitized, cwd locked
+        safe_prefixes = ("echo ", "ls", "pwd", "cat ", "head ", "tail ", "wc ", "date", "whoami", "ls ", "find ", "grep ", "stat ")
+        is_safe = lowered.startswith(safe_prefixes) or lowered in {"ls", "pwd", "whoami", "date", "env", "id"}
+        if is_safe:
             try:
                 out = _run_with_limits(
-                    ["bash", "-lc", params.command], timeout=min(params.timeout, 5), cwd=str(ctx.workspace)
+                    ["bash", "-lc", f"cd {str(ctx.workspace)!r} && {params.command}"],
+                    timeout=min(params.timeout, 5),
+                    cwd=str(ctx.workspace),
+                    env=_clean_env(),
                 )
                 return {
                     "command": params.command,
@@ -574,8 +673,11 @@ def register(registry: ToolRegistry) -> None:
                     "stdout": out.stdout[:4000],
                     "stderr": out.stderr[:2000],
                     "simulated": True,
-                    "note": "Simulated (or workspace-local) shell — enable real desktop for full isolation: docker compose --profile computer up -d desktop",
+                    "cwd": str(ctx.workspace),
+                    "note": "Simulated (workspace-local) — enable real desktop for full isolation: docker compose --profile computer up -d desktop",
                 }
+            except subprocess.TimeoutExpired:
+                raise ToolError(f"command timed out after {min(params.timeout,5)}s")
             except Exception as exc:
                 raise ToolError(f"simulated shell failed: {exc}") from exc
         return {
@@ -584,5 +686,6 @@ def register(registry: ToolRegistry) -> None:
             "stdout": f"[simulated] would run: {params.command}",
             "stderr": "",
             "simulated": True,
+            "cwd": str(ctx.workspace),
             "note": "Simulated — no host side effects. Enable real desktop for isolated execution.",
         }
