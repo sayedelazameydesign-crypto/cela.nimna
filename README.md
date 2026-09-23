@@ -1,40 +1,38 @@
-# Nimna – وكيل ذكي قابل لإعادة استخدام المهارات
+# Nimna — وكيل ذكي قابل لإعادة استخدام المهارات (Reusable-Skills Agent)
 
-> **حالة المشروع: نسخة مرشحة للإصدار (Release Candidate) — محصّن وفق نطاق الاختبارات الحالية (77 اختبارًا)**
-> الاختبارات لا تثبت الأمان المطلق. الحاويات تشترك في **نواة المضيف**؛ يجب إبقاء المضيف وDocker محدثين واستخدام **seccomp/AppArmor أو SELinux** عند النشر. لا تستخدم `subprocess` كعزل أمني، ولا تعتبر `mock` دليلًا على اتصال مزود حقيقي.
+> **الحالة: Release Candidate — محصّن وفق نطاق الاختبارات الحالية (77 اختبارًا)**
+> الاختبارات لا تثبت الأمان المطلق. الحاويات تشترك في **نواة المضيف**؛ أبقِ المضيف وDocker محدثين واستخدم **seccomp/AppArmor/SELinux**. لا تستخدم `subprocess` كعزل أمني، ولا تعتبر `mock` دليل اتصال حقيقي.
 
-وكيل عام يعمل فوق **مفتاح Gemini المجاني** (أو NVIDIA NIM أو أي نموذج متوافق مع OpenAI) ولا يحشر كل التعليمات داخل الـ prompt؛ بل يملك **مكتبة مهارات** على شكل مجلدات `SKILL.md`:
-
-> يقرأ الوكيل أوصاف المهارات أولًا ← يختار المناسب منها ← يحمّل تفاصيلها عند الحاجة ← ينفذها بأدوات محددة ومسموح بها فقط ← يطلب موافقتك قبل أي عملية حساسة ← يتحقق من النتيجة ← يرد.
+وكيل عام يعمل فوق **مفتاح Gemini المجاني** (أو NVIDIA NIM أو أي نموذج OpenAI-compatible) بمكتبة مهارات `SKILL.md` قابلة للتبديل:
 
 ```
 المستخدم → واجهة (CLI / Web / REST)
-   → المخطط Planner (يرى الكتالوج المختصر فقط)
-   → اختيار المهارات (حتى 3)
-   → تحميل SKILL.md + المراجع عند الطلب
-   → حلقة النموذج ↔ الأدوات (تحقق Pydantic، صلاحيات، سجل تدقيق)
-   → موافقة يدوية للأدوات الخطرة (تعليق التشغيل واستئنافه)
-   → مراجعة النتيجة (Verifier)
-   → الرد النهائي + حفظه في الذاكرة
+  → Planner (يرى الكتالوج المختصر فقط)
+  → اختيار المهارات (≤3) + تحميل SKILL.md عند الطلب
+  → حلقة النموذج ↔ الأدوات (Pydantic + صلاحيات + تدقيق)
+  → موافقة بصرية/يدوية للأدوات الخطرة (تعليق/استئناف + TTL 5د)
+  → بوابة الرؤية (Vision Gateway) للتحكم البصري
+  → مراجعة Verifier → الرد + حفظ في الذاكرة
 ```
 
-> **English:** Nimna is a provider-agnostic "agent skills" runtime: skills are `SKILL.md` folders loaded progressively, tools are scoped per skill and validated with Pydantic, sensitive tools require human approval (runs pause/resume), memory and audit live in SQLite, and the model layer (Gemini / NVIDIA / OpenAI-compatible) is swappable without touching skills or tools. See the [Quick start](#quick-start-english) below.
+> **English:** Provider-agnostic skills runtime — skills are `SKILL.md` folders loaded progressively, tools are scoped per skill with Pydantic validation, sensitive tools require human approval (pause/resume, 128-bit id, TTL, session-scoped), memory/audit in SQLite, model layer (Gemini/NVIDIA/OpenAI) swappable. See [Quick start](#quick-start-english).
 
 ---
 
 ## المحتويات
-
 1. [التشغيل السريع](#التشغيل-السريع)
 2. [البنية](#البنية)
-3. [المهارات](#المهارات-skills)
-4. [الأدوات والصلاحيات](#الأدوات-والصلاحيات)
-5. [الذاكرة وسجل التدقيق](#الذاكرة-وسجل-التدقيق)
-6. [تبديل المزود: Gemini / NVIDIA / غيرهما](#تبديل-المزود)
-7. [واجهة REST](#واجهة-rest)
-8. [Docker](#docker)
-9. [لوحة التحكم والكمبيوتر الحقيقي](#لوحة-التحكم-والكمبيوتر-الحقيقي)
+3. [المهارات (8)](#المهارات-skills)
+4. [الأدوات (22) والصلاحيات](#الأدوات-والصلاحيات)
+5. [الذاكرة والتدقيق](#الذاكرة-وسجل-التدقيق)
+6. [تبديل المزود](#تبديل-المزود-gemini--nvidia--openai)
+7. [واجهة REST & WebSocket](#واجهة-rest--websocket)
+8. [Docker والنشر](#docker-والنشر)
+9. [التحكم بالكمبيوتر والواجهة المتقدمة](#التحكم-بالكمبيوتر-والواجهة-المتقدمة-beating-manus-2026)
 10. [الإعدادات](#الإعدادات)
-11. [الأمان وحدود التصميم](#الأمان-وحدود-التصميم)
+11. [الأمان — المراجعة #1](#الأمان--المراجعة-1-أعلى-مخاطرة)
+12. [الاختبار والتشخيص](#الاختبار-والتشخيص)
+13. [المساهمة](#المساهمة)
 
 ---
 
@@ -46,20 +44,20 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
 cp .env.example .env
-# ضع مفتاحك: GEMINI_API_KEY=...   (مجاني من https://aistudio.google.com/apikey)
+# ضع مفتاحك: GEMINI_API_KEY=...  (https://aistudio.google.com/apikey)
 
-nimna doctor --offline                 # تحقق قبل التشغيل
-nimna skills list                      # المهارات المثبتة
-nimna ask "حلّل ملف المبيعات وأنشئ لي تقريرًا"
-nimna chat                             # محادثة تفاعلية (الموافقات تُطلب في الطرفية)
-nimna serve                            # واجهة ويب + REST على http://localhost:8000
-nimna doctor --offline               # فحص البيئة والمفاتيح و Docker والمهارات
-pytest                                 # 69 اختبارًا تعمل بلا مفتاح (مزود وهمي) (مزود وهمي)
+nimna doctor --offline                    # فحص بيئة
+nimna skills list
+nimna ask "حلّل ملف المبيعات وأنشئ تقريراً"
+nimna chat                               # تفاعلي — الموافقات في الطرفية
+PORT=8001 nimna serve                    # واجهة + REST  http://localhost:8001
+nimna doctor --offline
+pytest -q                                # 77 اختبار بلا مفتاح (mock)
 ```
 
-بدون أي مفتاح يمكنك تجربة كل شيء بالمزود الوهمي: `MODEL_PROVIDER=mock nimna serve` — سترى اختيار المهارات والأدوات يعمل فعليًا، والردود فقط تكون وهمية.
+بدون مفتاح: `MODEL_PROVIDER=mock nimna serve` — ترى اختيار المهارات والأدوات حياً والردود فقط وهمية.
 
-مجلد `workspace/` يحتوي `sales.csv` تجريبيًا، لذا الطلب أعلاه يعمل مباشرة: يختار الوكيل مهارتَي `csv_analysis` و`report_writer`، يفحص الملف، يحسب الإحصاءات (إجمالًا وحسب المنطقة)، ويكتب التقرير في `workspace/reports/`.
+`workspace/sales.csv` جاهز للتجربة: يختار `csv_analysis` + `report_writer` → يفحص الأعمدة → يحسب الإحصاءات → يرسم `Chart.js` → يكتب `workspace/reports/*.md` بدون كتابة فوق الأصلي.
 
 ---
 
@@ -67,320 +65,281 @@ pytest                                 # 69 اختبارًا تعمل بلا م�
 
 ```
 nimna/
-├── config.py            # الإعدادات من متغيرات البيئة / .env (لا مفاتيح داخل الكود)
-├── bootstrap.py         # build_agent(): يربط المزود + المهارات + الأدوات + الذاكرة
-├── providers/           # طبقة النموذج (قابلة للتبديل)
-│   ├── base.py          #   Message / ToolCall / ToolSpec / ModelProvider + إعادة المحاولة عند 429
-│   ├── gemini.py        #   Google Gen AI SDK (function calling يدوي، يحافظ على thought signatures)
-│   ├── openai_compat.py #   أي /chat/completions: NVIDIA NIM، OpenAI، Groq، Ollama...
-│   └── mock.py          #   مزود وهمي للاختبارات والعرض بدون مفتاح
-├── skills/              # مدير المهارات: اكتشاف، كتالوج مختصر، ترتيب لفظي، مراجع
-├── tools/               # سجل الأدوات: مخطط JSON من Pydantic، مستويات خطورة، سجن المسارات
-│   ├── sandbox.py       #   تنفيذ Python: subprocess (rlimits) أو docker (--network none)
-│   └── builtin/         #   files, csv, python, web, reports, memory, skills
-├── memory/store.py      # SQLite: الجلسات، الرسائل، الذاكرة الدائمة، سجل التدقيق، الموافقات المعلقة
+├── config.py            # Settings من .env (لا أسرار في الكود)
+├── bootstrap.py         # build_agent(): مزود + مهارات + أدوات + ذاكرة
+├── providers/
+│   ├── base.py          # Message/ToolCall/ToolSpec/ModelProvider + retry 429
+│   ├── gemini.py        # Google Gen AI SDK — function calling يدوي + thought signatures + Vision Gateway (Part.from_bytes)
+│   ├── openai_compat.py # /chat/completions: NVIDIA/OpenAI/Ollama
+│   └── mock.py          # للاختبار بدون مفتاح
+├── skills/              # اكتشاف + كتالوج مختصر + ترتيب لفظي + مراجع
+├── tools/
+│   ├── sandbox.py       # run_python: subprocess (rlimits) أو docker --network none --cap-drop ALL
+│   └── builtin/         # files, csv, python, web (SSRF), reports, memory, skills, computer
+├── memory/store.py      # SQLite: sessions/messages/memories/audit_log/pending_runs/approvals (TTL, session-scoped, one-shot)
 ├── core/
-│   ├── planner.py       #   اختيار المهارات (LLM + JSON) مع رجوع للترتيب اللفظي
-│   ├── agent.py         #   حلقة الوكيل القابلة للتعليق/الاستئناف + المراجعة
-│   ├── approval.py      #   سياسات الموافقة: Console / Defer (API) / Auto / Callback
-│   └── state.py         #   RunState قابل للتسلسل، AgentResult
-├── api/                 # FastAPI + واجهة ويب صغيرة (RTL) تدعم بطاقة الموافقة
-└── cli.py               # nimna ask | chat | skills | tools | serve | approvals | resume | doctor
-skills/                  # مكتبة المهارات (أضف مجلدًا = مهارة جديدة)
-workspace/               # مساحة عمل الوكيل (كل أدوات الملفات مقيدة بداخلها)
-tests/                   # pytest – تعمل بالكامل بدون شبكة
+│   ├── planner.py       # اختيار مهارات (LLM JSON + fallback لفظي عربي/إنجليزي)
+│   ├── agent.py         # حلقة قابلة للتعليق/الاستئناف + Verifier + كاسر حلقة بصري (hash)
+│   ├── approval.py      # DeferToClient / Console / Auto / Callback
+│   └── state.py         # RunState (run_id 128-bit) + AgentResult
+├── api/
+│   ├── app.py           # FastAPI + WebSocket hardened (1MB, ping, rate 10/s)
+│   └── static/index.html# لوحة تحكم 3 أعمدة + Computer Use متقدم
+└── cli.py               # nimna ask|chat|skills|tools|serve|approvals|resume|doctor
+skills/                  # 8 مهارات — أضف مجلد = مهارة جديدة
+workspace/               # مساحة عمل مقيدة (كل أدوات الملفات مسجونة داخلها)
+tests/                   # 77 اختبار — بلا شبكة
 ```
 
-### دورة عمل طلب واحد
-
-عند قول المستخدم: **«حلّل ملف المبيعات وأنشئ لي تقريرًا»**
-
-1. يُحفظ الطلب في ذاكرة الجلسة، ويُستدعى آخر 20 رسالة كسياق قصير.
-2. **المخطط** يرى الكتالوج المختصر فقط (الاسم + الوصف + الكلمات المفتاحية) ويعيد JSON: `{"skills": ["csv_analysis", "report_writer"], "plan": [...]}`. إن فشل النموذج أو أعاد نصًا غير صالح، يُستخدم الترتيب اللفظي (يدعم العربية والإنجليزية).
-3. تُحمّل أجسام `SKILL.md` المختارة داخل system prompt، وتُفتح **فقط** الأدوات المذكورة في `allowed_tools` لتلك المهارات (+ أدوات أساسية: `load_skill`, `read_skill_reference`, `memory_*`).
-4. حلقة النموذج ↔ الأدوات: كل استدعاء يُتحقق منه بـ Pydantic؛ الأخطاء تُعاد للنموذج ليصحح نفسه.
-5. أي أداة بخطورة `confirm` (حذف، كتابة فوق ملف موجود، تنفيذ Python بلا Docker) توقف التشغيل وتطلب موافقة: في CLI تُسأل فورًا، وفي REST تُعاد `status: awaiting_approval` وتُستأنف عبر `POST /api/approvals/{id}`.
-6. **المراجع Verifier**: استدعاء إضافي يفحص الجواب مقابل تعليمات المهارة والطلب؛ إن وجد مشاكل حقيقية يُطلب من النموذج إصلاحها (مرة واحدة). يمكن تعطيله بـ `AGENT_VERIFY=false`.
-7. يُحفظ الرد في الجلسة، وكل ما حدث (مهارات محمّلة، أدوات، موافقات، استهلاك التوكنات) في `audit_log`.
+**دورة طلب واحد** ـ «حلّل المبيعات»:
+1. حفظ الطلب + آخر 20 رسالة كسياق.
+2. **Planner** يرى الكتالوج المختصر فقط → `{"skills":["csv_analysis","report_writer"],"plan":[...]}`. فشل الـ JSON → ترتيب لفظي.
+3. تحميل `SKILL.md` للمهارات المختارة + فتح **فقط** `allowed_tools` الخاصة بها (+ `load_skill, read_skill_reference, memory_*`).
+4. حلقة نموذج↔أدوات مع تحقق Pydantic؛ الأخطاء تُعاد للنموذج.
+5. أداة `confirm/restricted` → تعليق (`AWAITING_APPROVAL`, id عشوائي 128-bit, TTL 5د, حد 5/جلسة) → موافقة بصرية/طرفية → استئناف ذري one-shot.
+6. حقن الرؤية: بعد `take_screenshot` تُحمّل الصورة كـ `user_with_image` للدور التالي (Gemini vision).
+7. **Verifier** يفحص الجواب مقابل تعليمات المهارة (مرة واحدة، `AGENT_VERIFY=false` لتعطيله).
+8. حفظ الرد + `audit_log` كامل.
 
 ---
 
 ## المهارات (Skills)
 
-كل مهارة مجلد بداخله `SKILL.md`. تُعرض الواجهة الأمامية (front matter) فقط للمخطط، ولا يُحمّل الجسم إلا عند الاختيار — وهذا ما يجعل إضافة عشرات المهارات لا يضخّم الـ prompt.
+كل مهارة مجلد `SKILL.md` — الواجهة الأمامية (front matter) فقط للمخطط، والجسم يُحمّل عند الاختيار (لا تضخم prompt).
 
 ```
 skills/csv_analysis/
-├── SKILL.md                 # مطلوب
-├── references/              # وثائق يقرأها الوكيل عند الحاجة بـ read_skill_reference
-├── scripts/                 # اختياري: سكربتات تُشغَّل عبر run_python
-└── tests/                   # اختياري
+├── SKILL.md
+├── references/statistics_guide.md
+└── scripts/
 ```
 
-```markdown
+```yaml
 ---
 name: csv_analysis
 display_name: تحليل ملفات CSV
-description: تحليل ملفات CSV: اكتشاف الأعمدة، القيم المفقودة، الإحصاءات، التجميع، وإنشاء ملخص.
+description: تحليل ملفات CSV: اكتشاف الأعمدة، القيم المفقودة، الإحصاءات...
 version: 1.0.0
-triggers: [تحليل ملف, CSV, إحصاءات البيانات, analyze csv]
-allowed_tools: [list_files, read_csv, calculate_statistics, create_chart, read_skill_reference]
+triggers: [تحليل ملف, CSV, analyze csv]
+allowed_tools: [list_files, read_csv, calculate_statistics, create_chart]
+risk_level: safe
 ---
-
 ## التعليمات
-1. افحص الأعمدة وأنواعها بـ read_csv ...
-2. لا تعدّل الملف الأصلي.
+1. افحص الأعمدة بـ read_csv ...
 ```
 
-- الحقول: `name` (مطلوب)، `description` (مطلوب)، `triggers`، `allowed_tools` (تُقبل أيضًا `allowed-tools` بصيغة agentskills)، `version`، `risk_level` (`safe`/`confirm`/`restricted`)، `tags`، `metadata`.
-- إن نسي الكاتب اقتباس نقطتين `:` داخل الوصف، يوجد محلل متسامح احتياطي.
-- **إضافة مهارة = إضافة مجلد** ثم `POST /api/skills/reload` (أو إعادة التشغيل). `nimna skills validate` يفحص الصياغة وينبه لأدوات غير مسجلة (`allowed_tools` تشير لأداة غير موجودة) أو مهارة `restricted` تحتاج مراجعة يدوية.
-- مهارة `skill_author` تجعل الوكيل نفسه يكتب مهارات جديدة عند طلبك: «أنشئ مهارة لمراجعة ملفات السجلات».
+- `nimna skills validate` ينبه لأداة غير مسجلة أو مهارة `restricted` تحتاج مراجعة.
+- إضافة مهارة = إضافة مجلد + `POST /api/skills/reload`.
 
-### المهارات المضمّنة
+### المهارات المضمّنة (8)
 
 | المهارة | الغرض | الأدوات | المستوى |
-|---|---|---|---|
-| `csv_analysis` | فحص CSV، إحصاءات، تجميع، رسم بياني | read_csv, calculate_statistics, create_chart | safe |
-| `report_writer` | تقرير Markdown منظم في `reports/` | write_report | safe/confirm |
-| `web_research` | بحث (DuckDuckGo بلا مفتاح) + قراءة صفحات + مصادر | web_search, fetch_url | safe |
-| `python_executor` | تشغيل سكربتات قصيرة في بيئة معزولة | run_python | safe/confirm |
-| `file_analysis` | استعراض وقراءة وتلخيص الملفات النصية | list_files, read_file, file_info | safe |
-| `skill_author` | تأليف مهارة جديدة بصيغة SKILL.md | write_file, list_skills | safe |
-| `computer_control` | **التحكم في سطح مكتب معزول (VNC)** — تصفح، نقر، كتابة، أوامر | take_screenshot, mouse_click, type_text, shell_execute | **restricted** |
+|---------|-------|---------|---------|
+| `csv_analysis` | فحص CSV + إحصاءات + رسم | `read_csv, calculate_statistics, create_chart` | safe |
+| `report_writer` | تقرير Markdown في `reports/` | `write_report` | safe/confirm |
+| `web_research` | بحث DuckDuckGo + قراءة صفحات بمصادر | `web_search, fetch_url` | safe |
+| `python_executor` | تشغيل Python معزول | `run_python` | safe/confirm |
+| `file_analysis` | استعراض وتلخيص نصوص | `list_files, read_file, file_info` | safe |
+| `skill_author` | تأليف `SKILL.md` جديدة | `write_file, list_skills` | safe |
+| `computer_control` | **تحكم بصري معزول VNC** — تصفح/نقر/كتابة | `take_screenshot, get_element_coordinates, mouse_click, type_text, list_files, read_file` | **restricted** |
+| `code_execution` | **تنفيذ أوامر/كود** — فصل أمني عن التحكم البصري | `shell_execute, run_python, write_file` | **restricted** |
+
+> فصل `computer_control` عن `code_execution` يمنع خداع الموافقة عبر حقن في صفحة ويب: موافقتك على نقرة لا تمنح تنفيذ shell.
 
 ---
 
 ## الأدوات والصلاحيات
 
-`nimna tools list` يعرض 21 أداة (17 سابقًا + 4 للكمبيوتر) مع مستوى الخطورة:
+`nimna tools` → 22 أداة:
 
-> **جديد: 4 أدوات للكمبيوتر** — `take_screenshot` (safe) و`mouse_click`/`type_text`/`shell_execute` (confirm/restricted) — تعمل عبر حاوية VNC معزولة، مع موافقة بصرية بنقطة حمراء في Mirror View.
+- **safe**: قراءة/حساب — تنفذ مباشرة.
+- **confirm/restricted**: تحتاج موافقة (تعليق). `delete_file` دائماً؛ `write_file/report` عند الكتابة فوق موجود؛ `run_python` مع `subprocess`؛ كل أدوات `computer_control`/`code_execution`.
 
-`nimna tools list` التفصيلي:
+**العزل:**
+- كل أدوات الملفات مسجونة في `WORKSPACE_DIR` (ترفض `..`, مسار مطلق, symlink هارب, null bytes).
+- `fetch_url/web_search` ترفض SSRF: فحص `hostname` قبل الطلب وبعد كل redirect (≤5)، حظر `localhost/127.0.0.1/0.0.0.0`, الشبكات الخاصة/الحلقة, `.local/.internal`, ودعم `::ffff:127.0.0.1`. كل hop يُحل DNS من جديد (مضاد DNS rebinding) بدون إعادة استخدام اتصال.
+- النموذج يرى فقط أدوات المهارات المحمّلة؛ استدعاء غير مسموح → خطأ.
 
-- **safe**: قراءة/حساب فقط، تُنفذ مباشرة.
-- **confirm**: تحتاج موافقة (`delete_file` دائمًا؛ `write_file`/`write_report` عند الكتابة فوق ملف موجود؛ `run_python` عندما يكون الـ sandbox من نوع subprocess).
-- كل أدوات الملفات مسجونة داخل `WORKSPACE_DIR`؛ المسارات المطلقة، `../`، الروابط الرمزية (`symlink`) التي تهرب خارج المساحة، والـ null bytes تُرفض. `list_files` يتجاهل الروابط التي تهرب.
-- `fetch_url`/`web_search` ترفض العناوين المحلية والخاصة (SSRF) — يُفحص كل `hostname` قبل الطلب وبعد كل إعادة توجيه (حتى 5 قفزات): `localhost`، `127.0.0.1`، `0.0.0.0`، الشبكات الخاصة/الحلقة/الرابط-المحلي، واللاحقات `.local`/`.internal`.
-- النموذج لا يرى إلا الأدوات التي تسمح بها المهارات المحمّلة؛ استدعاء أداة غير مسموحة يُعاد كخطأ.
-
-إضافة أداة جديدة:
-
+**إضافة أداة:**
 ```python
 from pydantic import BaseModel, Field
 from nimna.tools import default_registry, ToolContext
-
-class SendEmailParams(BaseModel):
-    to: str = Field(..., description="Recipient")
-    body: str
-
-registry = default_registry()
-
-@registry.tool("send_email", "Send an email (requires approval).", SendEmailParams, risk="confirm")
-def send_email(params: SendEmailParams, ctx: ToolContext):
-    ...
-    return {"sent": True}
-
-agent = build_agent(tools=registry)
+class SendEmailParams(BaseModel): to: str; body: str
+@default_registry().tool("send_email","...",SendEmailParams, risk="confirm")
+def send_email(p, ctx: ToolContext): return {"sent": True}
+# ثم أضفه إلى allowed_tools في المهارة
 ```
-
-ثم أضف `send_email` إلى `allowed_tools` في المهارات التي يحق لها استخدامه.
 
 ---
 
 ## الذاكرة وسجل التدقيق
 
-- **قصيرة**: رسائل الجلسة (`session_id`) تُمرر تلقائيًا (`AGENT_HISTORY_MESSAGES`).
-- **دائمة**: أداتا `memory_save` / `memory_search`؛ العناصر من نوع `preference` تُحقن في الـ prompt تلقائيًا (مثل «المستخدم يفضل الجداول المختصرة»).
-- **سجل التدقيق**: `GET /api/sessions/{id}/audit` أو جدول `audit_log` — كل مهارة حُمّلت، كل أداة استُدعيت (مع الوسائط ومدة التنفيذ والنتيجة)، كل موافقة طُلبت وقرارها، واستهلاك التوكنات.
-- البحث في الذاكرة لفظي (LIKE)؛ يمكن استبداله بقاعدة متجهات بتغيير `MemoryStore.search_memories` أو `SkillManager.rank_by_keywords`.
+- **قصيرة:** رسائل الجلسة (`session_id`) تُمرر تلقائياً (`AGENT_HISTORY_MESSAGES`).
+- **دائمة:** `memory_save/search`؛ نوع `preference` يُحقن في prompt.
+- **التدقيق:** `GET /api/sessions/{id}/audit` أو جدول `audit_log` — مهارات، أدوات (وسائط/مدة/نتيجة), موافقات, استهلاك توكنات. الأسرار تُستبدل `***REDACTED***` عبر `redact_payload`.
+- **الموافقات:** جدول `pending_runs` + `approvals` — `id` عشوائي 32 hex (128-bit), TTL 300s, حد 5/جلسة, تنظيف تلقائي للمنتهي, تحقق `session_id` عند الحل, واستهلاك one-shot ذري.
 
 ---
 
-## تبديل المزود
-
-طبقة النموذج مستقلة تمامًا عن الوكيل والمهارات:
+## تبديل المزود (Gemini / NVIDIA / OpenAI)
 
 ```python
 class ModelProvider(ABC):
-    def generate(self, messages: list[Message], tools: list[ToolSpec] | None = None) -> ModelResponse: ...
+    def generate(self, messages, tools=None) -> ModelResponse: ...
 ```
 
 | المزود | `.env` |
-|---|---|
-| **Gemini (مجاني)** | `MODEL_PROVIDER=gemini` `GEMINI_API_KEY=...` `GEMINI_MODEL=gemini-2.5-flash` |
+|--------|--------|
+| **Gemini مجاني** | `MODEL_PROVIDER=gemini` `GEMINI_API_KEY=...` `GEMINI_MODEL=gemini-2.5-flash` |
 | **NVIDIA NIM** | `MODEL_PROVIDER=openai` `OPENAI_BASE_URL=https://integrate.api.nvidia.com/v1` `NVIDIA_API_KEY=...` `OPENAI_MODEL=meta/llama-3.3-70b-instruct` |
-| OpenAI | `MODEL_PROVIDER=openai` `OPENAI_BASE_URL=https://api.openai.com/v1` `OPENAI_API_KEY=...` `OPENAI_MODEL=gpt-4o-mini` |
-| Ollama محلي | `MODEL_PROVIDER=openai` `OPENAI_BASE_URL=http://localhost:11434/v1` `OPENAI_API_KEY=ollama` `OPENAI_MODEL=llama3.1` |
+| OpenAI | `OPENAI_BASE_URL=https://api.openai.com/v1` `OPENAI_API_KEY=...` |
+| Ollama | `OPENAI_BASE_URL=http://localhost:11434/v1` `OPENAI_API_KEY=ollama` |
 | بلا مفتاح | `MODEL_PROVIDER=mock` |
 
-أو برمجيًا:
-
+برمجياً:
 ```python
 from nimna import build_agent, Settings
 from nimna.providers.openai_compat import OpenAICompatibleProvider
-
-provider = OpenAICompatibleProvider(api_key="...", base_url="https://integrate.api.nvidia.com/v1",
-                                    model="meta/llama-3.3-70b-instruct")
-agent = build_agent(Settings.from_env(), provider=provider)
-print(agent.run("لخص الملفات الموجودة").reply)
+agent = build_agent(Settings.from_env(), provider=OpenAICompatibleProvider(api_key="...", base_url="https://integrate.api.nvidia.com/v1", model="meta/llama-3.3-70b-instruct"))
+print(agent.run("لخص الملفات").reply)
 ```
-
-ملاحظات المستوى المجاني في Gemini: عند 429 يعيد المزود المحاولة تلقائيًا بتراجع أسّي (3 محاولات). كل طلب يستهلك عادة: استدعاء مخطط + عدد خطوات الأدوات + استدعاء مراجعة؛ عطّل المراجعة بـ `AGENT_VERIFY=false` إن كانت الحصة ضيقة.
+Gemini يعيد المحاولة تلقائياً عند 429 بتراجع أسي (3 محاولات). عطّل المراجع إذا ضاقت الحصة: `AGENT_VERIFY=false`.
 
 ---
 
-## واجهة REST
+## واجهة REST & WebSocket
 
-`nimna serve` ثم افتح `http://localhost:8000` (واجهة محادثة RTL تعرض المهارات والأدوات وبطاقة الموافقة) أو `/docs` لتوثيق OpenAPI.
+`PORT=8001 nimna serve` → `http://localhost:8001` (واجهة RTL) + `/docs`
 
 | الطريقة | المسار | الوصف |
-|---|---|---|
-| GET | `/api/health` | المزود، النموذج، عدد المهارات/الأدوات |
-| GET | `/api/skills` · `/api/skills/{name}` | الكتالوج / المهارة كاملة |
-| POST | `/api/skills/reload` | إعادة اكتشاف مجلد المهارات |
-| GET | `/api/tools` | الأدوات مع مخططاتها ومستوى الخطورة |
-| POST | `/api/chat` | `{"message": "...", "session_id": "اختياري"}` |
-| POST | `/api/approvals/{id}` | `{"approved": true, "always": false}` لاستئناف تشغيل معلق |
-| GET | `/api/approvals?session_id=` | الموافقات المعلقة |
-| GET | `/api/sessions/{id}/messages` · `/audit` | الذاكرة القصيرة / سجل التدقيق |
-| GET | `/api/memories?q=` | الذاكرة الدائمة |
+|---------|--------|-------|
+| GET | `/api/health` | مزود/نموذج/مهارات/أدوات + `verify_detail` + `port` |
+| GET | `/api/skills`, `/api/skills/{name}` | كتالوج / مهارة كاملة |
+| POST | `/api/skills/reload` | إعادة اكتشاف |
+| GET | `/api/tools` | الأدوات + مخططاتها + `risk` |
+| POST | `/api/chat` | `{"message":"...","session_id":"?"}` → `AgentResult` (قد يعود `awaiting_approval`) |
+| POST | `/api/approvals/{id}?session_id=` | `{"approved":true,"always":false}` — يتحقق من مالك الجلسة (403 إن اختلفت) |
+| GET | `/api/approvals?session_id=` | المعلقة (يُنظف المنتهي TTL) |
+| GET | `/api/sessions/{id}/messages`, `/audit` | الذاكرة/التدقيق |
+| GET | `/api/memories?q=` | الدائمة |
+| GET | `/api/computer/status`, `/api/computer/screenshot` | حالة VNC + آخر لقطة + شبكة نيون |
+| GET | `/api/workspace/files?path=.` | مستعرض ملفات مقيد |
+| WS | `/ws/{session_id}` | بث حي — `1MB` حد، `ping` 30s، حد 10 رسائل/ث، تحقق جلسة |
 
-مثال دورة موافقة:
+**دورة موافقة:**
+```bash
+curl -s localhost:8001/api/chat -H 'Content-Type: application/json' -d '{"message":"احذف old.csv"}'
+# → {"status":"awaiting_approval","pending":{"approval_id":"...32hex...","tool_name":"delete_file"}}
+curl -s localhost:8001/api/approvals/<id>?session_id=<sid> -H 'Content-Type: application/json' -d '{"approved":true}'
+# → {"status":"done","reply":"تم الحذف"}
+```
+
+---
+
+## Docker والنشر
 
 ```bash
-curl -s localhost:8000/api/chat -H 'Content-Type: application/json' \
-  -d '{"message":"احذف الملف old.csv"}'
-# → {"status":"awaiting_approval","pending":{"approval_id":"3f2c...","tool_name":"delete_file",...}}
-curl -s localhost:8000/api/approvals/3f2c... -H 'Content-Type: application/json' -d '{"approved":true}'
-# → {"status":"done","reply":"تم حذف old.csv ..."}
+cp .env.example .env  # chmod 600 .env
+docker compose up --build                          # آمن: subprocess (يطلب موافقة)
+docker compose --profile local-sandbox up --build  # عزل Docker حقيقي (يحتاج docker.sock)
+docker compose --profile computer up -d desktop    # سطح مكتب معزول  http://localhost:6901
 ```
+
+- `skills/` و`workspace/` كـ volumes.
+- **تحذير:** تركيب `/var/run/docker.sock` يعادل تحكم مضيف شبه كامل — الخدمة الافتراضية **لا تركّبه**. استخدم `local-sandbox` فقط محلياً بلا بيانات حساسة، أو شغّل خارج Docker، أو proxy محدود.
+- في وضع `docker` يعمل `run_python` في `python:3.11-slim` بلا شبكة (`--network none`), `cap-drop ALL`, `no-new-privileges`, حدود ذاكرة/CPU.
+- **الإنتاج:** Docker rootless/Podman + مستخدم غير root + `cap-drop ALL` + `no-new-privileges` + seccomp/AppArmor/SELinux.
 
 ---
 
-## Docker
+## التحكم بالكمبيوتر والواجهة المتقدمة (Beating Manus 2026)
 
-```bash
-cp .env.example .env   # ضع المفتاح (chmod 600 .env)
-docker compose up --build          # الوضع الآمن: subprocess sandbox (يطلب موافقة لـ run_python)
-# أو للعزل الحقيقي عبر Docker (يحتاج Docker Engine على المضيف):
-docker compose --profile local-sandbox up --build   # يشغل nimna-sandbox مع docker.sock
-```
+### 1) البنية المعزولة
+`dorowu/ubuntu-desktop-lxde-vnc:focal` على `http://localhost:6901` (noVNC). لا يلمس المضيف.
 
-- المجلدات `skills/` و`workspace/` مركّبة كـ volumes: أضف مهارة أو ملفًا دون إعادة بناء.
-- **تحذير صريح:** تركيب `/var/run/docker.sock` يمنح الحاوية تحكمًا شبه كامل بالمضيف (يمكنها إنشاء حاويات بصلاحيات عالية، حتى لو بوضع القراءة فقط) ويلغي عزل الـ sandbox — الوصول إلى الـ socket يعادل عمليًا صلاحيات واسعة جدًا على المضيف، وحتى التركيب بوضع القراءة فقط ليس عزلًا كافيًا. لذلك **الخدمة الافتراضية `nimna` لا تركّب الـ socket** وتعمل بـ `SANDBOX_BACKEND=subprocess` (يطلب موافقة). `local-sandbox` **خيار تطوير واضح فقط** — يجب ألا يكون متاحًا في أمر نشر اعتيادي أو CI غير موثوق. استخدم الخدمة `nimna-sandbox` ذات الـ profile فقط للتطوير المحلي على جهاز لا يحتوي بيانات حساسة، أو شغّل Nimna خارج Docker واجعل `run_python` يستخدم Docker Engine، أو استخدم proxy محدود الصلاحيات / Podman / خدمة sandbox منفصلة — انظر `SECURITY.md` و`docker-compose.yml`.
-- عند استخدام الـ profile، يعمل `run_python` داخل `python:3.11-slim` بلا شبكة (`--network none`)، بحدود ذاكرة/CPU/عمليات، وكل الصلاحيات محذوفة (`--cap-drop ALL` + `--security-opt no-new-privileges`)، ويصبح مصنفًا **safe** (لا يحتاج موافقة).
-- **الإنتاج الموصى به:** استخدم **Docker rootless** أو **Podman** مع مستخدم غير `root`، وحدود CPU والذاكرة، و`cap-drop=ALL` و`no-new-privileges` وملف **seccomp** أو **AppArmor/SELinux** مناسب. وضع rootless يقلل أثر اختراق الحاوية مقارنةً بـ Docker daemon يعمل بصلاحيات root.
+### 2) الأدوات وشبكة الإحداثيات + كاسر الحلقة
+- `take_screenshot` (safe) — يلتقط PNG، يضيف شبكة نيون شفافة كل 200×100، يحفظ في `workspace/.screenshots/` (TTL 1h, حد 80 ملف)، يحقن تلقائياً كـ `user_with_image` عبر بوابة الرؤية (Gemini `Part.from_bytes` / OpenAI `image_url`).
+- `get_element_coordinates(element_name)` (safe) — OCR (`pytesseract` إن وجد) + خريطة heurist (`firefox→140,140`, `حفظ→640,400`)، يعيد `x,y,confidence` وصورة مُعلّمة `locate-*.png` بنقطة حمراء — يحل توهان الإحداثيات.
+- `mouse_click(x,y,button,clicks,purpose)` / `type_text(text,submit)` (confirm, restricted) — يظهر **نقطة حمراء** متوهجة في Mirror View قبل التنفيذ.
+- `shell_execute` **منفصل** في `code_execution` — لا يمر عبر التحكم البصري.
+- **كاسر حلقة:** hash بصري 16×16 لكل لقطة؛ إذا تكررت 3 متتالية → تحذير عربي + `audit screenshot_loop_detected`.
 
-### تشغيل سطح المكتب المعزول
-```bash
-docker compose --profile computer up -d desktop
-# افتح http://localhost:6901  (كلمة المرور: nimna)
-# أو شاهد Mirror View في لوحة Nimna على http://localhost:8000
-nimna ask "التقط صورة للشاشة وأخبرني ماذا ترى"
-```
+### 3) الواجهة المتقدمة — 3 مناطق
+**القائمة الجانبية:** المهام / الذاكرة / المشاريع / الملفات / الإعدادات — تنقل سلس للسياق.
 
----
+**صندوق المحادثة والأوامر (يسار):** يعرض **سلسلة تفكير** (Chain of Thought) بالتزامن مع الإجراءات.
 
-## لوحة التحكم والكمبيوتر الحقيقي
+**العرض المركزي — Advanced Computer Use Display (يتفوق على Manus):**
+- **بث حي مع Neon Bounding Boxes:** مربعات نيون متوهجة (`#00ffa3` / `#00d4ff` مع `box-shadow 0 0 28px`) حول الأزرار/الحقول التي يقرأها الوكيل لحظياً.
+- **سجل الإجراءات الزمني Overlay:** شريط أفقي يضيف `📸 التقاط` → `🎯 تحديد` → `🖱️ النقر على زر الإرسال` → `⌨️ إدخال` → `💻 تنفيذ` حياً.
+- **نافذة Terminal Logs:** لوح سفلي `mono 11px` يعرض `stdout/stderr` لـ `shell_execute` مع شفافية كاملة للمطور.
+- **AI Cursor مخصص:** سهم أبيض + نقطة نيون، حركة `0.42s cubic-bezier` مع `ripple` عند النقر — بلون مختلف عن مؤشر المستخدم.
 
-> تحويل Nimna من “شات بوت” إلى **موظف رقمي** تراه يعمل أمامك — يلاحظ → يخطط → ينفذ → يتحقق بصريًا.
-
-### 1) مهارة `computer_control` (مستوى `restricted`)
-- **البنية:** حاوية Docker معزولة `dorowu/ubuntu-desktop-lxde-vnc:focal` (Ubuntu + LXDE + VNC + noVNC) — لا تلمس مضيفك أبدًا.
-- **الأدوات:** `take_screenshot` (آمن، يلتقط PNG ويحفظه في `workspace/.screenshots/` ويعيده base64 لبوابة الرؤية)، `mouse_click(x,y)`، `type_text(text, submit)`، `shell_execute(command)` — الثلاثة الأخيرة تتطلب موافقة بصرية (نقطة حمراء + زر موافقة/رفض فوق Mirror View).
-- **الحلقة:** `take_screenshot` → يحلل الصورة (Gemini vision) → يحدد إحداثيات الزر → `mouse_click` (بموافقة) → `take_screenshot` للتحقق → يكرر. كل خطوة مسجلة في `audit_log`.
-
-```markdown
----
-name: computer_control
-risk_level: restricted
-allowed_tools: [take_screenshot, mouse_click, type_text, shell_execute]
----
-لاحظ → خطط (جملة واحدة + إحداثيات) → نفّذ أداة واحدة → تحقق بلقطة جديدة
-```
-
-### 2) لوحة التحكم — Agent Dashboard (غير ممل)
-- **سلسلة الأفكار القابلة للطي:** بطاقات `🧭 الخطة المقترحة` و`🔗 سلسلة التنفيذ` و`سبب اختيار المهارات` — بدلاً من إخفاء التفكير، اعرضه مع نبض (Pulse) بجانب الأداة النشطة (“🌐 جاري البحث…”).
-- **مؤشرات حية:** WebSocket (`/ws/{session_id}`) يبث حالة “يفكر…”، “يختار المهارة…”، “ينفذ الأداة…” دون تحديث الصفحة.
-- **Mirror View (المرآة):** نافذة بث حي لسطح المكتب (noVNC iframe أو صورة لقطة) في يمين الشاشة. عند `mouse_click` تظهر نقطة حمراء متوهجة في الإحداثيات المطلوبة قبل التنفيذ.
-- **النتائج الغنية:** تقارير Markdown تُصيّر بجداول تفاعلية ورسوم `Chart.js` مباشرة، مع معاينة الملفات في **مستعرض ملفات** جانبي (`/api/workspace/files`).
-- **الموافقة البصرية:** بدلاً من نص فقط، ترى أثر الأداة على الشاشة وتوافق بـ [موافقة/رفض/دائمة] فوق الصورة.
-
-### 3) بوابة الرؤية (Vision Gateway)
-- `GeminiProvider` الآن يدعم `images: [{data: base64, mime_type}]` — تُحول إلى `Part.from_bytes` (Gemini) أو `image_url` (OpenAI-compatible). بعد كل `take_screenshot` يحقن الوكيل تلقائيًا صورة اللقطة كرسالة `user_with_image` ليحللها النموذج بصريًا في الدور التالي.
-- تفعيل: `COMPUTER_ENABLED=true` + `docker compose --profile computer up -d desktop` — في الوضع المحاكي (بدون الحاوية) يعيد الوكيل صورة مولدة بـ Pillow مع شبكة إحداثيات للاختبار.
-
-### 4) كيف تنفذ تقنيًا
-- **الواجهة:** `nimna/api/static/index.html` أصبحت لوحة تحكم بثلاثة أعمدة (مهارات/محادثة مع بطاقات قابلة للطي/مرآة+ملفات) مع `WebSocket` + `marked` + `Chart.js`، مع الحفاظ على REST كسقوط احتياطي.
-- **الخلفية:** `POST /api/chat` كما كان، plus `GET /api/computer/status`, `GET /api/computer/screenshot`, `GET /api/workspace/files`, `WebSocket /ws/{session_id}`.
-- **خريطة التطوير:** 1) حاوية VNC → 2) مهارة `computer_control` → 3) واجهة المرآة وبطاقات التفكير → 4) الموافقة البصرية.
-
-> جرب: `nimna ask "افتح المتصفح في الكمبيوتر وابحث عن الطقس"` — سترى الوكيل يلتقط صورة، يخطط، يطلب موافقتك بنقطة حمراء، ثم يتأكد بلقطة جديدة.
+> جرب: `nimna ask "افتح المتصفح وابحث عن الطقس"` — سترى التقاط → تحديد نيون → نقطة حمراء للموافقة → تحقق بلقطة جديدة، مع timeline وterminal حياً.
 
 ---
 
 ## الإعدادات
 
-كل الإعدادات في `.env.example` مع شرحها. أهمها:
+كلها في `.env.example`:
 
-| المتغير | الافتراضي | المعنى |
-|---|---|---|
-| `MODEL_PROVIDER` | `gemini` | `gemini` / `openai` / `mock` |
-| `AGENT_MAX_STEPS` | 12 | أقصى عدد جولات نموذج لكل طلب |
-| `AGENT_MAX_TOOL_CALLS` | 30 | أقصى عدد استدعاءات أدوات لكل طلب |
-| `AGENT_MAX_RUNTIME_SECONDS` | 300 | حد زمني بالثواني لكل طلب |
-| `AGENT_MAX_RESPONSE_TOKENS` | 4096 | سقف توكن الرد (يمرر للنموذج حيثما يُدعم) |
-| `AGENT_MAX_CONSECUTIVE_FAILURES` | 5 | توقف بعد أخطاء أدوات متتالية |
-| `AGENT_MAX_SKILLS` | 3 | أقصى عدد مهارات تُحمّل لكل طلب |
-| `AGENT_VERIFY` | true | تشغيل المراجع على الجواب النهائي |
-| `AGENT_AUTO_APPROVE` | false | **خطر**: تجاوز الموافقات (للأتمتة الموثوقة فقط) |
-| `AGENT_DEFAULT_TOOLS` | `load_skill,memory_search,list_files` | الأدوات عندما لا تُختار أي مهارة |
-| `AGENT_MAX_FILE_BYTES` | 5000000 | أقصى حجم ملف يُقرأ |
-| `AGENT_MAX_WRITE_BYTES` | 2000000 | أقصى حجم كتابة |
-| `SANDBOX_BACKEND` | `subprocess` | `docker` (عزل حقيقي، يحتاج Docker) أو `subprocess` (افتراضي آمن، يطلب موافقة) |
-| `WORKSPACE_DIR` / `SKILLS_DIR` / `DB_PATH` | `workspace` / `skills` / `data/nimna.db` | المسارات |
+| المتغير | افتراضي | المعنى |
+|--------|---------|--------|
+| `MODEL_PROVIDER` | `gemini` | `gemini`/`openai`/`mock` |
+| `GEMINI_API_KEY` / `OPENAI_API_KEY` | — | المفاتيح (تُقرأ `GEMINI_API_KEY` أو `GOOGLE_API_KEY`) |
+| `AGENT_MAX_STEPS` | 12 | جولات نموذج |
+| `AGENT_MAX_TOOL_CALLS` | 30 | استدعاءات أدوات |
+| `AGENT_MAX_RUNTIME_SECONDS` | 300 | حد زمني |
+| `AGENT_MAX_RESPONSE_TOKENS` | 4096 | سقف توكن |
+| `AGENT_MAX_CONSECUTIVE_FAILURES` | 5 | توقف بعد أخطاء متتالية |
+| `AGENT_MAX_SKILLS` | 3 | مهارات/طلب |
+| `AGENT_VERIFY` | true | مراجع الجواب |
+| `AGENT_AUTO_APPROVE` | false | **خطر**: تجاوز الموافقات |
+| `AGENT_DEFAULT_TOOLS` | `load_skill,...` | أدوات بلا مهارة |
+| `AGENT_MAX_FILE_BYTES` | 5_000_000 | حد قراءة |
+| `AGENT_MAX_WRITE_BYTES` | 2_000_000 | حد كتابة |
+| `AGENT_HISTORY_MESSAGES` | 20 | سياق جلسة |
+| `SANDBOX_BACKEND` | `subprocess` | `docker` أو `subprocess` |
+| `WORKSPACE_DIR`/`SKILLS_DIR`/`DB_PATH` | `workspace`/`skills`/`data/nimna.db` | مسارات |
+| `PORT` | 8000 | منفذ `nimna serve` |
 
 ---
 
-## الأمان وحدود التصميم
+## الأمان — المراجعة #1 (أعلى مخاطرة)
 
-> **تنبيه:** Nimna محصّن **وفق نطاق الاختبارات الحالية (77 اختبارًا)** — لا يثبت الأمان المطلق. الحاويات تشترك في نواة المضيف؛ يجب إبقاء المضيف وDocker محدثين واستخدام `seccomp`/`AppArmor` أو `SELinux` عند النشر.
+`computer_control` + `shell_execute` = سطح هجوم كامل — الموافقة البشرية وحدها ليست كافية.
 
-- المفتاح المجاني يوفّر قدرة النموذج فقط؛ نظام المهارات والذاكرة والصلاحيات مبني حوله ولا يعتمد على مزود بعينه.
-- `subprocess` sandbox يعزل البيئة والمسار ويحد الموارد لكنه **ليس حدًا أمنيًا** (`confirm` دائمًا) — لا تعتبره عزلًا أمنيًا. الافتراضي الآمن الآن `subprocess`؛ وضع `docker` (`--network none`، `--cap-drop ALL`، `--security-opt no-new-privileges`، حدود ذاكرة/CPU/عمليات) هو **safe** لكنه لا يزال يشارك النواة ويحتاج تحديثات وملف seccomp/AppArmor.
-- الوكيل لا يرسل ولا يشتري ولا يحذف شيئًا دون موافقة صريحة، والنظام يفرض ذلك برمجيًا لا بالـ prompt فقط.
-- مخرجات الأدوات تُقتطع (`AGENT_TOOL_RESULT_MAX_CHARS`) لحماية نافذة السياق.
-- محتوى الويب غير موثوق؛ تعليمات المهارة `web_research` تطلب من النموذج معاملته كبيانات لا كأوامر.
+**ما تم تطبيقه:**
+- فصل المهارتين — موافقة منفصلة لكل طبقة.
+- `run_id` عشوائي **32 hex (128-bit)** غير قابل للتخمين، `TTL 300s`، حد 5 معلقة/جلسة، تنظيف تلقائي، تحقق `session_id` عند الحل (403 إن اختلفت)، استهلاك one-shot ذري، جدول `approvals` للتدقيق.
+- `shell_execute`: فلتر محتوى **قبل** عرض الموافقة (`rm -rf /, curl|sh, base64|bash, nc, pty, screen/tmux/ssh, fork bomb`), `Popen` + `setsid` + `killpg` على timeout (ليس `await` فقط), `ulimit -t/-v/-n/-f` + `RLIMIT_*`, `cwd=workspace` دائماً, `env` منقّى (بدون `AWS_*/OPENAI_*/SSH_*`), `stdin=DEVNULL`, لا `pty`, شبكة معطلة افتراضياً.
+- `mouse_click`: تحقق `0≤x≤2560,0≤y≤1600`; `type_text`: حظر `\n` (استخدم `submit`), حد 5000 حرف؛ `take_screenshot`: TTL 1h وحد 80 ملف، بدون `path` مخصص.
+- WebSocket: حد 1MB, `ping` 30s, حد 10/ث, تحقق جلسة.
+- `health` يعيد `verify_detail: {checks:[skill_instructions,tool_results,language,completeness]}` وليس bool فقط.
 
+---
 
-- لا تُسجل الأسرار: كل الحمولات التي تمر عبر `redact_payload`/`MemoryStore.log` تستبدل قيم `api_key`/`secret`/`password`/`token` بـ `***REDACTED***` قبل التدقيق أو عرضها للنموذج (انظر `SECURITY.md`).
-- توقف الحلقة تلقائيًا عند: تكرار نفس استدعاء الأداة 3 مرات بلا تقدم، تكرار نفس نص النموذج 3 مرات، تجاوز `MAX_STEPS`/`MAX_TOOL_CALLS`/`MAX_RUNTIME`، أو 5 أخطاء أدوات متتالية.
-- لا يمكن لمهارة إعلان أداة غير مسجلة — `nimna skills validate` ينبه وruntime يتجاهلها.
-- أوامر التشخيص: `nimna doctor --offline` يتحقق من `.env`، المفاتيح، Docker، صلاحيات `workspace`، اتصال SQLite، وصحة مخططات الأدوات.
-- **قواعد تشغيل آمنة (إلزامية):**
-  - لا تستخدم `--profile local-sandbox` على جهاز يحتوي بيانات حساسة
-  - لا تشغّل الخدمة كـ `root` — الصورة تستخدم `USER nimna` (uid 1000) ويُنصح بـ Docker rootless/Podman
-  - لا تضع مفاتيح API داخل صورة Docker — مررها عبر `env_file: .env` (chmod 600) أو متغيرات البيئة
-  - لا تعتبر `subprocess` عزلًا أمنيًا
-  - الـ `mock` والاختبارات لا يثبتان نجاح الاتصال بمزود حقيقي — يجب اختبار Gemini/NVIDIA فعليًا قبل الإنتاج
+## الاختبار والتشخيص
 
-```text
-لا تستخدم --profile local-sandbox على جهاز يحتوي بيانات حساسة
-لا تشغّل الخدمة كـ root
-لا تضع مفاتيح API داخل صورة Docker
-لا تعتبر subprocess عزلًا أمنيًا
-الـ mock والاختبارات لا يثبتان نجاح الاتصال بمزود حقيقي
+```bash
+nimna doctor --offline   # .env, مفاتيح, Docker, صلاحيات, SQLite, مخططات الأدوات
+pytest -q                # 77 اختبار (mock) — بلا شبكة
+nimna skills validate    # صياغة SKILL.md + restricted
+nimna tools              # 22 أداة مع risk
+curl -s localhost:8001/api/health | jq
+websocat ws://localhost:8001/ws/test
 ```
 
+توقف تلقائي عند: تكرار نفس استدعاء أداة 3 مرات، تكرار نص 3 مرات، تجاوز `MAX_*`, أو 5 أخطاء متتالية. كل الحمولات عبر `redact_payload` (***REDACTED***).
+
 ---
 
-## الترخيص والأمان
+## المساهمة
 
-- الترخيص: MIT — انظر `LICENSE` و`NOTICE`.
-- الأمان: `SECURITY.md` يوضح عزل الملفات/الشبكة/الكود والموافقات والحدود.
-- المساهمة: `CONTRIBUTING.md` — كيف تضيف مهارة/أداة وتشغّل `pytest` و`nimna doctor`.
+- الترخيص MIT — `LICENSE`, `NOTICE` — الأمان `SECURITY.md`.
+- إضافة مهارة: مجلد `skills/<name>/SKILL.md` → `POST /api/skills/reload`.
+- إضافة أداة: سجلها في `ToolRegistry` (Pydantic) وأضفها لـ `allowed_tools`.
+- لا تسجل أسراراً، لا تشغل كـ root، لا تستخدم `local-sandbox` على بيانات حساسة — استخدم rootless/Podman + seccomp/AppArmor.
 
 ---
 
@@ -388,11 +347,10 @@ allowed_tools: [take_screenshot, mouse_click, type_text, shell_execute]
 
 ```bash
 pip install -e ".[dev]"
-cp .env.example .env            # set GEMINI_API_KEY (free) or NVIDIA/OpenAI settings
+cp .env.example .env          # GEMINI_API_KEY (free) or NVIDIA/OpenAI
 nimna ask "analyse sales.csv and write a report"
-nimna serve                     # web UI + REST at :8000
-nimna doctor --offline     # diagnose env / keys / docker
-pytest                          # 69 offline tests (mock provider)
+PORT=8001 nimna serve         # http://localhost:8001
+nimna doctor --offline
+pytest -q                     # 77 offline tests (mock)
 ```
-
-Add a skill: create `skills/<name>/SKILL.md` with front matter (`name`, `description`, `triggers`, `allowed_tools`) and instructions, then `POST /api/skills/reload`. Add a tool: register a Pydantic-typed handler on the `ToolRegistry` and list it in the skills allowed to use it. Swap the model: change `MODEL_PROVIDER` — skills, tools, memory and approvals stay exactly the same.
+Add a skill: `skills/<name>/SKILL.md` (`name, description, triggers, allowed_tools`) → `POST /api/skills/reload`. Add a tool: register Pydantic handler on `ToolRegistry`. Swap model: change `MODEL_PROVIDER` — skills/tools/memory stay identical.
