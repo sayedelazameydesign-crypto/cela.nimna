@@ -22,7 +22,7 @@
 ## المحتويات
 1. [التشغيل السريع](#التشغيل-السريع)
 2. [البنية](#البنية)
-3. [المهارات (8)](#المهارات-skills)
+3. [المهارات (9)](#المهارات-skills)
 4. [الأدوات (22) والصلاحيات](#الأدوات-والصلاحيات)
 5. [الذاكرة والتدقيق](#الذاكرة-وسجل-التدقيق)
 6. [تبديل المزود](#تبديل-المزود-gemini--nvidia--openai)
@@ -132,7 +132,7 @@ risk_level: safe
 - `nimna skills validate` ينبه لأداة غير مسجلة أو مهارة `restricted` تحتاج مراجعة.
 - إضافة مهارة = إضافة مجلد + `POST /api/skills/reload`.
 
-### المهارات المضمّنة (8)
+### المهارات المضمّنة (9)
 
 | المهارة | الغرض | الأدوات | المستوى |
 |---------|-------|---------|---------|
@@ -144,8 +144,10 @@ risk_level: safe
 | `skill_author` | تأليف `SKILL.md` جديدة | `write_file, list_skills` | safe |
 | `computer_control` | **تحكم بصري معزول VNC** — تصفح/نقر/كتابة | `take_screenshot, get_element_coordinates, mouse_click, type_text, list_files, read_file` | **restricted** |
 | `code_execution` | **تنفيذ أوامر/كود** — فصل أمني عن التحكم البصري | `shell_execute, run_python, write_file` | **restricted** |
+| `browser_use` | **متصفح سحابي Browser Use API V4** — وكلاء مستضافون + متصفحات CDP بقواعد الحصص والإيقاف | `web_search, fetch_url, list_files, read_file, read_skill_reference` | safe |
 
 > فصل `computer_control` عن `code_execution` يمنع خداع الموافقة عبر حقن في صفحة ويب: موافقتك على نقرة لا تمنح تنفيذ shell.
+> مهارة `browser_use` توثيق وتأليف كود للتكامل السحابي (API V4) — التشغيل الفعلي يتم عبر `code_execution` بموافقة مستقلة. المرجع الكامل: [`docs/browser_use_v4.md`](docs/browser_use_v4.md).
 
 ---
 
