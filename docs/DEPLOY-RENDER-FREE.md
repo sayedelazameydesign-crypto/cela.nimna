@@ -3,15 +3,20 @@
 > **سياق هذا الملف (التوحيد).** كان `render.yaml` + هذا الدليل موجودين **محلياً فقط** في
 > `57dc133`، بينما كان على GitHub `a3f9d30` يحمل الـworkflow الحي
 > `.github/workflows/live-provider-proof.yml` مع قناة الـannotation (`::notice::`).
-> الفرع الموحَّد يحمل الاثنين: عقد النشر المجاني **و** إثبات أن المزود يرد فعلاً.
+> التوحيد حمل الاثنين معاً: عقد النشر المجاني **و** إثبات أن المزود يرد فعلاً.
 > `live-provider-proof.yml` لم يُمسّ — أمر التحقق في §7.
 
 > **ما يثبته هذا الملف — وما لا يثبته.** هذا **عقد نشر** + دليل قابل لإعادة الإنتاج.
 > ليس دليلاً على أن شيئاً نُشر: لا `render.yaml` ولا هذا الدليل يثبتان deployment على
-> Render ولا real inference. لحظة الكتابة `main` ما زالت `a3f9d30` وهذا العقد على فرع
-> PR لم يُدمج بعد؛ أدوات التحقق من حالة الدمج والنشر مذكورة في §7 — **استعملها بدل
-> الافتراض**. ترتيب البوابة الصحيح: دمج → إثبات حي (`live-provider-proof`) → deploy على
-> Render → smoke test على الـpublic URL، ولا خطوة تُختصر.
+> Render ولا real inference. **حالة العقد الآن: مُدمَج** — PR #16 دُمِج في
+> `2026-09-24T09:26:35Z` وصار `main = 0310c63`؛ هذا يعتمد *عقد التكوين*، ولا يثبت أن
+> خدمةً نُشرت. أدوات التحقق من حالة الدمج والنشر في §7 — **استعملها بدل الافتراض**.
+> ترتيب البوابة الصحيح، ولا خطوة تُختصر:
+>
+> ```text
+> دمج → إثبات حي (live-provider-proof) → deploy على Render → smoke test على الـpublic URL
+> CI PASS ≠ Merge · Merge ≠ Deployment · Deployment ≠ Live verification
+> ```
 
 ---
 
@@ -196,8 +201,8 @@ git diff --name-only "$BASE" HEAD
 
 # هل صار العقد جزءاً من main فعلاً؟ (لا تُصدِق نصاً في docs — اسأل origin)
 git ls-remote origin main
-#   a3f9d30…  ← حتى الدمج: عقد Render ما زال على فرع PR، وليس في main
-#   <merge-commit> بعد الدمج ← هنا فقط يصير النشر من main أمراً ممكناً
+#   a3f9d30…        ← قبل الدمج: العقد على فرع PR فقط
+#   0310c63ebeb2…   ← بعد دمج PR #16: العقد في main، ومن هنا فقط يصير النشر منها ممكناً
 gh pr view <PR> --json state,mergedAt,mergeCommit -q '{state:.state,mergedAt:.mergedAt,mergeCommit:.mergeCommit.oid}'
 # هل نُشر فعلاً؟ لا دليل في المستودع قبل وجود URL + مخرجات health من الخدمة الحيّة
 curl -sS https://<service>.onrender.com/api/health | jq '{status,provider,model,skills,tools,port}'
@@ -207,6 +212,24 @@ curl -sS https://<service>.onrender.com/api/health | jq '{status,provider,model,
 `render.yaml` أو خُضرة CI **ليست** دليلاً على deployment؛ إنها دليل على أن العقد
 صحيح ومقروء. الدليل على النشر شيء آخر: URL حيّ + `/api/health` منه + annotation
 من `live-provider-proof.yml` (وليس من الـblueprint).
+
+### سجلّ الحالة (مقاس بالأوامر، لا منسوخ من PR)
+
+| اللحظة | الدليل |
+|---|---|
+| قبل التوحيد | `main = a3f9d30` — لا `render.yaml` في المستودع |
+| التوحيد | `e80bb39` فوق `a3f9d30` (عقد + docs + بوابة + اختبارات) ثم `5d758ce` (توثيق الحالة) |
+| الدمج | PR #16 `MERGED` في `2026-09-24T09:26:35Z` → `main = 0310c63` (`7 files, +695 / −0`) |
+| CI على `main` | `integrity` success وخطوته 7 `Verify Render blueprint` = **success** (run `35981257006`) |
+| الـworkflow الحي | `git diff a3f9d30 0310c63 -- .github/workflows/live-provider-proof.yml scripts/live_provider_proof.py` = **0 سطر** |
+| آخر إثبات حيّ | run `35977697240` (على `a3f9d30`، أي بنفس سكربت الإثبات الحالي بايت ببايت) — الـannotation: `verdict: PASS` · `provider: gemini` · `model: gemini-2.5-flash` · `direct_call.latency_ms: 597` |
+| النشر على Render | ⚪ **لم يُنفَّذ**: لا URL حيّ، لا `/api/health` عام، لا smoke test |
+
+**ملاحظة تشغيلية:** الإثبات الحي يدوي بطبيعته (`workflow_dispatch`)، وحساب الـagent لا يملك
+`actions:write` هنا (`403` على `POST /repos/…/actions/workflows/365881318/dispatches`) —
+فيُشغَّل من الواجهة: Actions → *Live provider proof (real inference)* → Run workflow على
+`main`، ويُقرأ الـverdict من الـannotation. **لا run حيّ بعد الدمج مُسجَّل**: لا تُقرأ خُضرة
+`production-gate` على `main` كبديل عنه.
 
 وأمان النشر نفسه: لا `AGENT_AUTO_APPROVE=true`، لا `COMPUTER_ENABLED=true` بلا desktop
 معزول، الحمولات تمرّ بـ`redact_payload` (`***REDACTED***`) في `audit_log`.
