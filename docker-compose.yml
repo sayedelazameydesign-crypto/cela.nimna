@@ -6,6 +6,8 @@ services:
       - "8000:8000"
     env_file:
       - .env                      # copy .env.example -> .env and add your key
+                                  # REQUIRED: NIMNA_API_KEY (NIMNA_ENV defaults to production;
+                                  # without a key the server refuses to boot)
     environment:
       # Safe default: no Docker socket mounted. The Python sandbox runs with
       # subprocess + rlimits and requires approval for run_python.
@@ -17,6 +19,10 @@ services:
       - nimna-data:/app/data
     restart: unless-stopped
 
+  # ════════════════════════════════════════════════════════════════════════
+  # DEV ONLY — لا تنشر
+  # DEV ONLY — do NOT deploy. Mounts /var/run/docker.sock (≈ root on the host).
+  # ════════════════════════════════════════════════════════════════════════
   # ── Local sandbox with Docker isolation (development only) ───────────────
   # This service mounts the Docker socket, which grants the container near-
   # host control (can create arbitrary privileged containers) — even read-only
@@ -81,18 +87,27 @@ services:
   # ── Isolated desktop for Computer Control (VNC + noVNC) ────────────────
   # Provides an Ubuntu LXDE desktop that Nimna can see and click.
   # Isolated from the host — only workspace is shared.
+  #   echo "VNC_PASSWORD=$(python3 -c 'import secrets;print(secrets.token_urlsafe(18))')" >> .env
   #   docker compose --profile computer up -d desktop
-  #   open http://localhost:6901  (password: nimna, if set)
+  #   open http://localhost:6901  (bound to 127.0.0.1 only)
   # Nimna's Mirror View will show the same desktop via noVNC.
+  #
+  # VNC_PASSWORD comes from .env (no default). infra/desktop/vnc-guard.sh runs
+  # before the image's /startup.sh and REFUSES to start when it is missing, a
+  # known weak default (e.g. the old "nimna"), or shorter than 12 characters.
+  # (`${VAR:?}` is deliberately not used: compose interpolates every service,
+  # so it would break `docker compose up nimna` for people not using this profile.)
   desktop:
     image: dorowu/ubuntu-desktop-lxde-vnc:focal
+    entrypoint: ["/bin/sh", "/usr/local/bin/nimna-vnc-guard.sh", "/startup.sh"]
     ports:
-      - "6901:80"
+      - "127.0.0.1:6901:80"
     environment:
       - RESOLUTION=1280x800
-      - VNC_PASSWORD=nimna
+      - VNC_PASSWORD=${VNC_PASSWORD:-}
       - LANGUAGE=ar
     volumes:
+      - ./infra/desktop/vnc-guard.sh:/usr/local/bin/nimna-vnc-guard.sh:ro
       - ./workspace:/home/ubuntu/workspace:rw
       - desktop-home:/home/ubuntu
     shm_size: 1gb

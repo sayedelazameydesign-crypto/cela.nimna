@@ -123,17 +123,35 @@ jobs:
     env:
       MODEL_PROVIDER: mock        # the API refuses to boot without a provider config
       DB_PATH: /tmp/zap-health.db
+      NIMNA_ENV: production       # scan the real production posture (auth + CORS deny + headers)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: {python-version: "3.11"}
       - run: pip install -r requirements.txt
+      - name: Ephemeral API key (generated per run, masked — not a repository secret)
+        run: |
+          KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+          echo "::add-mask::$KEY"
+          echo "NIMNA_API_KEY=$KEY" >> "$GITHUB_ENV"
       - name: Start API (mock provider — runners have no keys) and PROVE health
         run: |
           nohup python -m uvicorn nimna.api.app:app --host 0.0.0.0 --port 8000 &
           for i in {1..30}; do curl -sf http://127.0.0.1:8000/api/health > /tmp/health.json && break || sleep 1; done
           curl -sf http://127.0.0.1:8000/api/health || { echo "HEALTH FAILED — server never came up"; exit 1; }
           echo "runtime evidence:"; head -c 400 /tmp/health.json
+      - name: PROVE auth + security headers on the live server
+        run: |
+          set -e
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/api/tools)
+          [ "$code" = "401" ] || { echo "AUTH GATE BROKEN: /api/tools without key -> $code"; exit 1; }
+          code=$(curl -s -o /dev/null -w '%{http_code}' -H "X-Nimna-Key: $NIMNA_API_KEY" http://127.0.0.1:8000/api/tools)
+          [ "$code" = "200" ] || { echo "valid key rejected: $code"; exit 1; }
+          curl -sI http://127.0.0.1:8000/ | tee /tmp/headers.txt
+          grep -qi '^x-content-type-options: nosniff' /tmp/headers.txt
+          grep -qi '^x-frame-options: DENY' /tmp/headers.txt
+          grep -qi '^referrer-policy: strict-origin-when-cross-origin' /tmp/headers.txt
+          echo "auth 401/200 + security headers verified"
       - name: Resolve runner address reachable from the ZAP container
         run: echo "ZAP_TARGET=http://$(hostname -I | awk '{print $1}'):8000" >> "$GITHUB_ENV"
       - name: OWASP ZAP Baseline Scan (blocking, run directly — no wrapper)

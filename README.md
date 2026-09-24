@@ -46,6 +46,9 @@ pip install -e ".[dev]"
 
 cp .env.example .env
 # ضع مفتاحك: GEMINI_API_KEY=...  (https://aistudio.google.com/apikey)
+# ومفتاح الوصول للـAPI (إلزامي؛ NIMNA_ENV=production هو الافتراضي):
+#   NIMNA_API_KEY=$(python -c "import secrets; print(secrets.token_urlsafe(32))")
+# أو للتطوير المحلي فقط بلا مفتاح (يخدم 127.0.0.1 فقط): NIMNA_ENV=development
 
 nimna doctor --offline                    # فحص بيئة
 nimna skills list
@@ -56,7 +59,9 @@ nimna doctor --offline
 pytest -q                                # 83 اختبار بلا مفتاح (mock)
 ```
 
-بدون مفتاح: `MODEL_PROVIDER=mock nimna serve` — ترى اختيار المهارات والأدوات حياً والردود فقط وهمية.
+بدون مفتاح مزوّد: `NIMNA_ENV=development MODEL_PROVIDER=mock nimna serve` — ترى اختيار المهارات والأدوات حياً والردود فقط وهمية.
+
+> **الأمان:** كل المسارات عدا `/` و`/api/health` و`/static/*` تتطلب ترويسة `X-Nimna-Key`. في الإنتاج (الافتراضي) يرفض الخادم الإقلاع بلا `NIMNA_API_KEY`. التفاصيل: [`SECURITY.md`](SECURITY.md) و[`docs/API-SECURITY.md`](docs/API-SECURITY.md).
 
 `workspace/sales.csv` جاهز للتجربة: يختار `csv_analysis` + `report_writer` → يفحص الأعمدة → يحسب الإحصاءات → يرسم `Chart.js` → يكتب `workspace/reports/*.md` بدون كتابة فوق الأصلي.
 
@@ -221,9 +226,12 @@ Gemini يعيد المحاولة تلقائياً عند 429 بتراجع أسي
 
 `PORT=8001 nimna serve` → `http://localhost:8001` (واجهة RTL) + `/docs`
 
+كل المسارات عدا `/` و`/api/health` و`/static/*` تتطلب `X-Nimna-Key: $NIMNA_API_KEY` (401 بدونه).
+`POST /api/chat` محدود بـ 30 طلب/دقيقة لكل مفتاح (429 + `Retry-After`)، و10 اتصالات WebSocket متزامنة لكل مفتاح.
+
 | الطريقة | المسار | الوصف |
 |---------|--------|-------|
-| GET | `/api/health` | مزود/نموذج/مهارات/أدوات + `verify_detail` + `port` |
+| GET | `/api/health` | **عام** — مزود/نموذج/مهارات/أدوات + `verify_detail` + `port` |
 | GET | `/api/skills`, `/api/skills/{name}` | كتالوج / مهارة كاملة |
 | POST | `/api/skills/reload` | إعادة اكتشاف |
 | GET | `/api/tools` | الأدوات + مخططاتها + `risk` |
@@ -234,13 +242,13 @@ Gemini يعيد المحاولة تلقائياً عند 429 بتراجع أسي
 | GET | `/api/memories?q=` | الدائمة |
 | GET | `/api/computer/status`, `/api/computer/screenshot` | حالة VNC + آخر لقطة + شبكة نيون |
 | GET | `/api/workspace/files?path=.` | مستعرض ملفات مقيد |
-| WS | `/ws/{session_id}` | بث حي — `1MB` حد، `ping` 30s، حد 10 رسائل/ث، تحقق جلسة |
+| WS | `/ws/{session_id}` | بث حي — مصادقة بالترويسة `X-Nimna-Key` أو sub-protocol `nimna.key.<key>` (المتصفح)، `1MB` حد، `ping` 30s، حد 10 رسائل/ث، 10 اتصالات/مفتاح |
 
 **دورة موافقة:**
 ```bash
-curl -s localhost:8001/api/chat -H 'Content-Type: application/json' -d '{"message":"احذف old.csv"}'
+curl -s localhost:8001/api/chat -H "X-Nimna-Key: $NIMNA_API_KEY" -H 'Content-Type: application/json' -d '{"message":"احذف old.csv"}'
 # → {"status":"awaiting_approval","pending":{"approval_id":"...32hex...","tool_name":"delete_file"}}
-curl -s localhost:8001/api/approvals/<id>?session_id=<sid> -H 'Content-Type: application/json' -d '{"approved":true}'
+curl -s localhost:8001/api/approvals/<id>?session_id=<sid> -H "X-Nimna-Key: $NIMNA_API_KEY" -H 'Content-Type: application/json' -d '{"approved":true}'
 # → {"status":"done","reply":"تم الحذف"}
 ```
 
@@ -249,10 +257,10 @@ curl -s localhost:8001/api/approvals/<id>?session_id=<sid> -H 'Content-Type: app
 ## Docker والنشر
 
 ```bash
-cp .env.example .env  # chmod 600 .env
+cp .env.example .env  # chmod 600 .env — واضبط NIMNA_API_KEY (إلزامي)
 docker compose up --build                          # آمن: subprocess (يطلب موافقة)
-docker compose --profile local-sandbox up --build  # عزل Docker حقيقي (يحتاج docker.sock)
-docker compose --profile computer up -d desktop    # سطح مكتب معزول  http://localhost:6901
+docker compose --profile local-sandbox up --build  # DEV ONLY — لا تنشر (يركّب docker.sock)
+docker compose --profile computer up -d desktop    # سطح مكتب معزول  http://localhost:6901 (يتطلب VNC_PASSWORD ≥ 12 حرفاً)
 ```
 
 - `skills/` و`workspace/` كـ volumes.
@@ -325,6 +333,12 @@ docker compose --profile computer up -d desktop    # سطح مكتب معزول 
 | `BROWSER_USE_MAX_SPEND_USD` | 0 | بوابة Browser Use الصلبة |
 | `BROWSER_USE_API_KEY` | — | مفتاح V4، لا يظهر في API أو audit |
 | `PORT` | 8000 | منفذ `nimna serve` |
+| `NIMNA_ENV` | `production` | `production` (المفتاح إلزامي) أو `development` (بلا مفتاح: loopback فقط) |
+| `NIMNA_API_KEY` | — | مفتاح/مفاتيح الوصول (مفصولة بفواصل للتدوير) — ترويسة `X-Nimna-Key` |
+| `NIMNA_ALLOWED_ORIGINS` | — | قائمة CORS صريحة؛ الافتراضي: رفض الكل (إنتاج) / localhost (تطوير) |
+| `NIMNA_CHAT_RATE_LIMIT` | 30 | طلبات `/api/chat` في الدقيقة لكل مفتاح |
+| `NIMNA_WS_MAX_CONNECTIONS` | 10 | اتصالات WebSocket متزامنة لكل مفتاح |
+| `VNC_PASSWORD` | — | كلمة سر سطح المكتب (profile `computer`)؛ تُرفض الفارغة/الضعيفة |
 
 ---
 
@@ -337,7 +351,8 @@ docker compose --profile computer up -d desktop    # سطح مكتب معزول 
 - `run_id` عشوائي **32 hex (128-bit)** غير قابل للتخمين، `TTL 300s`، حد 5 معلقة/جلسة، تنظيف تلقائي، تحقق `session_id` عند الحل (403 إن اختلفت)، استهلاك one-shot ذري، جدول `approvals` للتدقيق.
 - `shell_execute`: فلتر محتوى **قبل** عرض الموافقة (`rm -rf /, curl|sh, base64|bash, nc, pty, screen/tmux/ssh, fork bomb`), `Popen` + `setsid` + `killpg` على timeout (ليس `await` فقط), `ulimit -t/-v/-n/-f` + `RLIMIT_*`, `cwd=workspace` دائماً, `env` منقّى (بدون `AWS_*/OPENAI_*/SSH_*`), `stdin=DEVNULL`, لا `pty`, شبكة معطلة افتراضياً.
 - `mouse_click`: تحقق `0≤x≤2560,0≤y≤1600`; `type_text`: حظر `\n` (استخدم `submit`), حد 5000 حرف؛ `take_screenshot`: TTL 1h وحد 80 ملف، بدون `path` مخصص.
-- WebSocket: حد 1MB, `ping` 30s, حد 10/ث, تحقق جلسة.
+- WebSocket: حد 1MB, `ping` 30s, حد 10/ث, تحقق جلسة، مصادقة مفتاح، 10 اتصالات/مفتاح.
+- API: مصادقة `X-Nimna-Key` افتراضية الرفض، CORS مقيد، حد 30 طلب/دقيقة على `/api/chat`، ترويسات `nosniff`/`DENY`/`strict-origin-when-cross-origin` — انظر `SECURITY.md`.
 - `health` يعيد `verify_detail: {checks:[skill_instructions,tool_results,language,completeness]}` وليس bool فقط.
 
 ---
@@ -349,8 +364,8 @@ nimna doctor --offline   # .env, مفاتيح, Docker, صلاحيات, SQLite, �
 pytest -q                # 83 اختبار (mock) — بلا شبكة
 nimna skills validate    # صياغة SKILL.md + restricted
 nimna tools              # 26 أداة مع risk ( +3 vector memory + Browser Use V4 + run_command gated)
-curl -s localhost:8001/api/health | jq
-websocat ws://localhost:8001/ws/test
+curl -s localhost:8001/api/health | jq                          # عام
+websocat -H "X-Nimna-Key: $NIMNA_API_KEY" ws://localhost:8001/ws/test
 ```
 
 توقف تلقائي عند: تكرار نفس استدعاء أداة 3 مرات، تكرار نص 3 مرات، تجاوز `MAX_*`, أو 5 أخطاء متتالية. كل الحمولات عبر `redact_payload` (***REDACTED***).
@@ -429,8 +444,10 @@ CI العادي لأنه قد يستهلك credits أو يغير بيانات خ
 ```bash
 pip install -e ".[dev]"
 cp .env.example .env          # GEMINI_API_KEY (free) or NVIDIA/OpenAI
+                              # + NIMNA_API_KEY (required: production is the default mode)
 nimna ask "analyse sales.csv and write a report"
-PORT=8001 nimna serve         # http://localhost:8001
+PORT=8001 nimna serve         # http://localhost:8001 — the UI asks for the key once per tab
+# local-only, no key: NIMNA_ENV=development PORT=8001 nimna serve  (loopback clients only)
 nimna doctor --offline
 pytest -q                     # 83 offline tests (mock)
 ```
