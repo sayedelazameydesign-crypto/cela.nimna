@@ -12,7 +12,7 @@ dependencies = [
   "pydantic==2.13.5",
   "pyyaml==6.0.3",
   "httpx==0.28.1",
-  "fastapi==0.141.1",
+  "fastapi[standard]==0.141.1",
   "uvicorn[standard]==0.53.0",
   "google-genai==2.25.0",
   "Pillow>=10.0",
@@ -30,6 +30,9 @@ include = ["nimna*"]
 
 [tool.setuptools.package-data]
 nimna = ["api/static/*"]
+
+[tool.fastapi]
+entrypoint = "nimna.api.app:app"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
