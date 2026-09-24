@@ -21,6 +21,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11", cache: pip}
+      - run: pip install -r requirements.txt
+      - name: Install Nimna package for the behavioral probe
+        run: pip install -e . --no-deps
       - name: Content filter pre-approval must precede approval gate
         run: |
           set -e
@@ -131,17 +136,34 @@ jobs:
           echo "runtime evidence:"; head -c 400 /tmp/health.json
       - name: Resolve runner address reachable from the ZAP container
         run: echo "ZAP_TARGET=http://$(hostname -I | awk '{print $1}'):8000" >> "$GITHUB_ENV"
-      - name: OWASP ZAP Baseline Scan (blocking on FAIL-level findings)
-        # The action runs in a container: 127.0.0.1 inside it is NOT the runner,
-        # so the target is the runner's own address. fail_action=true makes the
-        # scan falsifiable; -I keeps passive warnings advisory while FAIL alerts
-        # break the build.
-        uses: zaproxy/action-baseline@v0.12.0
+      - name: OWASP ZAP Baseline Scan (blocking, run directly — no wrapper)
+        # --network host: the scanner container must reach the API on the runner.
+        # Exit codes of zap-baseline.py: 0=clean, 2=WARN-only (-I promotes
+        # warnings to advisory), 3=no alerts. 1 = FAIL alerts → the gate REDS.
+        # ANY other code (docker pull/run failure) also REDS the gate: an
+        # unverifiable scan is not a pass.
+        run: |
+          set +e
+          docker pull ghcr.io/zaproxy/zaproxy:stable
+          docker run --rm --network host -v "$PWD:/zap/wrk:rw" \
+            -t ghcr.io/zaproxy/zaproxy:stable zap-baseline.py \
+            -t "$ZAP_TARGET" -I -a -r zap_report.html
+          RC=$?
+          set -e
+          echo "zap-baseline exit=$RC"
+          if [ "$RC" -eq 0 ] || [ "$RC" -eq 2 ] || [ "$RC" -eq 3 ]; then
+            echo "ZAP gate: PASS (exit=$RC)"
+            exit 0
+          fi
+          echo "ZAP gate: RED (exit=$RC — FAIL alerts or unverifiable scan)"
+          exit 1
+      - name: Upload ZAP report as evidence (on failure only)
+        if: failure()
+        uses: actions/upload-artifact@v4
         with:
-          target: ${{ env.ZAP_TARGET }}
-          fail_action: true
-          allow_issue_writing: false
-          cmd_options: "-a -I"
+          name: zap-report
+          path: zap_report.html
+          if-no-files-found: ignore
 
   sandbox-escape:
     runs-on: ubuntu-latest
