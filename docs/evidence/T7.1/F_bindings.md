@@ -49,3 +49,8 @@ DETERMINISTIC: identical    # diff بين تشغيلين فارغ
 | X04 | execution | core/agent.py | compat مُعلَن (audit `gateway_compat`+legacy) |
 | X05 | execution | core/agent.py | NOT_IN_GATEWAY refusal (audit+payload) |
 | X06–X08 | execution | agents/base.py | swarm: has→invoke + refusal |
+
+## نسخة البوابة
+`F_bindings.py` في هذا المجلد **نسخة حرفية** (byte-for-byte) من الأصل الكنسي
+`scripts/audit/enumerate_bindings.py` — تجزئة الاثنين في MANIFEST.sha256 تكشف
+أي انحراف بينهما.
