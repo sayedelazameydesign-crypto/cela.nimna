@@ -6,6 +6,13 @@
 > الفرع الموحَّد يحمل الاثنين: عقد النشر المجاني **و** إثبات أن المزود يرد فعلاً.
 > `live-provider-proof.yml` لم يُمسّ — أمر التحقق في §7.
 
+> **ما يثبته هذا الملف — وما لا يثبته.** هذا **عقد نشر** + دليل قابل لإعادة الإنتاج.
+> ليس دليلاً على أن شيئاً نُشر: لا `render.yaml` ولا هذا الدليل يثبتان deployment على
+> Render ولا real inference. لحظة الكتابة `main` ما زالت `a3f9d30` وهذا العقد على فرع
+> PR لم يُدمج بعد؛ أدوات التحقق من حالة الدمج والنشر مذكورة في §7 — **استعملها بدل
+> الافتراض**. ترتيب البوابة الصحيح: دمج → إثبات حي (`live-provider-proof`) → deploy على
+> Render → smoke test على الـpublic URL، ولا خطوة تُختصر.
+
 ---
 
 ## 1) ما الذي يقرره `render.yaml`
@@ -178,7 +185,7 @@ gh api "repos/$REPO/check-runs/$JOB/annotations" -q '.[] | .message'
 
 ---
 
-## 7) ما لم يتغيّر في التوحيد (قابلة للفحص)
+## 7) ما لم يتغيّر في التوحيد + حالة الدمج والنشر (قابلة للفحص)
 
 ```bash
 BASE=a3f9d30   # رأس GitHub قبل التوحيد
@@ -186,7 +193,20 @@ git diff --stat "$BASE" HEAD -- .github/workflows/live-provider-proof.yml
 # متوقع: لا شيء — الـworkflow الحي وقناة الـannotation كما هما بايت ببايت
 git diff --name-only "$BASE" HEAD
 # متوقع: render.yaml، docs/DEPLOY-RENDER-FREE.md، بوابة الـblueprint (scripts + tests + 00-integrity.yml)
+
+# هل صار العقد جزءاً من main فعلاً؟ (لا تُصدِق نصاً في docs — اسأل origin)
+git ls-remote origin main
+#   a3f9d30…  ← حتى الدمج: عقد Render ما زال على فرع PR، وليس في main
+#   <merge-commit> بعد الدمج ← هنا فقط يصير النشر من main أمراً ممكناً
+gh pr view <PR> --json state,mergedAt,mergeCommit -q '{state:.state,mergedAt:.mergedAt,mergeCommit:.mergeCommit.oid}'
+# هل نُشر فعلاً؟ لا دليل في المستودع قبل وجود URL + مخرجات health من الخدمة الحيّة
+curl -sS https://<service>.onrender.com/api/health | jq '{status,provider,model,skills,tools,port}'
 ```
+
+**قاعدة الحوكمة التي يحميها هذا القسم:** نجاح `production-gate` أو وجود
+`render.yaml` أو خُضرة CI **ليست** دليلاً على deployment؛ إنها دليل على أن العقد
+صحيح ومقروء. الدليل على النشر شيء آخر: URL حيّ + `/api/health` منه + annotation
+من `live-provider-proof.yml` (وليس من الـblueprint).
 
 وأمان النشر نفسه: لا `AGENT_AUTO_APPROVE=true`، لا `COMPUTER_ENABLED=true` بلا desktop
 معزول، الحمولات تمرّ بـ`redact_payload` (`***REDACTED***`) في `audit_log`.
