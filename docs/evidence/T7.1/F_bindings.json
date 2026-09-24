@@ -1,0 +1,207 @@
+{
+ "binding_count": 10,
+ "exceptions": [
+  {
+   "file": "nimna/execution/gateway.py",
+   "line": 141,
+   "reason": "تعريف حقل compat_tools على الـ ExecutionGateway نفسه — نقطة إعلان القائمة الصريحة (عقد T7.1: compat مُعلَن مُدقَّق)، ليست موقع ربط ولا مسار تنفيذ؛ أي تعديل هنا يغيّر توجيه X04/X08 ويُراجع معهما.",
+   "text": "compat_tools: tuple[str, ...] = ()) -> None:"
+  },
+  {
+   "file": "nimna/execution/gateway.py",
+   "line": 154,
+   "reason": "إسناد حقل compat_tools داخل مُنشئ الـ gateway — نفس طبيعة الإعلان أعلاه؛ ليست موقع ربط ولا مسار تنفيذ.",
+   "text": "self.compat_tools = frozenset(compat_tools)"
+  }
+ ],
+ "execution_count": 8,
+ "generated_from_commit": "a513983145e1",
+ "golden_rule": "10 binding + 8 execution (BND-9); triage-at-binding mandatory",
+ "missing": [],
+ "sites": [
+  {
+   "file": "nimna/core/agent.py",
+   "id": "B01",
+   "kind": "binding",
+   "lines": [
+    82
+   ],
+   "text": "execution_gateway: Optional[Any] = None):",
+   "triage": "enumerated"
+  },
+  {
+   "file": "nimna/core/agent.py",
+   "id": "B02",
+   "kind": "binding",
+   "lines": [
+    108
+   ],
+   "text": "self.execution_gateway = execution_gateway",
+   "triage": "enumerated"
+  },
+  {
+   "file": "nimna/core/agent.py",
+   "id": "B03",
+   "kind": "binding",
+   "lines": [
+    627
+   ],
+   "text": "gateway = self.execution_gateway",
+   "triage": "enumerated"
+  },
+  {
+   "file": "nimna/core/agent.py",
+   "id": "B04",
+   "kind": "binding",
+   "lines": [
+    647
+   ],
+   "text": "gateway = getattr(self, \"execution_gateway\", None)",
+   "triage": "enumerated"
+  },
+  {
+   "file": "nimna/core/agent.py",
+   "id": "B05",
+   "kind": "binding",
+   "lines": [
+    648
+   ],
+   "text": "if gateway is None:",
+   "triage": "enumerated"
+  },
+  {
+   "file": "nimna/agents/base.py",
+   "id": "B06",
+   "kind": "binding",
+   "lines": [
+    67
+   ],
+   "text": "execution_gateway: Any = None,",
+   "triage": "enumerated"
+  },
+  {
+   "file": "nimna/agents/base.py",
+   "id": "B07",
+   "kind": "binding",
+   "lines": [
+    75
+   ],
+   "text": "self.execution_gateway = execution_gateway",
+   "triage": "enumerated"
+  },
+  {
+   "file": "nimna/agents/base.py",
+   "id": "B08",
+   "kind": "binding",
+   "lines": [
+    166
+   ],
+   "text": "gateway = getattr(self, \"execution_gateway\", None)",
+   "triage": "enumerated"
+  },
+  {
+   "file": "nimna/bootstrap.py",
+   "id": "B09",
+   "kind": "binding",
+   "lines": [
+    17,
+    27
+   ],
+   "text": "execution_gateway: Optional[Any] = None) -> Agent:",
+   "triage": "enumerated"
+  },
+  {
+   "file": "nimna/core/planner_swarm.py",
+   "id": "B10",
+   "kind": "binding",
+   "lines": [
+    208
+   ],
+   "text": "execution_gateway=getattr(parent_agent, \"execution_gateway\", None),",
+   "triage": "enumerated"
+  },
+  {
+   "file": "nimna/core/agent.py",
+   "id": "X01",
+   "kind": "execution",
+   "lines": [
+    629
+   ],
+   "text": "outcome = gateway.invoke_for_agent(",
+   "triage": "enumerated"
+  },
+  {
+   "file": "nimna/core/agent.py",
+   "id": "X02",
+   "kind": "execution",
+   "lines": [
+    653
+   ],
+   "text": "elif gateway.has(tool.name):",
+   "triage": "enumerated"
+  },
+  {
+   "file": "nimna/core/agent.py",
+   "id": "X03",
+   "kind": "execution",
+   "lines": [
+    660
+   ],
+   "text": "{\"status\": \"GATEWAY_ERROR\", \"ok\": False,",
+   "triage": "enumerated"
+  },
+  {
+   "file": "nimna/core/agent.py",
+   "id": "X04",
+   "kind": "execution",
+   "lines": [
+    663,
+    665
+   ],
+   "text": "elif tool.name in getattr(gateway, \"compat_tools\", frozenset()):",
+   "triage": "enumerated"
+  },
+  {
+   "file": "nimna/core/agent.py",
+   "id": "X05",
+   "kind": "execution",
+   "lines": [
+    671,
+    675
+   ],
+   "text": "self._audit(state, \"gateway_refused\",",
+   "triage": "enumerated"
+  },
+  {
+   "file": "nimna/agents/base.py",
+   "id": "X06",
+   "kind": "execution",
+   "lines": [
+    167
+   ],
+   "text": "if gateway is not None and gateway.has(call.name):",
+   "triage": "enumerated"
+  },
+  {
+   "file": "nimna/agents/base.py",
+   "id": "X07",
+   "kind": "execution",
+   "lines": [
+    170
+   ],
+   "text": "outcome = gateway.invoke_for_agent(",
+   "triage": "enumerated"
+  },
+  {
+   "file": "nimna/agents/base.py",
+   "id": "X08",
+   "kind": "execution",
+   "lines": [
+    182
+   ],
+   "text": "elif gateway is not None and call.name not in getattr(gateway, \"compat_tools\", frozenset()):",
+   "triage": "enumerated"
+  }
+ ],
+ "untriaged": []
+}
