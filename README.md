@@ -259,6 +259,12 @@ docker compose --profile computer up -d desktop    # سطح مكتب معزول 
 - **تحذير:** تركيب `/var/run/docker.sock` يعادل تحكم مضيف شبه كامل — الخدمة الافتراضية **لا تركّبه**. استخدم `local-sandbox` فقط محلياً بلا بيانات حساسة، أو شغّل خارج Docker، أو proxy محدود.
 - في وضع `docker` يعمل `run_python` في `python:3.11-slim` بلا شبكة (`--network none`), `cap-drop ALL`, `no-new-privileges`, حدود ذاكرة/CPU.
 - **الإنتاج:** Docker rootless/Podman + مستخدم غير root + `cap-drop ALL` + `no-new-privileges` + seccomp/AppArmor/SELinux.
+- **Render Free (عرض أولي/ديمو):** `render.yaml` هو عقد النشر، ودليله [`docs/DEPLOY-RENDER-FREE.md`](docs/DEPLOY-RENDER-FREE.md)
+  (خدمة Docker واحدة على `plan: free`، `healthCheckPath: /api/health`، `PORT=10000`، `MAX_SPEND_USD=0`).
+  البوابة `python scripts/check_render_blueprint.py` تشغّلها `00-integrity.yml`: قيم غير مقتبسة،
+  مفاتيح لا يقرؤها الكود، أو سرّ مضمّن = فشل. **بلا `GEMINI_API_KEY` في اللوحة لا إقلاع أصلاً** —
+  `ProviderError` عند التكوين، لا سقوط صامت إلى `mock`. النشر المجاني لا يثبت أن النموذج يرد؛
+  ذلك شغل `live-provider-proof.yml` وقناة الـannotation فيه.
 
 ---
 
@@ -381,6 +387,8 @@ Mission Runtime
 - `docs/CAPABILITY-MATRIX.md`: ما نملكه فعلاً مقابل المخطط.
 - `docs/VERIFICATION-MATRIX.md`: PASS / MOCKED / BLOCKED / PARTIAL بدون خلط.
 - `docs/architecture/agent-os-blueprint.md`: خطة ترقية تدريجية بلا كسر النسخة.
+- `docs/DEPLOY-RENDER-FREE.md`: عقد النشر المجاني (`render.yaml`) وقيود Free Tier الموثقة،
+  وعلاقته بالإثبات الحي (`live-provider-proof.yml` + قناة الـannotation).
 
 ### Browser Use Cloud V4 (اختياري ومحكوم)
 

@@ -1,0 +1,98 @@
+# Render Blueprint — cela.nimna (Free tier, Docker runtime)
+#
+# السياق: كان هذا الملف محلياً فقط في `57dc133`؛ على GitHub كان `a3f9d30` يحمل
+# الـworkflow الحي `.github/workflows/live-provider-proof.yml` وقناة الـannotation
+# (`::notice::`). هذا الفرع يوحّد الاثنين: النشر المجاني + الإثبات الحي، دون تعديل
+# الـworkflow الحي.
+#
+# المرجع الرسمي للمفاتيح: https://render.com/docs/blueprint-spec
+# ملاحظة YAML مهمة: `off` و`true` بلا اقتباس تُقرأ كـ boolean في YAML 1.1، وRender
+# يتوقّع نصاً؛ لذلك كل القيم مقتبسة صراحةً (و`scripts/check_render_blueprint.py` يفرض ذلك).
+
+services:
+  - type: web
+    name: cela-nimna
+    runtime: docker          # يبني الصورة من ./Dockerfile (python:3.11-slim, CMD nimna serve)
+    plan: free               # 0.1 CPU / 512 MB — قيود Free في docs/DEPLOY-RENDER-FREE.md
+    branch: main
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health   # نفس المسار الذي يفحصه ci.yml وlive-provider-proof.yml
+    autoDeployTrigger: "off"       # بدل `autoDeploy: false` (المفتاح مهجور)
+
+    envVars:
+      # -- المزوّد -------------------------------------------------------
+      - key: MODEL_PROVIDER
+        value: "gemini"            # native google-genai path — مسار مفاتيح AI Studio (AQ.*)
+      - key: GEMINI_MODEL
+        value: "gemini-2.5-flash"
+      # بدون مفتاح الصعود يفشل عمداً (ProviderError) — لا boot صامت بمزوّد وهمي.
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GOOGLE_API_KEY        # fallback مسموح في nimna/config.py
+        sync: false
+      - key: OPENAI_API_KEY        # إن استُخدم مسار NVIDIA/OpenAI المتوافق
+        sync: false
+      - key: NVIDIA_API_KEY
+        sync: false
+      - key: BROWSER_USE_API_KEY   # مغلق افتراضياً (BROWSER_USE_ENABLED=false)
+        sync: false
+
+      # -- الشبكة --------------------------------------------------------
+      - key: HOST
+        value: "0.0.0.0"
+      - key: PORT
+        value: "10000"             # منفذ Render الافتراضي؛ يتجاوز ENV PORT=8000 في Dockerfile
+                                   # لأن Render يحقن المتغيرات وقت التشغيل لا وقت البناء فقط.
+
+      # -- حدود الحكم (governance) ---------------------------------------
+      - key: COST_GUARD_ENABLED
+        value: "true"
+      - key: COST_GUARD_HARD
+        value: "true"
+      - key: MAX_SPEND_USD
+        value: "0"                 # بوابة صلبة: أي ملف تسعير غير معلَن = مرفوض (BLOCKED)
+      - key: AGENT_MAX_STEPS
+        value: "12"
+      - key: AGENT_MAX_TOOL_CALLS
+        value: "30"
+      - key: AGENT_MAX_RUNTIME_SECONDS
+        value: "300"
+      - key: AGENT_VERIFY
+        value: "true"
+      - key: AGENT_AUTO_APPROVE
+        value: "false"             # لا تُشغّلها في Free أبداً
+
+      # -- العزل ---------------------------------------------------------
+      - key: SANDBOX_BACKEND
+        value: "subprocess"        # لا docker.sock على Free
+      - key: SANDBOX_TIMEOUT
+        value: "20"
+      - key: SANDBOX_MEMORY_MB
+        value: "512"
+      - key: BROWSER_USE_ENABLED
+        value: "false"
+      - key: COMPUTER_ENABLED
+        value: "false"
+
+      # -- المسارات في الحاوية (تطابق Dockerfile) -------------------------
+      - key: SKILLS_DIR
+        value: "/app/skills"
+      - key: WORKSPACE_DIR
+        value: "/app/workspace"
+      - key: DB_PATH
+        value: "/app/data/nimna.db"   # ephemeral: يُمسح عند redeploy/restart/spin-down
+
+      # -- ذاكرة اختيارية (بلا افتراضات مكلفة) ---------------------------
+      - key: EMBEDDING_PROVIDER
+        value: "hash"              # hash embeddings 768-dim بلا استدعاء API خارجي
+      - key: REDIS_URL             # اختياري: Render Key Value المجاني (25 MB, in-memory)
+        sync: false
+
+# ملاحظات Free Tier (تفصيلها في docs/DEPLOY-RENDER-FREE.md):
+# - لا قرص دائم مجاني: كل شيء داخل الحاوية يُمسح عند كل redeploy/restart/spin-down.
+# - الخدمة تنام بعد 15 دقيقة بلا traffic والإيقاظ يستغرق نحو دقيقة.
+# - 750 ساعة Free شهرياً لكل workspace؛ عند الاستنفاد تُعلَّق الخدمة حتى أول الشهر.
+# - لا shell access ولا one-off jobs على Free — التشخيص عبر /api/* أو `nimna doctor` محلياً.
+# - الصورة تُثبّت اعتماديات pyproject فقط (لا redis/qdrant-client/numpy)؛ المسارات
+#   الاختيارية تنهار بهدوء إلى fallback (يظهر ذلك في /api/health).

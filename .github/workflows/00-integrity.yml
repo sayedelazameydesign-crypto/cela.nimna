@@ -23,3 +23,9 @@ jobs:
         run: python -m compileall -q nimna security
       - name: Ensure no plaintext environment file is tracked
         run: test ! -e .env
+      - name: Verify Render blueprint (render.yaml)
+        # هذا الـjob لا يثبّت requirements.txt (يبقى racy-free وsريعاً)، لذا نصّب
+        # pyyaml صراحةً: بدونها يفشل الفحص — لا صمت.
+        run: |
+          python -m pip install --quiet "pyyaml==6.0.3"
+          python scripts/check_render_blueprint.py
