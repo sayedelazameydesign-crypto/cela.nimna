@@ -10,6 +10,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
+
 import yaml
 
 REPO = Path(__file__).resolve().parent.parent
@@ -72,15 +74,39 @@ def test_falsifiability_checker_rejects_tampered_workflow(tmp_path):
         assert "VIOLATION" in rc.stdout
 
 
-def test_t8_is_actually_an_ancestor_of_the_current_head():
-    rc = subprocess.run(["git", "merge-base", "--is-ancestor", T8_SHA, "HEAD"],
-                        cwd=REPO, capture_output=True)
-    assert rc.returncode == 0, "this repo's HEAD must contain the T8 commit"
+@pytest.fixture
+def tmp_git_repo(tmp_path):
+    """Self-contained git repo — ancestor-gate LOGIC must not depend on this
+    checkout's history (CI's `test` job checks out shallow; the REAL gate runs
+    in production_gate.sh under fetch-depth: 0)."""
+    def run(*args):
+        return subprocess.run(["git", "-C", str(tmp_path), *args],
+                              capture_output=True, text=True)
+    run("init", "-q", "-b", "main")
+    run("config", "user.email", "gate@test")
+    run("config", "user.name", "gate")
+    (tmp_path / "f.txt").write_text("1\n", encoding="utf-8")
+    run("add", "-A")
+    run("commit", "-qm", "root")
+    root = run("rev-parse", "HEAD").stdout.strip()
+    (tmp_path / "f.txt").write_text("2\n", encoding="utf-8")
+    run("add", "-A")
+    run("commit", "-qm", "child")
+    assert root and run("status").returncode == 0
+    return tmp_path, root
 
 
-def test_ancestor_gate_goes_red_on_a_fake_sha():
-    rc = subprocess.run(["git", "merge-base", "--is-ancestor",
-                         "0" * 40, "HEAD"], cwd=REPO, capture_output=True)
+def test_ancestor_gate_logic_in_temp_repo(tmp_git_repo):
+    tmp, root = tmp_git_repo
+    rc = subprocess.run(["git", "-C", str(tmp), "merge-base",
+                         "--is-ancestor", root, "HEAD"], capture_output=True)
+    assert rc.returncode == 0, "the true-ancestor case must satisfy the gate"
+
+
+def test_ancestor_gate_goes_red_on_a_fake_sha(tmp_git_repo):
+    tmp, _root = tmp_git_repo
+    rc = subprocess.run(["git", "-C", str(tmp), "merge-base",
+                         "--is-ancestor", "0" * 40, "HEAD"], capture_output=True)
     assert rc.returncode != 0, "a fake commit must NOT satisfy the ancestor gate"
 
 

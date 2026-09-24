@@ -25,8 +25,10 @@ jobs:
         run: |
           set -e
           echo "Checking that content filter (RATONALE checks) runs before approval gate in builtin tools..."
-          if grep -R "def effective_risk" -n nimna/; then
-            echo "VIOLATION: effective_risk bypass present — the content filter must not be replaceable"
+          # scoped to builtin tools: base-layer Tool.effective_risk (nimna/tools/base.py)
+          # is the LEGITIMATE dynamic-risk hook; a builtin tool redefining its own is the bypass.
+          if grep -R "def effective_risk" -n nimna/tools/builtin/; then
+            echo "VIOLATION: a builtin tool redefines effective_risk — content filter must not be replaceable"
             exit 1
           fi
           echo "blocklist patterns must EXIST (absence fails — falsifiable):"
@@ -46,6 +48,41 @@ jobs:
                    if "should_kill" in f.read_text(encoding="utf-8", errors="ignore")]
           assert kills, "anomaly kill-switch hook missing from production code"
           print("skill split OK; anomaly hook present in", len(kills), "file(s)")
+
+          # BEHAVIORAL gate: a denylisted command must NEVER reach the executor,
+          # even with the approval gate switched OFF (auto_approve) — the
+          # denylist sits deeper than approval (proven behavior, not grep).
+          import os
+          os.environ["MODEL_PROVIDER"] = "mock"
+          os.environ["DB_PATH"] = ":memory:"
+          from unittest import mock as _m
+          from nimna.config import Settings
+          from nimna.core.agent import Agent
+          from nimna.core.approval import DeferToClient
+          from nimna.memory import MemoryStore
+          from nimna.providers import MockProvider
+          from nimna.providers.base import ModelResponse, ToolCall
+          from nimna.skills import SkillManager
+          from nimna.tools import default_registry
+          s2 = Settings.from_env(env_file=None)
+          s2.provider = "mock"; s2.verify = False
+          s2.db_path = __import__("pathlib").Path(":memory:")
+          s2.skills_dir = __import__("pathlib").Path("skills")
+          s2.workspace_dir = __import__("pathlib").Path(".")
+          s2.auto_approve = True
+          ag = Agent(MockProvider(), SkillManager(__import__("pathlib").Path("skills")),
+                     default_registry(), MemoryStore(":memory:"), s2,
+                     approval_policy=DeferToClient(), workspace=s2.workspace_dir)
+          with _m.patch("nimna.tools.builtin.computer._run_with_limits",
+                        side_effect=AssertionError("HANDLER SPAWNED!")) as sp:
+              ag.provider.queue(ModelResponse(text="", tool_calls=[ToolCall(
+                  name="shell_execute",
+                  arguments={"command": "rm -rf /", "purpose": "ci-behavioral-probe"})]))
+              res = ag.run("probe", session_id="ci-blocklist")
+              assert sp.call_count == 0, "DENIED command reached the executor!"
+              preview = str(res.tool_calls[0].result_preview).lower()
+              assert "blocked" in preview, preview
+          print("behavioral gate OK: denylist blocks rm -rf / before the executor (spawn=0)")
           PY
 
   trivy:
@@ -75,6 +112,9 @@ jobs:
 
   zap:
     runs-on: ubuntu-latest
+    env:
+      MODEL_PROVIDER: mock        # the API refuses to boot without a provider config
+      DB_PATH: /tmp/zap-health.db
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
