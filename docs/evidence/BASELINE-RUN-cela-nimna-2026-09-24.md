@@ -1,0 +1,248 @@
+# Baseline Run Evidence — cela.nimna (Steps 0–4)
+
+**التاريخ:** 2026-09-24
+**الفرع:** `arena/01a0d288-cela-nimna`
+**الـBaseline:** `ffcb0c722fb4cc6bc70f43499459fb69f47b5a6d` (`origin/main`)
+**الحزمة:** Python 3.11.2 / FastAPI 0.141.1 / Uvicorn 0.53.0 / Pydantic 2.13.5 / google-genai 2.25.0 (مطابق للتثبيت في `requirements.txt`)
+
+> يوثّق هذا المستند التشغيل الفعلي لهذا المستودع بالذات. لا علاقة له بأي SHA أو brief خارجي.
+
+---
+
+## 0) الهوية — مؤكَّدة
+
+```text
+$ git rev-parse HEAD origin/main
+ffcb0c722fb4cc6bc70f43499459fb69f47b5a6d   (HEAD)
+ffcb0c722fb4cc6bc70f43499459fb69f47b5a6d   (origin/main)
+
+$ git status --porcelain     → فارغ
+$ git rev-list --count HEAD  → 1
+```
+
+`c3141990` → `fatal: Not a valid object name` + GitHub API `422 No commit found`. **مُستبعَد نهائيًا.**
+
+---
+
+## 1) متطلبات التشغيل الفعلية
+
+```bash
+pip install -r requirements.txt
+pip install -e . --no-deps     # ← إلزامي، وهو ما يفعله CI بالحرف
+python -m nimna serve --port 8000
+```
+
+`scripts/run_arena_suite.py` يشغّل مهامه في **عمليات فرعية**؛ بدون تثبيت الحزمة تفشل بـ
+`cannot import nimna: ModuleNotFoundError` وتظهر الصفوف `ERROR`. CI ينفّذ هذه الخطوة تحت اسم
+*"Install Nimna package for test imports"*.
+
+**النتيجة:** `318 اختبارًا` في `23` ملفًا — كلها خضراء.
+
+---
+
+## 2) F3 — تعارض `.env` مع الاختبارات: **مُعالَج**
+
+### المشكلة (كانت)
+
+`.env` يعرّف `MODEL_PROVIDER=gemini` ⇒ `nimna/config.py:load_dotenv()` يكتب القيم في
+`os.environ` **لعملية Python بأكملها**. في `tests/test_production_gate.py:117` كان:
+
+```python
+os.environ.setdefault("MODEL_PROVIDER", "mock")   # ← no-op إن سبق ضبطه
+```
+
+أي اختبار سابق استدعى `Settings.from_env()` يجعل `.env` يضبط `gemini` أولًا، فيصبح `setdefault`
+بلا أثر → يُبنى مزوّد Gemini بلا مفتاح → `ProviderError`.
+
+```text
+بدون .env → exit=0            |  مع .env → exit=1
+FAILED tests/test_production_gate.py::test_health_endpoint_is_real_runtime_state
+E   nimna.providers.base.ProviderError: Gemini API key is not set
+```
+
+### الإصلاح المُطبَّق (اختبار فقط — لا يمسّ runtime)
+
+```diff
+-def test_health_endpoint_is_real_runtime_state():
++def test_health_endpoint_is_real_runtime_state(monkeypatch):
+     from fastapi.testclient import TestClient
+-    import os
+-    os.environ.setdefault("MODEL_PROVIDER", "mock")
+-    os.environ.setdefault("DB_PATH", ":memory:")
++    monkeypatch.setenv("MODEL_PROVIDER", "mock")
++    monkeypatch.setenv("DB_PATH", ":memory:")
+```
+
+`monkeypatch` يمنح الاختبار بيئته الخاصة ويستعيدها بعده، وهو **محصّن** ضد أي قيمة ضبطها اختبار سابق،
+بخلاف `setdefault`. السلوك الإنتاجي لم يتغيّر إطلاقًا.
+
+### التحقق (حالتان معاديتان)
+
+| الحالة | النتيجة |
+|---|---|
+| الحزمة كاملة مع `.env` يعرّف `MODEL_PROVIDER=gemini` | `exit=0` ✅ |
+| `MODEL_PROVIDER=gemini` مُصدَّر في الصدفة (أسوأ حالة) | `exit=0` ✅ |
+
+كما أُعيد `MODEL_PROVIDER=gemini` إلى `.env` ليطابق ما يشحنه `.env.example`، واختُفيت الحاجة
+إلى التحايل السابق. **تحذير للمطوّرين:** أي اختبار يعتمد على `os.environ.setdefault` بعد تحميل
+`.env` هو فخّ حقيقي — و CI لا يكشفه لأن `.env` غير موجود هناك (`.gitignore:15`).
+
+---
+
+## 3) المزوّد — لا يوجد fallback صامت ✅
+
+```text
+$ build_agent(Settings.from_env(None))      # الافتراضي gemini بلا مفتاح
+FAIL-CLOSED: ProviderError -> Gemini API key is not set – set GEMINI_API_KEY (preferred) or GOOGLE_API_KEY
+```
+
+- `create_provider()` يرمي `ProviderError` لأي مزوّد مجهول.
+- `MockProvider` لا يُبنى إلا عند `MODEL_PROVIDER=mock` صراحةً.
+- **الـcost guard الصارم يسمح فعليًا بالموديل المجاني:** في `nimna/models/registry.py:208-209`
+  يُسجَّل Gemini كـ `CostProfile(0.0, 0.0, known=True, free_tier=True)`. تحقّقنا بالتجربة:
+  الطلب يمرّ من بوابة الميزانية ويصل الشبكة (ولم يُرفض بـ budget).
+
+---
+
+## 4) الأدلة الحيّة
+
+### 4.1 Doctor
+
+```text
+✅ workspace writable      ✅ SQLite data/nimna.db (0o600)
+✅ Docker (sandbox backend=subprocess)
+✅ tools (28 registered)   ✅ skills (10 loaded) – 10 OK
+✅ tool JSON schemas (Gemini/OpenAI compatible)
+❌ Gemini key: not configured        ← الوحيد، متوقّع
+  ↳ 1 skill(s) reference unknown tools
+```
+
+### 4.2 `/api/health`
+
+```json
+{"status":"ok","provider":"mock","skills":10,"tools":28,
+ "cost_guard":{"enabled":true,"mode":"hard","max_spend_usd":0.0,"zero_cost_profile":true},
+ "verify_detail":{"enabled":true,"mode":"strict_reviewer",
+   "checks":["skill_instructions","tool_results","language","completeness"]}}
+```
+
+### 4.3 المحادثة + الذاكرة
+
+```text
+POST /api/chat  → status=done | skills=['file_analysis','web_research'] | steps=1
+GET  /api/sessions/proof-sess-1/messages → 2 رسائل محفوظة في SQLite ✅
+```
+
+### 4.4 بوابة الموافقة — إثبات كامل عبر HTTP
+
+```text
+1) file exists before        : True
+2) POST /api/chat            : 200 | status = awaiting_approval
+3) suspended for approval    : delete_file | approval_id = 6721f7c1...
+   file STILL exists (gate!) : True          ← لم يُنفَّذ شيء قبل الموافقة
+4) GET /api/approvals        : {'pending':[{'id':'6721f7c1...','session_id':'proof'}]}
+5) POST approve -> status    : done | reply = تم حذف الملف.
+   tool calls                : [('delete_file', True, True)]   ← ok + approved
+6) file deleted after        : True
+7) pending approvals cleared : {'pending': []}
+```
+
+---
+
+## 5) F7 — قيد البيئة الحالية: **لا يوجد إنترنت عامّ**
+
+فحص الخروج للشبكة من هذه البيئة:
+
+```text
+api.github.com                    -> HTTP 200      ✅ مسموح
+generativelanguage.googleapis.com -> HTTP 000      ❌ TLS مُغلق (curl exit 35)
+ai.google.dev                     -> HTTP 000      ❌
+example.com                       -> HTTP 000      ❌ (ليس حجب Google، بل حجب عام)
+proxy env vars                    -> (none)
+```
+
+**النتيجة:** طلب Gemini **حقيقي** غير قابل للتنفيذ هنا حتى بمفتاح صحيح — الحجب على مستوى الشبكة.
+هذا اكتشاف يتيم لا علاقة له بالكود: طلب المُثبت بمفتاح وهمي وصل إلى مرحلة TLS ثم انقطع، مما يثبت أن
+التسلسل الكامل (Settings → provider → SDK → HTTP) سليم وأن الفشل شبكي بحت.
+
+**المكان الصحيح لإثبات inference الحقيقي:** جهازك المحلي، أو GitHub Actions، أو بيئة النشر.
+
+---
+
+## 6) مُثبت المزوّد الحقيقي — جاهز للتنفيذ
+
+أُضيف مكوّنان لأنني لا أستطيع الوصول إلى Google من هنا، ولا يمكن أن أُصدر شهادة زائفة:
+
+| الملف | الدور |
+|---|---|
+| `scripts/live_provider_proof.py` | يثبت inference حقيقي بقواعد صارمة |
+| `.github/workflows/live-provider-proof.yml` | تشغيل يدوي (dispatch) بسرّ `GEMINI_API_KEY` |
+
+### القواعد الصارمة في المُثبت
+
+1. **يرفض إصدار شهادة تحت `MODEL_PROVIDER=mock`** (exit 2) — تشغيل وهمي لا يُغني عن حقيقي.
+2. كل فحص assertion يُخرج رمزًا غير صفري — لا يمكن أن ينجح بالمصادفة.
+3. لا يُطبع المفتاح أبدًا؛ يُذكر فقط اسم المتغيّر الذي وفّره.
+4. يتحقق من: الاستجابة غير فارغة، لا تحتوي بانر الـmock، `total_tokens > 0`، وحلقة الوكيل كاملة `done`.
+
+### إثبات أن المُثبت **يستطيع الفشل** (مهم — وإلا فهو ختم مطاطي)
+
+```text
+MODEL_PROVIDER=mock                    → exit=2  [FAIL] provider is not mock
+MODEL_PROVIDER=gemini + مفتاح غير صالح  → exit=1  [FAIL] live request completed
+./scripts/check_ci_falsifiable.sh → FALSIFIABILITY OK: no masks found
+```
+
+### تعليمات المفتاح (سبتمبر 2026)
+
+- مفاتيح AI Studio الجديدة تُصدر كـ **auth keys** (`AQ.*`) منذ 28 مايو 2026.
+- المفاتيح القياسية (`AIza*`) غير المقيّدة تُرفض منذ 19 يونيو 2026، و**كل** المفاتيح القياسية تُرفض خلال سبتمبر 2026.
+- مفتاح `AQ.` يعمل على المسار الأصلي (وهو ما يستخدمه هذا المستودع عبر `google-genai`)،
+  و**يُرفض على المسارات المتوافقة مع OpenAI** — لذلك ثبّت الـworkflow `MODEL_PROVIDER=gemini` صراحةً.
+- الطبقة المجانية لا تتطلب بطاقة؛ الترقية المدفوعة وحدها تحتاج billing.
+
+**الخطوات (دقيقتان):**
+
+```text
+1. https://aistudio.google.com/apikey  →  Create API key   (مجاني، بلا بطاقة)
+2. الصق المفتاح في /home/user/cela.nimna/.env   →  GEMINI_API_KEY=AQ....
+   (الملف بصلاحيات 600 ومُتجاهَل في git — لا ترسله في المحادثة ولا تضمّنه في أي commit)
+3. أبلغني، وسأشغّل:  python scripts/live_provider_proof.py
+```
+
+بديلاً، أضف `GEMINI_API_KEY` كـ repository secret وشغّل الـworkflow يدويًا.
+
+---
+
+## 7) تصحيحات على خطة التشغيل
+
+| ورد في الخطة | الواقع |
+|---|---|
+| `SSE` | **لا وجود لـSSE.** البث عبر `@app.websocket("/ws/{session_id}")` (`nimna/api/app.py:417`). |
+| `Mission` ككيان مستقل | لا كيان منفصل. `mission_id` = `run_id`. |
+| `MockProvider` كخطر fallback | غير ممكن — fail-closed مُثبت. |
+| `verdict: MOCKED` يعني runtime وهمي | لا — `MOCKED` هو وسم الـarena suite للتشغيل على MockProvider، وفحص المزوّد أثبت أن الإنتاج لا يسقط إلى mock. |
+
+**مفاتيح ميتة:** `MOCK_TOOL_CALLING` يُقرأ في `nimna/config.py:128,227` ولا يُستخدم في أي مكان آخر —
+مفتاح يوحي بقدرة غير موجودة، ويخالف مبدأ المستودع (*code presence never implies capability*).
+
+---
+
+## 8) الحالة والخطوات التالية
+
+```text
+[✓] 0  تثبيت الهوية والـSHA            → ffcb0c7
+[✓] 1  تشغيل FastAPI محليًا            → 0.0.0.0:8000
+[✓] 2  فحص Provider Router            → fail-closed
+[✓] 3  منع MockProvider كـfallback     → أصلاً ممنوع
+[✓] 4  API + Memory + Approval        → مُثبت حيًّا (WS بدل SSE)
+[✓] —  إصلاح عزل الاختبارات            → monkeypatch، والتحقق في حالتين معاديتين
+[✓] —  cost guard vs Gemini المجاني    → يسمح فعليًا (0.0/known/free_tier)
+[⛔] —  طلب Gemini حقيقي في هذه البيئة  → مستحيل: لا إنترنت عامّ (F7)
+[ ] 5  بناء Docker                    → محجوب: لا Docker في البيئة
+[ ] 6  نشر مجاني أولي (Render Free)
+[ ] 7  Smoke / rollback verification
+```
+
+**العائق التالي ليس Docker — بل إثبات inference الحقيقي**، وهو يتطلب بيئة لها خروج للإنترنت.
+أسرع مسار: المفتاح في `.env` محليًا ثم `scripts/live_provider_proof.py`. وبعدها Docker ثم Render Free.

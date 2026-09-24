@@ -1,0 +1,52 @@
+name: Live provider proof (real inference)
+
+# Manual dispatch ONLY — this workflow spends real (free-tier) quota.
+#
+# It exists so that "the provider really answers" is a re-runnable, falsifiable
+# claim kept in the repository, instead of a one-off screenshot or a mock run
+# mistaken for a live one.
+#
+# Requires a repository secret: GEMINI_API_KEY
+#   * Create it in Google AI Studio (free tier — no billing account, no card).
+#   * Keys created in AI Studio since 28 May 2026 are AUTHORIZATION keys (AQ.*).
+#     Auth keys are restricted to the Generative Language API and are NOT
+#     accepted on OpenAI-compatible endpoints — which is exactly why this job
+#     pins MODEL_PROVIDER=gemini (the native google-genai path) and never routes
+#     through the openai-compatible transport.
+#   * Standard (AIza*) keys are rejected by the Gemini API from September 2026.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-proof:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11", cache: pip}
+      - run: pip install -r requirements.txt
+      - name: Install Nimna package for test imports
+        run: pip install -e . --no-deps
+
+      - name: Require the credential (never silently skip)
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          if [ -z "${GEMINI_API_KEY:-}" ]; then
+            echo "::error::GEMINI_API_KEY is not set. A live proof cannot pass without a real credential."
+            exit 1
+          fi
+          echo "credential present (value is never printed)"
+
+      - name: This workflow carries no masks
+        run: ./scripts/check_ci_falsifiable.sh .github/workflows/live-provider-proof.yml
+
+      - name: Live provider proof
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          MODEL_PROVIDER: gemini
+          GEMINI_MODEL: gemini-2.5-flash
+        run: python scripts/live_provider_proof.py
