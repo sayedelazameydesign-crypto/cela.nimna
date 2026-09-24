@@ -595,3 +595,21 @@ Evidence لا claim، Recovery bounded) ونضيف طبقة واحدة جديد�
 
 **الثوابت غير القابلة للتفاوض (موروثة):** لا PASS وهمي · UNKNOWN لا يُرقّى · SQLite
 مصدر الحقيقة · scope قبل execution · المحتوى الخارجي untrusted · كل claim له دليل.
+
+---
+
+## ★ T7.1-C — معايير خروج الهجرة لفتح P5 (تذكرة P5 — إلحاق 2026-09-24، لا يمس الأرقام stale أعلاه)
+
+**لا فتح P5 قبل تحقق كل ما يلي (بوابة، لا وصف):**
+1. `SHELL_TOOL_ENABLED` يبقى افتراضياً معطلاً بالطبقات الثلاث — config
+   (`config.py: shell_tool_enabled: bool = False`)، env
+   (`_env_bool("SHELL_TOOL_ENABLED", False)`)، وبوابة التسجيل
+   (`shell.py register(): _enabled_from_env()`). الاختبار:
+   `tests/test_shell_reachability_c.py` (سلبي: gateway=None + legacy + بلا
+   مهارة ⇒ shell غير قابل للوصول).
+2. قرار المزود (P4) مُتَّخذ ومُوثَّق — التكليف الصريح: «لا فتح P5 قبل قرار
+   المزود».
+3. الأدوات الجديدة تدخل بقاعدة ما قبل T8: كل قدرة = code + offline test +
+   policy + audit + صفوف مصفوفة القدرات.
+4. أي تخفيف (auto_approve/ALWAYS) يمر ببوابة T7.1-B المختبرة (20 اختباراً) —
+   fail-open مموَّه أو legacy pendings بلا digest = رفض.
