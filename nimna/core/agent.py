@@ -11,6 +11,7 @@
 Runs are serialisable (:class:`RunState`), so a run can pause when a tool
 needs approval and be resumed later by :meth:`Agent.resume`.
 """
+import hashlib
 import json
 import logging
 import time
@@ -226,6 +227,10 @@ class Agent:
         if not state.started_at:
             state.started_at = time.perf_counter()
         decision = Decision.ALWAYS if (approved and always) else (Decision.APPROVE if approved else Decision.DENY)
+        # T7.1-B3: the approval is bound to the EXACT deferred call. The live
+        # binding check happens in _apply_decision — against the call that will
+        # actually execute (resolved from the message list), not the pending's
+        # own copy — so a mutated state can never inherit an approval.
         self.memory.resolve_pending(run_id, decision.value)
         self._audit(state, "approval_resolved", {"tool": state.pending.tool_name if state.pending else None,
                                                   "decision": decision.value})
@@ -529,6 +534,7 @@ class Agent:
                     state.pending = PendingApproval(
                         approval_id=state.run_id, tool_name=tool.name, tool_call=call, risk=risk,
                         summary=self._summarise_call(call), description=tool.description,
+                        call_digest=self._call_digest(tool.name, call),
                     )
                     state.pending_call_index = index
                     state.status = RunStatus.AWAITING_APPROVAL
@@ -562,6 +568,19 @@ class Agent:
         call = assistant.tool_calls[state.pending_call_index] if assistant else pending.tool_call
         state.pending = None
         state.status = RunStatus.RUNNING
+        # T7.1-B3 identity binding: the approval covers THIS digest only. A
+        # different call at the same index (mutated state) is refused even when
+        # the user approved — an approval is never inherited.
+        if decision in (Decision.APPROVE, Decision.ALWAYS) and pending.call_digest:
+            live_digest = self._call_digest(pending.tool_name, call)
+            if live_digest != pending.call_digest:
+                self._audit(state, "approval_binding_mismatch",
+                            {"tool": pending.tool_name,
+                             "expected": pending.call_digest[:19],
+                             "found": live_digest[:19]})
+                self._record_denied(state, call)
+                state.consecutive_failures += 1
+                return
         if decision == Decision.DENY:
             self._record_denied(state, call)
             state.consecutive_failures += 1
@@ -849,6 +868,14 @@ class Agent:
     @staticmethod
     def _signature(call: ToolCall) -> str:
         return f"{call.name}:{json.dumps(call.arguments, sort_keys=True, ensure_ascii=False)}"
+
+    @staticmethod
+    def _call_digest(tool_name: str, call: ToolCall) -> str:
+        """T7.1-B3: identity binding for a deferred approval — tool + exact
+        arguments. resume() recomputes it and refuses on any mismatch."""
+        body = json.dumps({"tool": tool_name, "arguments": call.arguments},
+                          sort_keys=True, ensure_ascii=False)
+        return "sha256:" + hashlib.sha256(body.encode("utf-8")).hexdigest()
 
     def _approval_key(self, tool_name: str, state: RunState) -> str:
         """Scoped permanent-approval key: tool + skill name:version.

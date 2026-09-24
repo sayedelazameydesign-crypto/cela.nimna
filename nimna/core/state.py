@@ -29,6 +29,10 @@ class PendingApproval(BaseModel):
     risk: str = "confirm"
     summary: str = ""
     description: str = ""
+    # T7.1-B3: identity of the exact deferred call (tool + arguments digest).
+    # resume() recomputes it from the live state and refuses on mismatch, so a
+    # different call at the same index can never inherit someone's approval.
+    call_digest: str = ""
 
 
 class ToolCallRecord(BaseModel):
