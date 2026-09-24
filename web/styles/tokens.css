@@ -1,0 +1,163 @@
+/* ============================================================
+   NIMNA WEB — DESIGN TOKENS (النقطة الوحيدة للحقيقة التصميمية)
+   ------------------------------------------------------------
+   Single source of truth for the design system.
+   Inspired by: Claude (warm paper, serif display, terracotta)
+              + Manus (tool-grade density, dark graphite, mono accents)
+
+   Conventions
+   • Colors are stored as RGB triplets (R G B) so Tailwind can
+     compose opacity:  rgb(var(--color-accent) / <alpha-value>)
+   • Tailwind maps every token in tailwind.config.ts — components
+     must use semantic utilities (bg-canvas, text-ink-secondary,
+     border-line) and NEVER raw hex values.
+   • Dark theme = .dark class on <html> (Manus-style graphite).
+   ============================================================ */
+
+:root {
+  color-scheme: light;
+
+  /* == Surfaces ================================================= */
+  --color-canvas: 250 249 245;          /* #FAF9F5 warm paper — app background */
+  --color-canvas-subtle: 244 242 236;   /* #F4F2EC sidebar / wells */
+  --color-surface: 255 255 255;         /* #FFFFFF cards, panels, composer */
+  --color-surface-raised: 255 253 250;  /* #FFFDFB hover, popovers */
+  --color-surface-sunken: 238 236 228;  /* #EEECE4 insets, chips */
+  --color-overlay: 28 27 23;            /* #1C1B17 scrim behind modals */
+
+  /* == Text ====================================================== */
+  --color-ink: 31 30 27;                /* #1F1E1B primary text */
+  --color-ink-secondary: 102 99 92;     /* #66635C labels, metadata */
+  --color-ink-muted: 154 150 141;       /* #9A968D placeholders, disabled */
+  --color-ink-inverse: 247 246 242;     /* #F7F6F2 text on dark surfaces */
+
+  /* == Borders =================================================== */
+  --color-line: 228 225 216;            /* #E4E1D8 hairlines */
+  --color-line-strong: 214 210 198;     /* #D6D2C6 emphasized borders */
+  --color-line-focus: 217 119 87;       /* focus ring follows the accent */
+
+  /* == Accent — terracotta ======================================= */
+  --color-accent: 217 119 87;           /* #D97757 primary action */
+  --color-accent-hover: 196 99 63;      /* #C4633F hover */
+  --color-accent-pressed: 176 86 52;    /* #B05634 pressed */
+  --color-accent-soft: 247 237 231;     /* #F7EDE7 tinted backgrounds */
+  --color-accent-ink: 255 249 245;      /* #FFF9F5 text on accent */
+
+  /* == Semantic ================================================== */
+  --color-success: 61 138 95;           /* #3D8A5F */
+  --color-success-soft: 232 241 233;    /* #E8F1E9 */
+  --color-warning: 181 133 11;          /* #B5850B */
+  --color-warning-soft: 249 242 224;    /* #F9F2E0 */
+  --color-danger: 194 78 58;            /* #C24E3A */
+  --color-danger-soft: 249 235 231;     /* #F9EBE7 */
+  --color-info: 74 125 189;             /* #4A7DBD */
+  --color-info-soft: 233 240 248;       /* #E9F0F8 */
+
+  /* == Conversation ============================================== */
+  --color-user-bubble: 240 238 230;     /* #F0EEE6 user message bubble */
+  --color-code-block: 40 38 34;         /* #282622 dark code on light canvas */
+  --color-code-ink: 233 230 222;        /* #E9E6DE code text */
+
+  /* == Typography ================================================ */
+  /* Self-hosted variable fonts (@fontsource) with system fallbacks. */
+  --font-ui: "Inter Variable", "Inter", ui-sans-serif, system-ui,
+    -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    "Noto Sans", sans-serif;
+  --font-display: "Newsreader Variable", "Newsreader", ui-serif, Georgia,
+    Cambria, "Times New Roman", serif;
+  --font-code: "JetBrains Mono Variable", "JetBrains Mono", ui-monospace,
+    SFMono-Regular, Menlo, Consolas, monospace;
+
+  --text-micro: 0.6875rem;              /* 11px — timestamps, tiny labels */
+  --text-caption: 0.8125rem;            /* 13px — list items, chips */
+  --text-body: 0.9375rem;               /* 15px — default UI & chat text */
+  --text-title: 1.125rem;               /* 18px — panel / header titles */
+  --text-display: 1.5rem;               /* 24px — section display */
+  --text-display-lg: 1.875rem;          /* 30px — hero / artifact titles */
+
+  /* == Layout ==================================================== */
+  --layout-sidebar-width: 264px;
+  --layout-sidebar-collapsed-width: 68px;
+  --layout-artifact-width: 520px;
+  --layout-chat-max-width: 46rem;       /* readable measure for chat column */
+  --layout-header-height: 52px;
+
+  /* == Radius ==================================================== */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-2xl: 28px;
+  --radius-full: 9999px;
+
+  /* == Elevation ================================================= */
+  --shadow-hairline: 0 1px 0 rgb(var(--color-line) / 0.6);
+  --shadow-card: 0 1px 2px rgb(28 27 23 / 0.05), 0 2px 8px rgb(28 27 23 / 0.04);
+  --shadow-pop: 0 4px 16px rgb(28 27 23 / 0.1), 0 12px 48px rgb(28 27 23 / 0.12);
+  --shadow-focus-ring: 0 0 0 3px rgb(var(--color-accent) / 0.28);
+
+  /* == Motion ==================================================== */
+  --duration-instant: 80ms;
+  --duration-fast: 140ms;
+  --duration-base: 220ms;
+  --duration-slow: 340ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-enter: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --ease-exit: cubic-bezier(0.3, 0, 0.8, 0.15);
+
+  /* == Z-index =================================================== */
+  --z-base: 0;
+  --z-sticky: 20;
+  --z-dropdown: 30;
+  --z-panel: 40;
+  --z-modal: 50;
+  --z-toast: 60;
+}
+
+/* ============================================================
+   DARK THEME — Manus-style graphite (تفعيل عبر .dark على <html>)
+   ============================================================ */
+.dark {
+  color-scheme: dark;
+
+  --color-canvas: 17 17 15;             /* #11110F */
+  --color-canvas-subtle: 22 22 19;      /* #161613 */
+  --color-surface: 26 26 23;            /* #1A1A17 */
+  --color-surface-raised: 33 33 29;     /* #21211D */
+  --color-surface-sunken: 12 12 10;     /* #0C0C0A */
+  --color-overlay: 0 0 0;
+
+  --color-ink: 236 234 227;             /* #ECEAE3 */
+  --color-ink-secondary: 166 163 153;   /* #A6A399 */
+  --color-ink-muted: 112 109 100;       /* #706D64 */
+  --color-ink-inverse: 31 30 27;
+
+  --color-line: 42 42 37;               /* #2A2A25 */
+  --color-line-strong: 56 56 49;        /* #383831 */
+  --color-line-focus: 224 138 107;
+
+  --color-accent: 224 138 107;          /* #E08A6B lifted terracotta */
+  --color-accent-hover: 232 152 124;    /* #E8987C */
+  --color-accent-pressed: 209 119 87;
+  --color-accent-soft: 46 33 27;        /* #2E211B */
+  --color-accent-ink: 26 17 12;         /* #1A110C */
+
+  --color-success: 92 168 118;
+  --color-success-soft: 26 40 30;
+  --color-warning: 214 164 44;
+  --color-warning-soft: 45 38 20;
+  --color-danger: 222 104 82;
+  --color-danger-soft: 48 28 24;
+  --color-info: 110 156 210;
+  --color-info-soft: 24 36 48;
+
+  --color-user-bubble: 38 38 33;        /* #262621 */
+  --color-code-block: 12 12 10;
+  --color-code-ink: 233 230 222;
+
+  --shadow-hairline: 0 1px 0 rgb(255 255 255 / 0.04);
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 2px 8px rgb(0 0 0 / 0.3);
+  --shadow-pop: 0 4px 16px rgb(0 0 0 / 0.5), 0 12px 48px rgb(0 0 0 / 0.55);
+  --shadow-focus-ring: 0 0 0 3px rgb(var(--color-accent) / 0.35);
+}

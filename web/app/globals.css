@@ -1,0 +1,53 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-line;
+  }
+
+  html {
+    @apply antialiased;
+  }
+
+  body {
+    @apply bg-canvas font-sans text-body text-ink;
+    font-feature-settings: "cv11", "ss01";
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: rgb(var(--color-accent) / 0.22);
+  }
+
+  /* Thin, quiet scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--color-line-strong) / 0.75) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: rgb(var(--color-line-strong) / 0.7);
+    border-radius: var(--radius-full);
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--color-ink-muted) / 0.8);
+  }
+}
+
+@layer components {
+  /* Prose used inside assistant messages (static for now — no markdown logic yet) */
+  .prose-nimna {
+    @apply text-body leading-relaxed text-ink;
+  }
+  .prose-nimna strong {
+    @apply font-semibold;
+  }
+}
