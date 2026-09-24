@@ -1,0 +1,70 @@
+# Render Free — cela.nimna
+# هذا الملف كان محلياً فقط في 57dc133، والآن موحّد مع a3f9d30 (workflow الحي + قناة الـannotation)
+# النشر المجاني: Web Service واحد Docker، بدون Redis/Qdrant، قرص مؤقت (ephemeral)
+# المرجع: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: cela-nimna
+    runtime: docker
+    plan: free
+    branch: main
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    autoDeploy: false
+    envVars:
+      - key: MODEL_PROVIDER
+        value: gemini
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: 10000
+      - key: LOG_LEVEL
+        value: INFO
+      - key: AGENT_MAX_STEPS
+        value: 12
+      - key: AGENT_MAX_TOOL_CALLS
+        value: 30
+      - key: AGENT_MAX_RUNTIME_SECONDS
+        value: 300
+      - key: AGENT_VERIFY
+        value: true
+      - key: AGENT_AUTO_APPROVE
+        value: false
+      - key: COST_GUARD_ENABLED
+        value: true
+      - key: COST_GUARD_HARD
+        value: true
+      - key: MAX_SPEND_USD
+        value: 0
+      - key: SKILLS_DIR
+        value: /app/skills
+      - key: WORKSPACE_DIR
+        value: /app/workspace
+      - key: DB_PATH
+        value: /app/data/nimna.db
+      - key: SANDBOX_BACKEND
+        value: subprocess
+      - key: BROWSER_USE_ENABLED
+        value: false
+      - key: COMPUTER_ENABLED
+        value: false
+      # الأسرار — تُضبط من لوحة Render، لا تُكتب هنا
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_BASE_URL
+        sync: false
+
+# ملاحظات Free Tier:
+# - لا يوجد قرص دائم مجاني؛ /app/data مؤقت ويُمسح مع كل redeploy / spin-down.
+#   إن احتجت persistence حقيقية، ارفع إلى Starter + disk أو استخدم Postgres خارجي.
+# - الخدمة تنام بعد 15 دقيقة خمول وتستيقظ عند أول طلب (cold start ~30-60 ثانية).
+# - لا تُفعّل Qdrant/Redis في Free — استخدم fallback المحلي (hash embeddings + SQLite).
+# - لا تركّب docker.sock — SANDBOX_BACKEND يبقى subprocess (آمن افتراضياً).
