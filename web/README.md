@@ -1,17 +1,15 @@
 # Nimna Web — Agent Workspace UI
 
 A **Manus × Claude** inspired frontend for the Nimna agent.
-**Current phase: structure only** — layout, tokens, and static components.
-No state, no event handlers, no API calls yet (interactions are gated behind design approval).
+**RTL-first, Arabic, light theme by default** (dark available via toggle).
 
 ## Stack
 
 - Next.js 15 (App Router) + TypeScript (strict)
 - Tailwind CSS 3.4 + `tailwindcss-animate`
-- shadcn-compatible conventions (`components.json` ready) — primitives are
-  dependency-free for now; Radix-based shadcn components can be added with
-  `npx shadcn add` when interactions are approved
-- lucide-react icons
+- shadcn conventions (`components.json`); Radix primitives for Tabs +
+  DropdownMenu included — only what the interactions actually use
+- lucide-react icons · self-hosted variable fonts (@fontsource, no CDN)
 
 ## File tree
 
@@ -32,25 +30,28 @@ web/
 │   └── icon.svg                 # favicon
 ├── lib/
 │   ├── utils.ts                 # cn() helper
-│   └── mock.ts                  # static demo content (no logic)
+│   └── mock.ts                  # بيانات عرض عربية ثابتة
 └── components/
+    ├── workspace.tsx            # ★ حامل حالة المرحلة 2 (رسائل/طيّ اللوحة/الثيم)
     ├── layout/
-    │   ├── app-shell.tsx        # 3-column grid: sidebar | chat | artifact
-    │   └── sidebar.tsx          # brand, new task, nav, recent tasks, credits
+    │   ├── app-shell.tsx        # شبكة 3 أعمدة، تنعكس تلقائيًا مع RTL
+    │   └── sidebar.tsx          # العلامة، مهمة جديدة، تنقل، مهام أخيرة، رصيد
     ├── chat/
-    │   ├── chat-panel.tsx       # header + transcript + composer
+    │   ├── chat-panel.tsx       # ترويسة + سجل + حقل إدخال
     │   ├── message-list.tsx
-    │   ├── message-bubble.tsx   # user bubble / assistant row + artifact chip
-    │   ├── tool-steps.tsx       # "Used N tools" transparency card
-    │   └── composer.tsx         # inert input area (attach, skills, model, send)
+    │   ├── message-bubble.tsx   # فقاعة المستخدم / صف المساعد + شريحة المخرجات
+    │   ├── tool-steps.tsx       # بطاقة شفافية "استُخدمت N أدوات"
+    │   └── composer.tsx         # ★ حالة: نص/Enter/توسيط + منتقيات مهارات ونموذج
     ├── artifacts/
-    │   └── artifact-panel.tsx   # tabs (Preview/Code/Console) + document preview
-    └── ui/                      # shadcn-style primitives
+    │   └── artifact-panel.tsx   # تبويبات Radix: معاينة / الكود / الطرفية
+    └── ui/                      # بدائيات بأسلوب shadcn
         ├── button.tsx
         ├── badge.tsx
         ├── avatar.tsx
         ├── separator.tsx
-        └── textarea.tsx
+        ├── textarea.tsx
+        ├── tabs.tsx             # Radix Tabs (المرحلة 2)
+        └── dropdown-menu.tsx    # Radix DropdownMenu (المرحلة 2)
 ```
 
 ## Design tokens
@@ -77,11 +78,18 @@ npm run typecheck  # strict TS check
 npm run build      # production build
 ```
 
-## Phase status
+## الاتجاه واللغة
 
-| Phase | Scope | Status |
+الواجهة **عربية، `dir="rtl"` على `<html>`، مبنية مرة واحدة** — لا توجد نسخة
+LTR موازية. كل المكونات تستعمل الأدوات المنطقية (`ms/me/ps/pe/start/end`،
+`border-s/e`، `rounded-ee`) فتنعكس تلقائيًا، والأكواد والطرفية تبقى
+`dir="ltr"` داخل التخطيط. الخطوط: Inter للاتيني، Cairo للعربي،
+Newsreader للعرض اللاتيني.
+
+## حالة المراحل
+
+| المرحلة | النطاق | الحالة |
 |------:|-------|--------|
-| 1 | File tree, design tokens, static shell (sidebar + chat + artifact) | ✅ this commit |
-| 2 | Interactions: composer state, tab switching, theme toggle, panel collapse | ⏸ awaiting approval |
-| 3 | Data: REST + WebSocket bindings to the Nimna backend, streaming, approvals UI | ⏸ |
-| 4 | RTL / Arabic layout pass, i18n | ⏸ |
+| 1 | شجرة الملفات، توكنز التصميم، صدفة ساكنة (سايدبار + محادثة + مخرجات) | ✅ |
+| 2 | التفاعلات: حالة Composer (إرسال/Enter/توسيط/منتقيات) · تبديل التبويبات (Radix) · طيّ اللوحة · تبديل الثيم | ✅ |
+| 3 | البيانات: ربط REST + WebSocket بخلفية نِمنا، البث، واجهة الموافقات | ⏸ |

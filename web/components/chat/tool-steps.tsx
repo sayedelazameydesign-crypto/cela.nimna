@@ -24,34 +24,29 @@ function StepIcon({ status }: { status: StepStatus }) {
   );
 }
 
-/**
- * Collapsed "agent used N tools" card (Manus-style transparency).
- * Static for now — expansion becomes real interaction in the next phase.
- */
+/** بطاقة شفافية "استُخدمت N أدوات" بأسلوب Manus. */
 export function ToolSteps({ steps }: { steps: ToolStep[] }) {
-  const total = steps.reduce((sum, step) => {
-    if (!step.duration) return sum;
-    return sum + parseFloat(step.duration);
-  }, 0);
-
   return (
     <div className="overflow-hidden rounded-xl border border-line bg-surface shadow-card">
       <div className="flex cursor-default items-center gap-2 border-b border-line px-3.5 py-2.5">
         <span className="text-caption font-medium text-ink">
-          Used {steps.length} tools
+          استُخدمت {steps.length.toLocaleString("ar-EG")} أدوات
         </span>
-        <span className="font-mono text-2xs text-ink-muted">
-          {total.toFixed(1)}s
+        <span className="font-mono text-2xs text-ink-muted" dir="ltr">
+          {steps
+            .reduce((sum, step) => {
+              if (!step.duration) return sum;
+              return sum + parseFloat(step.duration);
+            }, 0)
+            .toFixed(1)}
+          s
         </span>
-        <ChevronDown className="ml-auto size-4 text-ink-muted" />
+        <ChevronDown className="ms-auto size-4 text-ink-muted" />
       </div>
 
       <ul className="divide-y divide-line/60">
         {steps.map((step) => (
-          <li
-            key={step.id}
-            className="flex items-center gap-2.5 px-3.5 py-2"
-          >
+          <li key={step.id} className="flex items-center gap-2.5 px-3.5 py-2">
             <StepIcon status={step.status} />
             <span className="shrink-0 text-caption font-medium text-ink">
               {step.label}
@@ -61,9 +56,7 @@ export function ToolSteps({ steps }: { steps: ToolStep[] }) {
             </span>
             {step.duration ? (
               <span
-                className={cn(
-                  "ml-auto shrink-0 font-mono text-2xs text-ink-muted"
-                )}
+                className={cn("ms-auto shrink-0 font-mono text-2xs text-ink-muted")}
               >
                 {step.duration}
               </span>

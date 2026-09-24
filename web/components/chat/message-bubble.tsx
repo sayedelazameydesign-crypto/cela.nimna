@@ -5,26 +5,27 @@ import { cn } from "@/lib/utils";
 import { ToolSteps } from "./tool-steps";
 
 /**
- * A single message row.
- *  • user      → beige bubble aligned to the trailing edge (Claude-style)
- *  • assistant → full-width, serif-touched agent mark, optional tool-steps
- *                card and artifact reference chip (Manus-style)
+ * صف رسالة واحد.
+ *  • المستخدم  ← فقاعة بيج بمحاذاة نهاية السطر (يسارًا في RTL)
+ *  • المساعد   ← عرض كامل مع علامة الوكيل وبطاقة الخطوات
+ *
+ * الزاوية المخصومة للفقاعة منطقية (rounded-ee) فتنعكس تلقائيًا مع الاتجاه.
  */
 export function MessageBubble({ message }: { message: Message }) {
   if (message.role === "user") {
     return (
       <div className="flex flex-col items-end gap-1">
-        <div className="max-w-[85%] rounded-2xl rounded-br-md bg-user-bubble px-4 py-2.5 text-body leading-relaxed text-ink shadow-hairline">
+        <div className="max-w-[85%] rounded-2xl rounded-ee-md bg-user-bubble px-4 py-2.5 text-body leading-relaxed text-ink shadow-hairline">
           {message.content}
         </div>
-        <span className="pr-1 text-2xs text-ink-muted">{message.time}</span>
+        <span className="pe-1 text-2xs text-ink-muted">{message.time}</span>
       </div>
     );
   }
 
   return (
     <div className="flex gap-3">
-      {/* Agent mark */}
+      {/* علامة الوكيل */}
       <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg border border-line bg-surface font-display text-sm italic text-accent shadow-card">
         N
       </span>
@@ -44,15 +45,16 @@ export function MessageBubble({ message }: { message: Message }) {
                 {artifact.title}
               </span>
               <span className="text-2xs text-ink-muted">
-                {artifact.kind} · {artifact.status.toLowerCase()}
+                {artifact.kind} · {artifact.status}
               </span>
             </span>
-            <ArrowUpRight className="size-4 shrink-0 text-ink-muted" />
+            <ArrowUpRight className="size-4 shrink-0 text-ink-muted rtl:-scale-x-100" />
           </div>
         ) : null}
 
-        <span
-          className={cn("block text-2xs text-ink-muted")}>{message.time}</span>
+        <span className={cn("block text-2xs text-ink-muted")}>
+          {message.time}
+        </span>
       </div>
     </div>
   );

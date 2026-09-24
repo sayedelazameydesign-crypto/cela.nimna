@@ -1,18 +1,6 @@
-import { AppShell } from "@/components/layout/app-shell";
-import { Sidebar } from "@/components/layout/sidebar";
-import { ChatPanel } from "@/components/chat/chat-panel";
-import { ArtifactPanel } from "@/components/artifacts/artifact-panel";
+import { Workspace } from "@/components/workspace";
 
-/**
- * Home = the workspace shell.
- * Static composition only — no state, no handlers, no data fetching yet.
- */
+/** الصفحة الرئيسية — صدفة مساحة العمل (كل حالة التفاعل داخل Workspace). */
 export default function Home() {
-  return (
-    <AppShell
-      sidebar={<Sidebar />}
-      chat={<ChatPanel />}
-      artifact={<ArtifactPanel />}
-    />
-  );
+  return <Workspace />;
 }
