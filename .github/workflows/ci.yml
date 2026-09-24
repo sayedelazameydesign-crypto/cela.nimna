@@ -25,30 +25,33 @@ jobs:
         run: |
           set -e
           echo "Checking that content filter (RATONALE checks) runs before approval gate in builtin tools..."
-          ! grep -R "def effective_risk" -n --color || true
-          echo "searching for blocklist patterns"
-          grep -R "BLOCKLIST\|_is_safe\|curl.*\\|.*sh\|chmod +s\|rm -rf" nimna/tools/builtin/ || echo "patterns present"
+          if grep -R "def effective_risk" -n nimna/; then
+            echo "VIOLATION: effective_risk bypass present — the content filter must not be replaceable"
+            exit 1
+          fi
+          echo "blocklist patterns must EXIST (absence fails — falsifiable):"
+          grep -Rq "BLOCKLIST" nimna/tools/builtin/ || { echo "MISSING: blocklist patterns in builtin tools"; exit 1; }
           echo "Checking hidden prompt injection samples are blocked (effect exists in reviews)"
           python3 - << 'PY'
-          import re, pathlib
-          # verify computer_control vs code_execution split (review #1)
-          txt = pathlib.Path("skills/computer_control/SKILL.md").read_text() if pathlib.Path("skills/computer_control/SKILL.md").exists() else ""
-          txt2 = pathlib.Path("skills/code_execution/SKILL.md").read_text() if pathlib.Path("skills/code_execution/SKILL.md").exists() else ""
-          print("skills present", bool(txt), bool(txt2))
-          # check deny before approval in relevant files
-          import pathlib as pl
-          for f in pl.Path("nimna").rglob("*.py"):
-              s = f.read_text(encoding="utf-8", errors="ignore")
-              if "should_kill" in s or "anomaly" in s.lower():
-                  print(f"anomaly hook in {f}")
-          print("OK")
+          import pathlib
+          cc = pathlib.Path("skills/computer_control/SKILL.md")
+          ce = pathlib.Path("skills/code_execution/SKILL.md")
+          assert cc.exists() and ce.exists(), "skill split documents missing"
+          cct = cc.read_text(encoding="utf-8")
+          cet = ce.read_text(encoding="utf-8")
+          # computer_control must NEGATE shell_execute; code_execution must own it
+          assert "shell_execute" in cet, "code_execution must expose shell_execute explicitly"
+          assert "لم يعد ضمن هذه المهارة" in cct, "computer_control must negate shell_execute explicitly"
+          kills = [str(f) for f in pathlib.Path("nimna").rglob("*.py")
+                   if "should_kill" in f.read_text(encoding="utf-8", errors="ignore")]
+          assert kills, "anomaly kill-switch hook missing from production code"
+          print("skill split OK; anomaly hook present in", len(kills), "file(s)")
           PY
 
   trivy:
     runs-on: ubuntu-latest
-    # Security scanning is valuable, but a scanner outage must be reported as
-    # advisory rather than blocking the functional/integrity gates.
-    continue-on-error: true
+    # Security gates BLOCK. A scanner outage is a RED run a human looks at —
+    # not a green run hiding behind advisory masking.
     steps:
       - uses: actions/checkout@v4
       - name: Run Trivy vulnerability scanner (fs)
@@ -77,21 +80,25 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: "3.11"}
       - run: pip install -r requirements.txt
-      - name: Start API (no Docker needed)
+      - name: Start API (mock provider — runners have no keys) and PROVE health
         run: |
           nohup python -m uvicorn nimna.api.app:app --host 0.0.0.0 --port 8000 &
-          for i in {1..30}; do curl -sf http://127.0.0.1:8000/api/health && break || sleep 1; done
-          curl -s http://127.0.0.1:8000/api/health | head -c 500
-      - name: OWASP ZAP Baseline Scan (advisory)
-        # The action runs in a container and may not reach a host-loopback API
-        # on every runner; preserve the report without blocking integrity/tests.
-        continue-on-error: true
+          for i in {1..30}; do curl -sf http://127.0.0.1:8000/api/health > /tmp/health.json && break || sleep 1; done
+          curl -sf http://127.0.0.1:8000/api/health || { echo "HEALTH FAILED — server never came up"; exit 1; }
+          echo "runtime evidence:"; head -c 400 /tmp/health.json
+      - name: Resolve runner address reachable from the ZAP container
+        run: echo "ZAP_TARGET=http://$(hostname -I | awk '{print $1}'):8000" >> "$GITHUB_ENV"
+      - name: OWASP ZAP Baseline Scan (blocking on FAIL-level findings)
+        # The action runs in a container: 127.0.0.1 inside it is NOT the runner,
+        # so the target is the runner's own address. fail_action=true makes the
+        # scan falsifiable; -I keeps passive warnings advisory while FAIL alerts
+        # break the build.
         uses: zaproxy/action-baseline@v0.12.0
         with:
-          target: "http://127.0.0.1:8000"
-          fail_action: false
+          target: ${{ env.ZAP_TARGET }}
+          fail_action: true
           allow_issue_writing: false
-          cmd_options: "-a"
+          cmd_options: "-a -I"
 
   sandbox-escape:
     runs-on: ubuntu-latest
@@ -138,7 +145,34 @@ jobs:
           # the actual protection is rlimits + cwd jail; this test just ensures backend is subprocess
           assert s.sandbox_backend == "subprocess"
           print("backend", s.sandbox_backend, "image", s.sandbox_image)
-          # verify write outside workspace is blocked
-          from nimna.tools.builtin import computer as _c
-          print("sandbox-escape check passed")
+          # REAL adversarial check: path traversal must be refused by the jail
+          import tempfile, pathlib
+          from nimna.tools.base import ToolContext
+          ws = pathlib.Path(tempfile.mkdtemp())
+          ctx = ToolContext(settings=s, workspace=ws, session_id="gate")
+          for probe in ("../escape.txt", "/etc/passwd"):
+              try:
+                  ctx.resolve_path(probe)
+                  raise SystemExit(f"JAIL BROKEN: {probe} was not refused")
+              except Exception as exc:
+                  print(f"jail refused {probe!r}: {type(exc).__name__}")
+          print("sandbox-escape check passed (jail enforced)")
           PY
+
+  production-gate:
+    runs-on: ubuntu-latest
+    needs: [test, security-blocklist, trivy, zap, sandbox-escape]
+    steps:
+      - uses: actions/checkout@v4
+        with: {fetch-depth: 0}   # ancestor check needs real history
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11", cache: pip}
+      - run: pip install -r requirements.txt
+      - name: Install Nimna package for test imports
+        run: pip install -e . --no-deps
+      - name: Install the dependency auditor
+        run: pip install pip-audit
+      - name: Production gate (sequential, falsifiable, no masks)
+        env:
+          PYTHON: python
+        run: bash scripts/production_gate.sh
