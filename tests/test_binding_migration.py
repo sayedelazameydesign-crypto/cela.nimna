@@ -342,3 +342,52 @@ def _ctx(agent):
     from nimna.tools.base import ToolContext
     return ToolContext(settings=agent.settings, workspace=agent.settings.workspace_dir,
                        session_id="se-unbound")
+
+
+# --------------------------------------------------------------------------- #
+# VNC-enabled shell_execute — the container path, pinned at the boundary
+# --------------------------------------------------------------------------- #
+def test_shell_execute_vnc_enabled_container_contract(workspace, settings, provider, monkeypatch):
+    """COMPUTER_ENABLED=1: shell_execute goes to `docker exec desktop bash -lc`
+    with ulimits, a timeout and a FORCED workspace cwd. The boundary
+    (_run_with_limits) is mocked — what the test pins is the exact contract of
+    what would enter the container; the container's interior is outside any
+    unit test's reach and is stated as such."""
+    from types import SimpleNamespace
+    agent = _bound_agent(workspace, settings, provider, None)   # unbound legacy path
+    legacy = agent.tools.get("shell_execute")
+    monkeypatch.setenv("COMPUTER_ENABLED", "1")
+    captured = {}
+
+    def fake_run(cmd, timeout, cwd=None, env=None):
+        captured["cmd"] = cmd
+        captured["timeout"] = timeout
+        return SimpleNamespace(returncode=0, stdout="container-output", stderr="")
+
+    with mock.patch("nimna.tools.builtin.computer._run_with_limits", side_effect=fake_run):
+        out = legacy.run(legacy.validate({"command": "echo hi", "purpose": "test"}),
+                         _ctx(agent))
+    cmd = captured["cmd"]
+    assert cmd[:3] == ["docker", "exec", "desktop"]             # isolated container only
+    assert "bash" in cmd and "-lc" in cmd
+    wrapped = cmd[cmd.index("-lc") + 1]
+    assert "ulimit -t" in wrapped and "ulimit -v" in wrapped    # CPU + memory caps
+    assert "cd /home/ubuntu/workspace" in wrapped               # forced workspace cwd
+    assert captured["timeout"] > 0
+    assert out["via"] == "docker" and out["exit_code"] == 0
+    assert out["stdout"] == "container-output"
+
+
+def test_shell_execute_vnc_enabled_docker_absent_degrades_to_zero_exec(workspace, settings, provider, monkeypatch):
+    """COMPUTER_ENABLED=1 but docker is missing (FileNotFoundError at the
+    boundary): the tool must degrade to the zero-execution simulation — never
+    fall back to an uncontained host shell."""
+    agent = _bound_agent(workspace, settings, provider, None)
+    legacy = agent.tools.get("shell_execute")
+    monkeypatch.setenv("COMPUTER_ENABLED", "1")
+    with mock.patch("nimna.tools.builtin.computer._run_with_limits",
+                    side_effect=FileNotFoundError("docker")):
+        out = legacy.run(legacy.validate({"command": "apt-get install -y x",
+                                          "purpose": "test"}), _ctx(agent))
+    assert out.get("simulated") is True                         # zero-exec simulation
+    assert out.get("exit_code") == 0 and "would run" in out.get("stdout", "")
