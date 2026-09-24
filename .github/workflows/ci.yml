@@ -31,8 +31,9 @@ jobs:
             echo "VIOLATION: a builtin tool redefines effective_risk — content filter must not be replaceable"
             exit 1
           fi
-          echo "blocklist patterns must EXIST (absence fails — falsifiable):"
-          grep -Rq "BLOCKLIST" nimna/tools/builtin/ || { echo "MISSING: blocklist patterns in builtin tools"; exit 1; }
+          echo "blocklist mechanism must EXIST (absence fails — falsifiable):"
+          grep -Rq "_is_blocked_command\|denylist" nimna/tools/builtin/ \
+            || { echo "MISSING: denylist mechanism in builtin tools"; exit 1; }
           echo "Checking hidden prompt injection samples are blocked (effect exists in reviews)"
           python3 - << 'PY'
           import pathlib
@@ -75,7 +76,9 @@ jobs:
                      approval_policy=DeferToClient(), workspace=s2.workspace_dir)
           with _m.patch("nimna.tools.builtin.computer._run_with_limits",
                         side_effect=AssertionError("HANDLER SPAWNED!")) as sp:
-              ag.provider.queue(ModelResponse(text="", tool_calls=[ToolCall(
+              ag.provider.queue(
+              '{"skills": ["code_execution"], "reason": "r"}',   # turn-gating: the skill IS the exposure surface
+              ModelResponse(text="", tool_calls=[ToolCall(
                   name="shell_execute",
                   arguments={"command": "rm -rf /", "purpose": "ci-behavioral-probe"})]))
               res = ag.run("probe", session_id="ci-blocklist")
