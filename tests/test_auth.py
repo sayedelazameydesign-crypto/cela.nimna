@@ -125,6 +125,23 @@ def test_limits_cannot_be_disabled(agent, field, value):
         _app(agent, **{field: value})
 
 
+@pytest.mark.parametrize("name, raw", [("NIMNA_CHAT_RATE_LIMIT", "abc"), ("NIMNA_CHAT_RATE_LIMIT", "3O"),
+                                       ("NIMNA_WS_MAX_CONNECTIONS", "10.5"), ("NIMNA_WS_MAX_CONNECTIONS", "ten")])
+def test_non_numeric_limits_refuse_boot_instead_of_silent_default(monkeypatch, name, raw):
+    monkeypatch.setenv("NIMNA_API_KEY", KEY)
+    monkeypatch.setenv(name, raw)
+    with pytest.raises(SecurityConfigError, match=f"{name}=.*is not an integer"):
+        SecurityConfig.from_settings(Settings.from_env(env_file=None))
+
+
+def test_numeric_limits_from_env_are_applied(monkeypatch):
+    monkeypatch.setenv("NIMNA_API_KEY", KEY)
+    monkeypatch.setenv("NIMNA_CHAT_RATE_LIMIT", " 45 ")
+    monkeypatch.delenv("NIMNA_WS_MAX_CONNECTIONS", raising=False)
+    cfg = SecurityConfig.from_settings(Settings.from_env(env_file=None))
+    assert (cfg.chat_rate_limit_per_minute, cfg.ws_max_connections_per_key) == (45, 10)
+
+
 def _clean_env(tmp_path: Path, **extra: str) -> dict[str, str]:
     env = {k: v for k, v in os.environ.items() if not k.startswith("NIMNA_")}
     env.update(MODEL_PROVIDER="mock", DB_PATH=":memory:", WORKSPACE_DIR=str(tmp_path / "ws"),

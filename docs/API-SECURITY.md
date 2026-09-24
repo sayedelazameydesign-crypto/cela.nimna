@@ -4,17 +4,83 @@ The policy (what is enforced and why) lives in [`../SECURITY.md`](../SECURITY.md
 This page covers **how to operate it**: generating and rotating keys, per-platform setup,
 calling the API, and troubleshooting. Code: `nimna/api/security.py`. Tests: `tests/test_auth.py`.
 
-## 0. Before merging: FastAPI Cloud deploys from `main`
+## ما قبل الدمج
 
-GitHub Deployments on this repository are created by `fastapi-cloud[bot]` for the commits on `main`
-(`gh api repos/sayedelazameydesign-crypto/cela.nimna/deployments`). After this change, **a deployment
-without `NIMNA_API_KEY` refuses to boot** (`SecurityConfigError` at import of `nimna.api.app:app`).
+> **بعد الدمج، أي نشر لا يملك `NIMNA_API_KEY` صالحاً يرفض الإقلاع** (`SecurityConfigError` عند استيراد
+> `nimna.api.app:app`). FastAPI Cloud ينشر تلقائياً عند كل push إلى `main` — لذا تُنجز هذه القائمة **قبل** Merge.
 
-1. Generate a key (below).
-2. Add `NIMNA_API_KEY` to the environment variables of **every** FastAPI Cloud app that deploys this
-   repository (dashboard → app → environment variables), **before** the merge.
-3. Merge, then verify: `curl -s -o /dev/null -w '%{http_code}' https://<app>/api/tools` returns `401`,
-   and the same call with `-H "X-Nimna-Key: $NIMNA_API_KEY"` returns `200`.
+### أ. متغيرات البيئة الجديدة
+
+| المتغير | إلزامي في الإنتاج؟ | القيمة الافتراضية | ماذا يحدث إن غاب |
+|---|---|---|---|
+| `NIMNA_API_KEY` | **نعم** | لا يوجد | الإنتاج: رفض الإقلاع (`nimna serve` ⇒ exit 2؛ uvicorn/FastAPI Cloud ⇒ خطأ عند الاستيراد). القيمة الفارغة أو المسافات أو `" , "` = غائب. التطوير: الـ API لعملاء loopback فقط. قيمة أقصر من 32 أو ضعيفة أو بمحارف خارج `[A-Za-z0-9._~+-]` ⇒ رفض الإقلاع. عدة مفاتيح بفواصل للتدوير. |
+| `NIMNA_ENV` | لا (غيابه = إنتاج) | `production` | يُعامَل كإنتاج ⇒ المفتاح مطلوب (fail-closed). أي قيمة غير `production`/`development` ⇒ رفض الإقلاع. لا تضع `development` على خادم عام. |
+| `NIMNA_ALLOWED_ORIGINS` | لا | غير معرَّف | الإنتاج: كل الطلبات عبر-الأصل مرفوضة (الواجهة المدمجة على `/` من نفس الأصل فلا تتأثر). التطوير: `localhost`/`127.0.0.1` بأي منفذ. `*` أو أصل مشوَّه ⇒ رفض الإقلاع. |
+| `NIMNA_CHAT_RATE_LIMIT` | لا | `30` (طلب/دقيقة/مفتاح على `POST /api/chat`) | يُستخدم 30. قيمة `< 1` أو غير رقمية ⇒ رفض الإقلاع (لا يمكن تعطيل الحد). |
+| `NIMNA_WS_MAX_CONNECTIONS` | لا | `10` (اتصال متزامن/مفتاح على `/ws/*`) | يُستخدم 10. قيمة `< 1` أو غير رقمية ⇒ رفض الإقلاع. |
+| `VNC_PASSWORD` | فقط مع `docker compose --profile computer` | لا يوجد | خدمة `desktop` وحدها تخرج بـ 64 قبل تشغيل VNC (غائب/ضعيف/أقل من 12 حرفاً). التطبيق وبقية الخدمات لا تتأثر. لا يقرؤه تطبيق Nimna. |
+
+### ب. خطوات يدوية لدى مزوّد النشر
+
+**FastAPI Cloud** (المزوّد الفعلي: GitHub Deployments على هذا المستودع ينشئها `fastapi-cloud[bot]`):
+
+- [ ] ولّد مفتاحاً محلياً: `python -c "import secrets; print(secrets.token_urlsafe(32))"` واحفظه في مدير كلمات مرور.
+- [ ] اعرض كل البيئات: `gh api repos/sayedelazameydesign-crypto/cela.nimna/deployments --jq '.[].environment' | sort -u` — عند كتابة هذا كانت اثنتان: `Production – celanimna` و`Production – celanimna-3ffa6b22`.
+- [ ] أضف `NIMNA_API_KEY` في لوحة **كل** تطبيق منهما (App → Environment Variables). حفظ المتغير مع إعادة نشر الكود الحالي آمن: الكود القديم لا يقرؤه.
+- [ ] لا تضف `NIMNA_ENV` (الافتراضي إنتاج) أو اجعله `production`؛ لا تضع `development` أبداً.
+- [ ] أضف `NIMNA_ALLOWED_ORIGINS` فقط إن كانت واجهة على أصل آخر تستدعي الـ API.
+- [ ] نفّذ `scripts/rollback-prod.sh --env "<البيئة>"` (قراءة فقط) ودوِّن الـ SHA المستهدف مسبقاً. إن فشل بـ «no successful deployment» فلا يوجد نشر ناجح سابق للرجوع إليه — اعرف ذلك قبل الدمج لا بعده.
+- [ ] تأكد أن كل العملاء (CLI، سكربتات، الواجهة عبر حقل المفتاح) سيحصلون على المفتاح.
+
+**Render** (`render.yaml`):
+
+- [ ] `NIMNA_API_KEY` معرَّف بـ `sync: false`: الصق المفتاح في Dashboard → Environment عند أول تطبيق للـ Blueprint (لا تستخدم Generate: ينتج `/` و`=` المرفوضة).
+
+**Kubernetes** (`k8s/deployment.yaml` يقرأ `secretKeyRef: nimna-secrets/NIMNA_API_KEY` دون `optional`):
+
+- [ ] `kubectl create secret generic nimna-secrets --from-literal=NIMNA_API_KEY="$NIMNA_API_KEY"` (أو أضف المفتاح إلى السر الموجود) **قبل** `kubectl apply` — وإلا يبقى الـ pod في `CreateContainerConfigError`.
+- [ ] مع أكثر من replica: العدّادات لكل عملية؛ الحد الفعلي ≈ 30 × عدد النسخ، وسيفشل فحص [7] في preflight خلف موزِّع الحمل (قيد معروف).
+
+**docker compose**:
+
+- [ ] `NIMNA_API_KEY=` في `.env` (`chmod 600 .env`)؛ و`VNC_PASSWORD` فقط إن كنت تشغّل `--profile computer`.
+
+### ج. بعد النشر مباشرة: `scripts/preflight-prod-check.sh`
+
+```bash
+export NIMNA_API_KEY=...              # نفس مفتاح الإنتاج؛ لا يُطبع ولا يظهر في ps (يُمرَّر لـ curl عبر ملف 0600)
+scripts/preflight-prod-check.sh https://<app-host>              # أو --chat-limit N إن غيّرت NIMNA_CHAT_RATE_LIMIT
+```
+
+| # | الفحص | المتوقع |
+|---|---|---|
+| 1 | `GET /` | 200 |
+| 2 | `GET /api/health` | 200 + JSON فيه `"status": "ok"` |
+| 3 | `GET /api/chat` بلا مفتاح | 401 |
+| 4 | `GET /api/chat` بالمفتاح الصحيح | 200 أو 4xx غير 401 (عملياً 405: المسار POST فقط، أي أن المصادقة نجحت) |
+| 5 | `GET /api/chat` بمفتاح خاطئ | 401 |
+| 6 | الترويسات الثلاث على `/` و`/api/health` واستجابة 401 | `nosniff`، `DENY`، `strict-origin-when-cross-origin` |
+| 7 | 31 × `POST /api/chat` بجسم `{}` | 1..30 ليست 429 (عملياً 422 قبل تشغيل أي نموذج، فلا تكلفة)، والـ 31 = 429 مع `Retry-After` بين 1 و60 |
+
+أكواد الخروج: `0` كل الفحوص نجحت · `1` فشل فحص · `2` خطأ شبكة/TLS (يتوقف فوراً؛ لا `-k` ولا تجاهل للأخطاء) ·
+`64` استخدام خاطئ (مفتاح غائب، `http://` لغير loopback). يستهلك الفحص حصة المفتاح لدقيقة: لا تُعِده قبل 60 ثانية.
+
+### د. التراجع: `scripts/rollback-prod.sh`
+
+```bash
+scripts/rollback-prod.sh --env "Production – celanimna-3ffa6b22"            # الافتراضي: dry-run، لا يغيّر شيئاً
+scripts/rollback-prod.sh --env "Production – celanimna-3ffa6b22" --execute  # يفتح PR تراجع
+```
+
+- **الافتراضي dry-run:** يقرأ GitHub Deployments وحالاتها ويطبع `ROLLBACK TARGET SHA: <sha>` ثم يخرج بـ 0.
+- **اختيار الهدف:** إن كان أحدث نشر فاشلاً ⇒ آخر نشر ناجح (ما يزال المزوّد يخدمه)؛ وإلا ⇒ أحدث نشر ناجح أقدم بـ SHA مختلف.
+  النشر «ناجح» إن احتوى تاريخ حالاته على `success` (GitHub يحوّل النشر الأقدم إلى `inactive`).
+- **`--execute`:** ينشئ commit جديداً فوق الفرع الافتراضي شجرته مطابقة تماماً للـ SHA المستهدف (لا force-push ولا إعادة كتابة للتاريخ)،
+  على فرع `rollback/<sha7>-<timestamp>`، ويفتح PR. **دمج ذلك الـ PR هو ما يطلق نشر FastAPI Cloud.** يحتاج `gh` بصلاحية `repo`
+  (و`workflow` إن كانت الشجرة المستعادة تغيّر `.github/workflows`).
+- إنشاء «deployment» عبر GitHub API لا يعيد النشر في FastAPI Cloud، لذا لا يفعل السكربت ذلك.
+- ⚠️ **التراجع إلى commit سابق لهذا الـ PR يعيد الـ API بلا مصادقة.** إن كانت المشكلة مفتاحاً ناقصاً فالحل الأسرع إضافة `NIMNA_API_KEY` في لوحة المزوّد وإعادة النشر، لا التراجع.
+- أكواد الخروج: `0` خطة/PR/لا شيء لفعله · `1` لا يوجد هدف تراجع · `2` خطأ `gh`/API · `64` استخدام خاطئ (مثلاً عدة بيئات بلا `--env`).
 
 ## 1. Generate a key
 

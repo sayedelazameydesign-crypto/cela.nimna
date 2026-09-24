@@ -125,6 +125,16 @@ def _normalise_origin(raw: str) -> str:
     return f"{parts.scheme}://{parts.netloc.lower()}"
 
 
+def _limit(value: Any, name: str) -> int:
+    """Integer limit or boot refusal — a typo must not silently become the default."""
+    if isinstance(value, bool):
+        raise SecurityConfigError(f"{name} must be an integer")
+    try:
+        return int(str(value).strip())
+    except ValueError:
+        raise SecurityConfigError(f"{name}={str(value)[:20]!r} is not an integer") from None
+
+
 @dataclass(frozen=True)
 class SecurityConfig:
     env: str
@@ -190,8 +200,8 @@ class SecurityConfig:
                         normalised.append(o)
             origins = tuple(normalised)
 
-        chat_limit = int(getattr(settings, "chat_rate_limit_per_minute", 30))
-        ws_limit = int(getattr(settings, "ws_max_connections_per_key", 10))
+        chat_limit = _limit(getattr(settings, "chat_rate_limit_per_minute", 30), "NIMNA_CHAT_RATE_LIMIT")
+        ws_limit = _limit(getattr(settings, "ws_max_connections_per_key", 10), "NIMNA_WS_MAX_CONNECTIONS")
         if chat_limit < 1:
             raise SecurityConfigError("NIMNA_CHAT_RATE_LIMIT must be >= 1 (rate limiting cannot be disabled)")
         if ws_limit < 1:
