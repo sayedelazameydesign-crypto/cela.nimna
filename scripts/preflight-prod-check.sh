@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# What:       calls a live deployment and verifies its security posture: public / and /api/health, 401 without/with a wrong key, the valid key accepted, 3 security headers, 429 + Retry-After after N+1 chat requests.
+# When:       right after every deploy of code that includes PR #20 (and before announcing it); not against pre-PR-20 code, which has no auth and must fail.
+# On failure: exits non-zero (1 = a check failed, 2 = network/TLS error — aborts at once, never `curl -k`, 64 = usage/missing key); the key is never printed.
+#
 # preflight-prod-check.sh — verify the live API security posture of a Nimna deployment.
 #
 # Usage:
@@ -26,7 +30,7 @@
 # header file (not argv, so it does not show up in `ps`) and is never printed.
 set -Eeuo pipefail
 
-usage() { sed -n '2,6p' "$0" >&2; exit 64; }
+usage() { sed -n '2,9p' "$0" >&2; exit 64; }
 
 BASE_URL=""
 CHAT_LIMIT="${NIMNA_CHAT_RATE_LIMIT:-30}"

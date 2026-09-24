@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# What:       reads GitHub Deployments + their status history, prints the SHA of the last good deployment to restore (dry run); --execute opens a PR restoring that exact tree on top of main.
+# When:       a deploy is broken AND the environment has a successful deployment to go back to (after PR #20 merges, 55ef6d6 is that target whether its deploy succeeds or fails).
+# On failure: exits non-zero (1 = no rollback target, 2 = gh/API error, 64 = usage) and changes nothing; with no target use scripts/emergency-revert.sh instead.
+#
 # rollback-prod.sh — find the last successful production deployment (GitHub Deployments API)
 # and roll the default branch back to it through a reviewable PR.
 #
@@ -32,7 +36,7 @@ while [ "$#" -gt 0 ]; do
     --env) [ "$#" -ge 2 ] || { echo "rollback: --env needs a value" >&2; exit 64; }; ENV_NAME="$2"; shift 2 ;;
     --repo) [ "$#" -ge 2 ] || { echo "rollback: --repo needs a value" >&2; exit 64; }; REPO="$2"; shift 2 ;;
     --execute) EXECUTE=1; shift ;;
-    -h|--help) sed -n '2,12p' "$0" >&2; exit 64 ;;
+    -h|--help) sed -n '2,15p' "$0" >&2; exit 64 ;;
     *) echo "rollback: unknown argument: $1" >&2; exit 64 ;;
   esac
 done
@@ -103,7 +107,7 @@ fi
 DEFAULT_BRANCH="$(json field "$WORK/repo.json" default_branch)"
 
 ghapi "$WORK/deployments.json" --paginate "repos/$REPO/deployments?per_page=100"
-mapfile -t ENVS < <(json envs "$WORK/deployments.json")
+ENVS=(); while IFS= read -r line; do ENVS+=("$line"); done < <(json envs "$WORK/deployments.json")   # no mapfile: bash 3.2
 [ "${#ENVS[@]}" -gt 0 ] || { echo "rollback: $REPO has no GitHub deployments" >&2; exit 1; }
 if [ -z "$ENV_NAME" ]; then
   if [ "${#ENVS[@]}" -ne 1 ]; then
@@ -113,7 +117,7 @@ if [ -z "$ENV_NAME" ]; then
   fi
   ENV_NAME="${ENVS[0]}"
 fi
-mapfile -t ROWS < <(json deployments "$WORK/deployments.json" "$ENV_NAME")
+ROWS=(); while IFS= read -r line; do ROWS+=("$line"); done < <(json deployments "$WORK/deployments.json" "$ENV_NAME")
 [ "${#ROWS[@]}" -gt 0 ] || { echo "rollback: no deployments for environment '$ENV_NAME'" >&2; exit 64; }
 
 echo "repo:        $REPO (default branch: $DEFAULT_BRANCH)"

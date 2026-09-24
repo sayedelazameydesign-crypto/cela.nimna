@@ -30,3 +30,6 @@ workspace/**/*.png
 .DS_Store
 .idea/
 .vscode/
+
+# offline code snapshots from scripts/snapshot-prod.sh (tarballs: never commit)
+.snapshots/
