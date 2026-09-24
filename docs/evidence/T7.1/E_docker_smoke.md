@@ -36,3 +36,10 @@
 tests/test_docker_argv_smoke.py ......  [100%]
 6 passed in 0.03s
 ```
+
+## نطاق الحاوية (تفصيل بعد جولة المالك)
+E يغطي حاوية **python-sandbox** (`tools/sandbox.py → run_in_docker`، صورة
+`python:3.11-slim`) حصراً. **لا يغطي** حاوية desktop/VNC ولا مسار
+`shell_execute` (computer pack) — ذاك المسار موثق في threat_model.md §6.3
+كسطح هجوم متبقٍّ: تعزيزه الداخلي سلسلة ulimit داخل `bash -lc` نصاً بلا سقف
+انحدار آلي، وحمايته المثبتة argv/استضافة-المستوى فقط.
