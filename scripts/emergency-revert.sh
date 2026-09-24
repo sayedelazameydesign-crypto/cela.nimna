@@ -147,6 +147,13 @@ fi
 echo "diffstat vs origin/$BASE:"
 git diff --stat "origin/$BASE" "$NEW_SHA" | tail -n 15 | sed 's/^/  /'
 
+WF_FILES="$(git diff --name-only "origin/$BASE" "$NEW_SHA" -- .github/workflows)"
+WF_HINT="needs a credential allowed to change workflows: SSH key, or a token with the \`workflow\` scope (classic/OAuth: \`gh auth refresh -s workflow\`; fine-grained: Workflows = write)"
+if [ -n "$WF_FILES" ]; then
+  echo "WARNING:        this revert changes GitHub workflow files — the push $WF_HINT:"
+  printf '%s\n' "$WF_FILES" | sed 's/^/                  /'
+fi
+
 SHORT="${SHA:0:7}"
 if [ "$EXECUTE" -eq 0 ]; then
   echo
@@ -159,6 +166,9 @@ resolve_repo
 BRANCH="emergency-revert/$SHORT-$(date -u +%Y%m%d%H%M%S)"
 if ! git push --quiet origin "$NEW_SHA:refs/heads/$BRANCH" 2> "$WORK/push.err"; then
   echo "revert: git push of $BRANCH failed:" >&2; sed 's/^/  /' "$WORK/push.err" >&2
+  if grep -qi "workflow" "$WORK/push.err"; then
+    echo "revert: GitHub refused the workflow-file change — the push $WF_HINT, then rerun" >&2
+  fi
   exit 2
 fi
 echo "pushed:         $BRANCH ($NEW_SHA)"

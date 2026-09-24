@@ -26,7 +26,8 @@ calling the API, and troubleshooting. Code: `nimna/api/security.py`. Tests: `tes
 
 - [ ] ولّد مفتاحاً محلياً: `python -c "import secrets; print(secrets.token_urlsafe(32))"` واحفظه في مدير كلمات مرور.
 - [ ] اعرض كل البيئات: `gh api repos/sayedelazameydesign-crypto/cela.nimna/deployments --jq '.[].environment' | sort -u` — عند كتابة هذا كانت اثنتان: `Production – celanimna` و`Production – celanimna-3ffa6b22`.
-- [ ] أضف `NIMNA_API_KEY` في لوحة **كل** تطبيق منهما (App → Environment Variables). حفظ المتغير مع إعادة نشر الكود الحالي آمن: الكود القديم لا يقرؤه.
+- [ ] أضف `NIMNA_API_KEY` في لوحة **كل** تطبيق منهما (App → Environment Variables) مع تفعيل مفتاح **Secret عند الإنشاء** (لا يمكن تحويل متغير عادي إلى Secret لاحقاً). **Save Only** يكفي: يُطبَّق على النشر التالي، أي نشر دمج PR #20. Save and Redeploy آمن أيضاً: الكود القديم لا يقرؤه.
+- [ ] تأكد أن من سيشغّل `emergency-revert.sh` يملك صلاحية تعديل الـ workflows: التراجع عن PR #20 يغيّر `.github/workflows/ci.yml`، وGitHub يرفض الـ push بدونها. `gh auth status` يجب أن يُظهر `workflow` (أو `gh auth refresh -s workflow`)، أو استخدم مفتاح SSH. الـ dry-run يطبع تحذيراً بذلك.
 - [ ] لا تضف `NIMNA_ENV` (الافتراضي إنتاج) أو اجعله `production`؛ لا تضع `development` أبداً.
 - [ ] أضف `NIMNA_ALLOWED_ORIGINS` فقط إن كانت واجهة على أصل آخر تستدعي الـ API.
 - [ ] نفّذ `scripts/snapshot-prod.sh` (نسخة offline من `origin/main`: SHA + tarball + أسماء المتغيرات) وانسخ مجلد `.snapshots/` خارج الجهاز.
@@ -122,6 +123,7 @@ Record the env var **values** from each app's dashboard by hand.
 3. Create the revert:
    - Dry run: `scripts/emergency-revert.sh --pr 20`. It shows the diffstat and confirms the result is IDENTICAL to the pre-merge tree.
    - Then run it with `--execute`. This opens the PR **"EMERGENCY REVERT: &lt;sha&gt;"**.
+   - The PR #20 revert changes `.github/workflows/ci.yml`, so the push needs a credential that may change workflows (SSH key, or a token with the `workflow` scope). The dry run prints a WARNING when this applies.
    - By hand, with the same result: `git revert -m 1 <merge-commit-sha>` for a merge commit, or `git revert <sha>` without `-m` for a squash merge.
 4. Merge the revert PR. If branch rules allow it, `git push origin main` with the manual revert works too. The push to `main` **is** the deploy.
 5. FastAPI Cloud redeploys every connected app automatically. Wait for **Ready** in each app's Deployments view.

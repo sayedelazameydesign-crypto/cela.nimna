@@ -468,6 +468,7 @@ def test_emergency_revert_dry_run_changes_nothing(repo, tmp_path):
     assert repo.remote_branches() == branches_before == ["refs/heads/main"]
     assert repo.git("rev-parse", "HEAD") == head_before and repo.git("status", "--porcelain") == ""
     assert _no_worktrees_left(repo)
+    assert "WARNING" not in r.stdout                               # no workflow files involved
 
 
 def test_emergency_revert_execute_pushes_exact_pre_merge_tree_and_opens_pr(repo, tmp_path):
@@ -677,3 +678,33 @@ def test_api_security_doc_has_emergency_rollback_section():
     for needle in ("emergency-revert.sh", "snapshot-prod.sh", "rollback-prod.sh", "fastapi deploy",
                    "git revert -m 1", "last successful deployment stays live"):
         assert needle in section, needle
+
+
+def _merge_touching_workflows(repo: Repo) -> str:
+    repo.commit("base", **{"app.txt": "v1\n"})
+    repo.git("checkout", "-q", "-b", "feature")
+    (repo.work / ".github" / "workflows").mkdir(parents=True)
+    repo.commit("feature + ci", **{"app.txt": "v2\n", ".github/workflows/ci.yml": "on: push\n"})
+    repo.git("checkout", "-q", "main")
+    repo.git("merge", "-q", "--no-ff", "feature", "-m", "Merge pull request #20")
+    repo.push()
+    return repo.git("rev-parse", "HEAD")
+
+
+def test_emergency_revert_warns_in_dry_run_when_workflows_change(repo):
+    merge = _merge_touching_workflows(repo)
+    r, _ = _run(REVERT, repo.work, merge, env=repo.env)
+    assert r.returncode == 0, r.stderr
+    assert "WARNING:" in r.stdout and ".github/workflows/ci.yml" in r.stdout and "workflow` scope" in r.stdout
+
+
+def test_emergency_revert_explains_a_github_workflow_push_rejection(repo, tmp_path):
+    merge = _merge_touching_workflows(repo)
+    hook = repo.origin / "hooks" / "pre-receive"          # emulate GitHub's refusal for tokens without `workflow`
+    hook.write_text("#!/bin/sh\necho 'refusing to allow an OAuth App to create or update workflow "
+                    "`.github/workflows/ci.yml` without `workflow` scope' >&2\nexit 1\n")
+    hook.chmod(0o755)
+    r, calls = _run(REVERT, repo.work, merge, "--execute", "--repo", R, env=repo.env, fixture=PR_OK, tmp=tmp_path)
+    assert r.returncode == 2
+    assert "GitHub refused the workflow-file change" in r.stderr and "gh auth refresh -s workflow" in r.stderr
+    assert _writes(calls) == [] and repo.remote_branches() == ["refs/heads/main"]
