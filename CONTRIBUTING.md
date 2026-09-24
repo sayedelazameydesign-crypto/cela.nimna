@@ -89,6 +89,32 @@ nimna doctor --offline
 The mock provider (`MockProvider`) lets you script exact model turns:
 `provider.queue('{"skills":["csv_analysis"]}', ModelResponse(...), "final")`.
 
+`pyproject.toml` already sets `addopts = "-q"`, so passing `-q` again yields `-qq`
+and **silently drops the final `N passed` summary line** — use `pytest` (no `-q`) or
+`pytest -vv` when you need names or counts.
+
+### Assertions on output structure: prove them by mutation
+
+When a test asserts *where* something appears (a warning banner before a table,
+a header before a body, an order of rows), assert the **structure**, not a
+specific string (see `_assert_banner_precedes_every_table` in
+`tests/test_evaluate_arena.py`), and prove the test bites by breaking the code on
+purpose once — move the block, run the test, watch it fail with a clear message,
+restore. Mutation cycles have a trap: CPython validates `.pyc` by
+(mtime at 1-second granularity, size), so a same-size edit restored within the
+same second is executed from **stale bytecode** while `git diff` shows the correct
+source. Recipe:
+
+```bash
+find . -name __pycache__ -type d -prune -exec rm -rf {} +   # drop existing caches first
+python -B -m pytest tests/test_x.py     # -B: write no .pyc during the mutation run
+# ...restore the file, then run once more with a clean cache
+```
+
+`-B` only stops *writing* bytecode; it does not stop *reading* an already-stale
+file — hence the cache wipe. An isolated `git worktree add` avoids the issue
+entirely at a higher cost.
+
 ## Pull requests
 
 - Keep commits focused; `git push origin arena/<id>` on your arena branch.

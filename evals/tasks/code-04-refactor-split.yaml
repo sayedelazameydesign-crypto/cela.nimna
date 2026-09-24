@@ -1,0 +1,38 @@
+# Arena task — coding: refactor a long function into helpers.
+id: code-04-refactor-split
+title: "Split process_order into small functions"
+category: coding
+prompt: >-
+  الملف orders/process_order.py يحتوي دالة process_order طويلة جداً.
+  أعد هيكلتها بحيث تتوزع على دوال صغيرة واضحة الأسماء دون تغيير السلوك،
+  واحتفظ بنفس الملف.
+requires: []
+allowed_tools: ["read_file", "edit_file", "write_file", "list_files", "load_skill"]
+max_steps: 14
+max_tool_calls: 24
+timeout_s: 200
+seed_files:
+  - path: orders/process_order.py
+    content: |
+      def process_order(order, catalog, tax_rate):
+          # long legacy function (intentionally monolithic for the task)
+          items = []
+          total = 0
+          for name, qty in order.items():
+              if name not in catalog:
+                  raise ValueError(name)
+              price = catalog[name] * qty
+              total = total + price
+              items.append((name, qty, price))
+          tax = total * tax_rate
+          shipping = 10 if total < 100 else 0
+          return {"items": items, "subtotal": total, "tax": tax, "shipping": shipping, "grand": total + tax + shipping}
+expected_artifacts:
+  - path: orders/process_order.py
+    contains: "def process_order"
+must_include: []
+must_not_include: []
+judge_rubric: |-
+  1) السلوك الخارجي لم يتغير (نفس المدخلات تعطي نفس الناتج).
+  2) ظهرت دوال مساعدة صغيرة بأسماء واضحة.
+  3) لا تكرار منطق حساب الضريبة/الشحن.

@@ -1,0 +1,29 @@
+# Arena task — data: deterministic JSON transformation.
+id: data-02-json-transform
+title: "Sort orders by amount"
+category: data
+prompt: >-
+  اقرأ data/orders.json ورتب الطلبات تنازلياً حسب amount ثم اكتب
+  الناتج في data/orders_sorted.json بنفس البنية.
+requires: []
+allowed_tools: ["read_file", "write_file", "run_python", "load_skill"]
+max_steps: 10
+max_tool_calls: 15
+timeout_s: 150
+seed_files:
+  - path: data/orders.json
+    content: |
+      {"orders": [
+        {"id": "a1", "amount": 30},
+        {"id": "b2", "amount": 90},
+        {"id": "c3", "amount": 60}
+      ]}
+expected_artifacts:
+  - path: data/orders_sorted.json
+    contains: "orders"
+must_include: []
+must_not_include: []
+judge_rubric: |-
+  1) الترتيب تنازلي: b2 ثم c3 ثم a1.
+  2) نفس البنية والمفاتيح لم تتغير.
+  3) JSON صالح قابل للتحميل.

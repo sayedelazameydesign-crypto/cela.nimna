@@ -1,0 +1,30 @@
+# Arena task — coding: find and fix a real bug in a seeded script.
+id: code-02-fix-buggy-mean
+title: "Fix the division bug in mean.py"
+category: coding
+prompt: >-
+  يوجد ملف scripts_src/mean.py فيه دالة mean(list) تعيد نتيجة خاطئة.
+  شخّص الخطأ وأصلحه في نفس الملف، واشرح السبب في جوابك النهائي.
+requires: []
+allowed_tools: ["read_file", "edit_file", "list_files", "load_skill"]
+max_steps: 10
+max_tool_calls: 15
+timeout_s: 150
+seed_files:
+  - path: scripts_src/mean.py
+    content: |
+      def mean(values):
+          # BUG: sums then divides by len(values) + 1
+          total = 0
+          for v in values:
+              total = total + v
+          return total / (len(values) + 1)
+expected_artifacts:
+  - path: scripts_src/mean.py
+    contains: "def mean"
+must_include: ["mean"]
+must_not_include: []
+judge_rubric: |-
+  1) القسمة أصبحت على len(values) لا len(values)+1.
+  2) الوكيل شرح سبب الخطأ قبل الإصلاح أو بعده.
+  3) لم يُدمر الملف أو يغير التوقيع.

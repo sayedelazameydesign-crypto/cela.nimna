@@ -1,0 +1,67 @@
+# Arena task — coding: run (fail) -> fix -> run again (success). Measures recovery.
+id: code-05-shell-fix-retry
+title: "Diagnose a crashing script via shell and fix it"
+category: coding
+prompt: >-
+  شغّل scripts_src/app.py عبر الطرفية؛ إن فشل فشخّص سبب الفشل من رسالة الخطأ،
+  أصلح الملف، ثم أعد تشغيله حتى ينجح ويكتب النتيجة.
+requires: ["shell_tool"]
+allowed_tools: ["run_command", "read_file", "write_file", "list_files", "load_skill"]
+max_steps: 14
+max_tool_calls: 24
+timeout_s: 200
+seed_files:
+  - path: scripts_src/app.py
+    content: |
+      # compute the sum of squares of the first n numbers and save it
+      n = 4
+      total = sum(i ** 2 for i in range(n))
+      # BUG: writes into a directory that does not exist
+      with open("missing_dir/result.txt", "w") as f:
+          f.write(str(total) + "\n")
+mock_skills: ["shell_execution"]
+mock_script:
+  - tool: run_command
+    arguments:
+      command: python3 scripts_src/app.py
+      purpose: محاولة التشغيل الأولى
+  - tool: write_file
+    arguments:
+      path: scripts_src/app.py
+      overwrite: true
+      content: |
+        # compute the sum of squares of the first n numbers and save it
+        import os
+        
+        n = 4
+        total = sum(i ** 2 for i in range(n))
+        os.makedirs("scripts_src", exist_ok=True)
+        with open("scripts_src/result.txt", "w") as f:
+            f.write(str(total) + "\n")
+  - tool: run_command
+    arguments:
+      command: python3 scripts_src/app.py
+      purpose: إعادة التشغيل بعد الإصلاح
+mock_final: "شخّصت الفشل (مجلد غير موجود)، أصلحت الملف، وأعدت التشغيل بنجاح والناتج في scripts_src/result.txt"
+expected_artifacts:
+  - path: scripts_src/result.txt
+    contains: "14"
+must_include: ["result.txt"]
+must_not_include: []
+verify:
+  - kind: file_exists
+    path: scripts_src/result.txt
+  - kind: content_matches
+    path: scripts_src/result.txt
+    equals: "14"
+  - kind: delta
+    path: scripts_src/result.txt
+    change: CREATED
+  - kind: delta_sha
+    path: scripts_src/result.txt
+  - kind: command
+    command: python3 scripts_src/app.py
+judge_rubric: |-
+  1) أول تشغيل فشل فعلاً (NONZERO_EXIT موثّق في الـ audit).
+  2) الإصلاح عالج سبب الفشل (إنشاء المجلد/المسار) لا العرض.
+  3) التشغيل الثاني SUCCESS وscripts_src/result.txt يحوي 14 (0+1+4+9).

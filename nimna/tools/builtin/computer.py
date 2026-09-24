@@ -315,7 +315,11 @@ def _run_with_limits(cmd: list[str], timeout: int, cwd: str | None = None, env: 
             resource.setrlimit(resource.RLIMIT_AS, (512*1024*1024, 512*1024*1024))
             resource.setrlimit(resource.RLIMIT_NOFILE, (64, 64))
             try:
-                resource.setrlimit(resource.RLIMIT_NPROC, (32, 32))
+                # 512, not 32: the limit is enforced per REAL UID — on shared CI
+                # machines (GitHub runners) the user's live process count already
+                # exceeds tiny bounds, so legit children die/hang. 512 still
+                # damps fork bombs (they spawn thousands).
+                resource.setrlimit(resource.RLIMIT_NPROC, (512, 512))
             except Exception:
                 pass
             resource.setrlimit(resource.RLIMIT_FSIZE, (10*1024*1024, 10*1024*1024))
@@ -662,7 +666,7 @@ def register(registry: ToolRegistry) -> None:
         if is_safe:
             try:
                 out = _run_with_limits(
-                    ["bash", "-lc", f"cd {str(ctx.workspace)!r} && {params.command}"],
+                    ["bash", "-c", f"cd {str(ctx.workspace)!r} && {params.command}"],
                     timeout=min(params.timeout, 5),
                     cwd=str(ctx.workspace),
                     env=_clean_env(),

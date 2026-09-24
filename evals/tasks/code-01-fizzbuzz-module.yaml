@@ -1,0 +1,65 @@
+# Arena task — coding: create a module AND verify it through the shell (Agent + Shell).
+# P1 contract §8: this task is the before/after probe for the run_command primitive.
+id: code-01-fizzbuzz-module
+title: "Create a fizzbuzz module and verify it via shell"
+category: coding
+prompt: >-
+  أنشئ ملفاً باسم src/fizzbuzz.py يحتوي دالة fizzbuzz(n)، ثم تحقق أنه يعمل
+  فعلاً بتشغيله عبر الطرفية وأخبرني بالمخرجات.
+requires: ["shell_tool"]
+allowed_tools: ["write_file", "run_command", "list_files", "load_skill"]
+max_steps: 12
+max_tool_calls: 20
+timeout_s: 180
+mock_skills: ["shell_execution"]
+mock_script:
+  - tool: write_file
+    arguments:
+      path: src/fizzbuzz.py
+      content: |
+        def fizzbuzz(n):
+            out = []
+            for i in range(1, n + 1):
+                if i % 15 == 0:
+                    out.append("FizzBuzz")
+                elif i % 3 == 0:
+                    out.append("Fizz")
+                elif i % 5 == 0:
+                    out.append("Buzz")
+                else:
+                    out.append(str(i))
+            return out
+        
+        
+        if __name__ == "__main__":
+            print(" ".join(fizzbuzz(15)))
+  - tool: run_command
+    arguments:
+      command: python3 src/fizzbuzz.py > src/output.txt && cat src/output.txt
+      purpose: تشغيل الوحدة وحفظ مخرجاتها الحقيقية في src/output.txt
+mock_final: "تم إنشاء src/fizzbuzz.py وتشغيله عبر الطرفية؛ المخرجات محفوظة في src/output.txt: 1 2 Fizz 4 Buzz Fizz 7 8 Fizz Buzz 11 Fizz 13 14 FizzBuzz"
+expected_artifacts:
+  - path: src/fizzbuzz.py
+    contains: "def fizzbuzz"
+  - path: src/output.txt
+    contains: "FizzBuzz"
+must_include: ["fizzbuzz"]
+must_not_include: []
+verify:
+  - kind: file_exists
+    path: src/output.txt
+  - kind: content_matches
+    path: src/output.txt
+    contains: "FizzBuzz"
+  - kind: exit_code
+    equals: 0
+  - kind: delta
+    path: src/output.txt
+    change: CREATED
+  - kind: delta_sha
+    path: src/output.txt
+judge_rubric: |-
+  1) الملف src/fizzbuzz.py موجود وفيه الدالة المطلوبة بتوقيع صحيح.
+  2) الوكيل شغّل الملف فعلاً عبر run_command (دليل shell_evidence في الـ audit).
+  3) مخرجات n=15 صحيحة (3->Fizz, 5->Buzz, 15->FizzBuzz).
+  4) إثبات P1-T2: src/output.txt يظهر CREATED في filesystem_delta (أثر shell) مع sha256 مطابق لإعادة التحقق — Delta + Re-observation = Evidence، لا يكفي "keyword found".

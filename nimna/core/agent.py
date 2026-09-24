@@ -11,6 +11,7 @@
 Runs are serialisable (:class:`RunState`), so a run can pause when a tool
 needs approval and be resumed later by :meth:`Agent.resume`.
 """
+import hashlib
 import json
 import logging
 import time
@@ -77,7 +78,8 @@ class Agent:
     def __init__(self, provider: ModelProvider, skills: SkillManager, tools: ToolRegistry,
                  memory: MemoryStore, settings: Settings,
                  approval_policy: Optional[ApprovalPolicy] = None, *,
-                 workspace: Optional[Any] = None, use_llm_planner: bool = True):
+                 workspace: Optional[Any] = None, use_llm_planner: bool = True,
+                 execution_gateway: Optional[Any] = None):
         # Put the budget gate at the provider boundary so planner, verifier,
         # normal turns, and swarm calls share one policy.  The wrapper forwards
         # provider-specific attributes (for example MockProvider.calls).
@@ -100,6 +102,10 @@ class Agent:
         )
         self.selector = SkillSelector(self.provider, skills, max_skills=settings.max_skills,
                                       use_llm=use_llm_planner)
+        # P1-T7: opt-in Execution Fabric binding. None (default) keeps the
+        # legacy tools.execute path byte-for-byte; when bound, every call to a
+        # gateway-registered tool crosses the single governed path.
+        self.execution_gateway = execution_gateway
         self.evidence = EvidenceJournal(memory)
         self.runtime_manifest = build_manifest(
             settings=settings,
@@ -221,6 +227,10 @@ class Agent:
         if not state.started_at:
             state.started_at = time.perf_counter()
         decision = Decision.ALWAYS if (approved and always) else (Decision.APPROVE if approved else Decision.DENY)
+        # T7.1-B3: the approval is bound to the EXACT deferred call. The live
+        # binding check happens in _apply_decision — against the call that will
+        # actually execute (resolved from the message list), not the pending's
+        # own copy — so a mutated state can never inherit an approval.
         self.memory.resolve_pending(run_id, decision.value)
         self._audit(state, "approval_resolved", {"tool": state.pending.tool_name if state.pending else None,
                                                   "decision": decision.value})
@@ -524,6 +534,7 @@ class Agent:
                     state.pending = PendingApproval(
                         approval_id=state.run_id, tool_name=tool.name, tool_call=call, risk=risk,
                         summary=self._summarise_call(call), description=tool.description,
+                        call_digest=self._call_digest(tool.name, call),
                     )
                     state.pending_call_index = index
                     state.status = RunStatus.AWAITING_APPROVAL
@@ -557,6 +568,28 @@ class Agent:
         call = assistant.tool_calls[state.pending_call_index] if assistant else pending.tool_call
         state.pending = None
         state.status = RunStatus.RUNNING
+        # T7.1-B3 identity binding: the approval covers THIS digest only. A
+        # different call at the same index (mutated state) is refused even when
+        # the user approved — an approval is never inherited.
+        if decision in (Decision.APPROVE, Decision.ALWAYS):
+            if not pending.call_digest:
+                # T7.1-B ع2: FAIL-CLOSED — a pre-binding record (no digest) can
+                # prove WHAT it approved, so it approves NOTHING. Never fail-open.
+                self._audit(state, "approval_binding_missing",
+                            {"tool": pending.tool_name,
+                             "reason": "legacy pending without call_digest — refused"})
+                self._record_denied(state, call)
+                state.consecutive_failures += 1
+                return
+            live_digest = self._call_digest(pending.tool_name, call)
+            if live_digest != pending.call_digest:
+                self._audit(state, "approval_binding_mismatch",
+                            {"tool": pending.tool_name,
+                             "expected": pending.call_digest[:19],
+                             "found": live_digest[:19]})
+                self._record_denied(state, call)
+                state.consecutive_failures += 1
+                return
         if decision == Decision.DENY:
             self._record_denied(state, call)
             state.consecutive_failures += 1
@@ -581,12 +614,68 @@ class Agent:
         else:
             state.consecutive_failures += 1
 
+    @staticmethod
+    def _compact_tool_result(payload: dict, limit: int) -> str:
+        # json is shadowed inside _run_tool (late `import base64, json`), so the
+        # gateway branches serialize through this module-level helper.
+        return json.dumps(payload, ensure_ascii=False, default=str)[:limit]
+
+    def _invoke_via_gateway(self, state: RunState, tool: Tool, call: ToolCall,
+                            ctx: ToolContext):
+        """P1-T7 — the single governed path: Registry → Capability → Policy →
+        Authorization → Executor → Observe → Verify → Checkpoint → Evidence."""
+        gateway = self.execution_gateway
+        started = time.perf_counter()
+        outcome = gateway.invoke_for_agent(
+            tool.name, call.arguments,
+            actor=gateway.actor, session_id=state.session_id, mission_id=state.run_id,
+            grant=ctx.extras.get("authorization_grant"),          # None ⇒ operator binding
+            verify_spec=tuple(ctx.extras.get("verify_spec") or ()),
+            resource=str(call.arguments.get("resource") or "workspace"),
+            requested_operation=tool.name,
+        )
+        payload = {"status": outcome.execution_status, "ok": outcome.ok,
+                   "reason": outcome.reason[:200],
+                   "result": outcome.result if outcome.handler_called else None,
+                   "evidence_digest": (outcome.record or {}).get("hash", "")}
+        result = self._compact_tool_result(payload, self.settings.tool_result_max_chars)
+        return result, outcome.ok, int((time.perf_counter() - started) * 1000)
+
     def _run_tool(self, state: RunState, tool: Tool, call: ToolCall, ctx: ToolContext,
                   approved: Optional[bool]) -> None:
         self._audit(state, "tool_call", {"tool": tool.name, "arguments": call.arguments})
-        result, ok, duration_ms = self.tools.execute(
-            tool.name, call.arguments, ctx, max_chars=self.settings.tool_result_max_chars
-        )
+        gateway = getattr(self, "execution_gateway", None)
+        if gateway is None:
+            # declared compatibility: no gateway bound ⇒ legacy path (T7.1)
+            result, ok, duration_ms = self.tools.execute(
+                tool.name, call.arguments, ctx, max_chars=self.settings.tool_result_max_chars
+            )
+        elif gateway.has(tool.name):
+            try:
+                result, ok, duration_ms = self._invoke_via_gateway(state, tool, call, ctx)
+            except Exception as exc:  # noqa: BLE001 — fail-closed: never legacy-fallback
+                self._audit(state, "gateway_error",
+                            {"tool": tool.name, "error": exc.__class__.__name__})
+                result = self._compact_tool_result(
+                    {"status": "GATEWAY_ERROR", "ok": False,
+                     "reason": f"{exc.__class__.__name__}: {str(exc)[:120]}"}, 10_000)
+                ok, duration_ms = False, 0
+        elif tool.name in getattr(gateway, "compat_tools", frozenset()):
+            # EXPLICIT compatibility list on the gateway — audited, never silent
+            self._audit(state, "gateway_compat", {"tool": tool.name})
+            result, ok, duration_ms = self.tools.execute(
+                tool.name, call.arguments, ctx, max_chars=self.settings.tool_result_max_chars
+            )
+        else:
+            # invariant (T7.1): bound gateway + unregistered tool ⇒ NO handler
+            self._audit(state, "gateway_refused",
+                        {"tool": tool.name,
+                         "reason": "not registered in the bound gateway (fail-closed binding)"})
+            result = self._compact_tool_result(
+                {"status": "NOT_IN_GATEWAY", "ok": False,
+                 "reason": (f"{tool.name}: this agent is gateway-bound and the tool "
+                            "is not registered in the gateway registry (fail-closed)")}, 10_000)
+            ok, duration_ms = False, 0
         state.messages.append(Message.tool_result(call, result))
         state.tool_calls.append(ToolCallRecord(name=tool.name, arguments=call.arguments, ok=ok,
                                                duration_ms=duration_ms, approved=approved,
@@ -594,7 +683,7 @@ class Agent:
         self._audit(state, "tool_result", {"tool": tool.name, "ok": ok, "duration_ms": duration_ms,
                                            "preview": result[:300]})
         # -- Heuristics Kill Switch (security/anomaly.py) — real-time ---
-        if tool.name == "shell_execute" and get_detector is not None:
+        if tool.name in {"shell_execute", "run_command"} and get_detector is not None:
             try:
                 _det = get_detector()
                 _det.log_call(state.session_id, tool.name, dict(call.arguments), stdout=result[:1000] if ok else "", stderr="" if ok else result[:1000])
@@ -788,6 +877,14 @@ class Agent:
     @staticmethod
     def _signature(call: ToolCall) -> str:
         return f"{call.name}:{json.dumps(call.arguments, sort_keys=True, ensure_ascii=False)}"
+
+    @staticmethod
+    def _call_digest(tool_name: str, call: ToolCall) -> str:
+        """T7.1-B3: identity binding for a deferred approval — tool + exact
+        arguments. resume() recomputes it and refuses on any mismatch."""
+        body = json.dumps({"tool": tool_name, "arguments": call.arguments},
+                          sort_keys=True, ensure_ascii=False)
+        return "sha256:" + hashlib.sha256(body.encode("utf-8")).hexdigest()
 
     def _approval_key(self, tool_name: str, state: RunState) -> str:
         """Scoped permanent-approval key: tool + skill name:version.

@@ -157,6 +157,13 @@ class Settings:
     sandbox_timeout: int = 20
     sandbox_memory_mb: int = 512
 
+    # shell execution primitive (P1-T1) — OFF by default: code presence never
+    # implies capability. Disabled => the tool is not registered and the
+    # executor returns DENIED (never a fallback-execute).
+    shell_tool_enabled: bool = False
+    shell_timeout_ms: int = 10_000
+    shell_max_output_bytes: int = 100_000
+
     # infra — Vision Gateway cache + scaling
     redis_url: str | None = None
     vision_cache_ttl: int = 600
@@ -240,6 +247,9 @@ class Settings:
             sandbox_image=_env("SANDBOX_IMAGE", "python:3.11-slim") or "python:3.11-slim",
             sandbox_timeout=_env_int("SANDBOX_TIMEOUT", 20),
             sandbox_memory_mb=_env_int("SANDBOX_MEMORY_MB", 512),
+            shell_tool_enabled=_env_bool("SHELL_TOOL_ENABLED", False),
+            shell_timeout_ms=_env_int("SHELL_TIMEOUT_MS", 10_000),
+            shell_max_output_bytes=_env_int("SHELL_MAX_OUTPUT_BYTES", 100_000),
             redis_url=_env("REDIS_URL", None),
             vision_cache_ttl=_env_int("VISION_CACHE_TTL", 600),
             browser_use_enabled=_env_bool("BROWSER_USE_ENABLED", False),

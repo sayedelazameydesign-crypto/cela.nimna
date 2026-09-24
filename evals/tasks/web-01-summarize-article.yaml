@@ -1,0 +1,21 @@
+# Arena task — web: fetch and summarize (needs network; SKIPPED offline).
+id: web-01-summarize-article
+title: "Summarize a web article in Arabic"
+category: web
+prompt: >-
+  ابحث عن صفحة ويكيبيديا الخاصة بـ Qdrant ثم لخّصها في 5 نقاط عربية
+  واحفظ الملخص في web/qdrant_summary.md.
+requires: ["network"]
+allowed_tools: ["web_search", "fetch_url", "write_file", "load_skill"]
+max_steps: 12
+max_tool_calls: 20
+timeout_s: 240
+expected_artifacts:
+  - path: web/qdrant_summary.md
+    contains: ""
+must_include: []
+must_not_include: []
+judge_rubric: |-
+  1) الملخص 5 نقاط فعلية بالعربية.
+  2) معلوماته متوافقة مع المصدر المُجلوب.
+  3) الملف محفوظ في المسار المطلوب.

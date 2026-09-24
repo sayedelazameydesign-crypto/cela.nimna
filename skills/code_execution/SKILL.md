@@ -13,6 +13,8 @@ triggers:
   - python -c
 allowed_tools:
   - shell_execute
+  - edit_file      # T8 — precise replace, explicit on missing/ambiguous
+  - apply_patch   # T8 — unified diff, all-or-nothing, jail-verified
   - run_python
   - write_file
   - list_files

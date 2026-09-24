@@ -1,0 +1,720 @@
+{
+  "version": 1,
+  "mode": "mock",
+  "repo_version": "f13ba6a",
+  "generated_at": "2026-09-23T19:05:01+00:00",
+  "rows": [
+    {
+      "task_id": "arabic-01-market-brief",
+      "category": "arabic_long",
+      "title": "موجز سوقي عربي من ملاحظات داخلية",
+      "mode": "mock",
+      "verdict": "MOCKED",
+      "score": 0.0,
+      "checks_passed": 0,
+      "checks_total": 1,
+      "checks": [
+        {
+          "name": "artifact:briefs/market_brief.md",
+          "ok": false,
+          "detail": "missing"
+        }
+      ],
+      "secret_hits": [],
+      "model": "mock",
+      "status_detail": "mock provider run — deterministic checks only",
+      "tools_called": [],
+      "skills_used": [
+        "computer_control",
+        "skill_author",
+        "web_research"
+      ],
+      "requires": [],
+      "metrics": {
+        "wall_ms": 10,
+        "tool_calls": 0,
+        "failed_tool_calls": 0,
+        "failed_shell_commands": 0,
+        "shell_executions": 0,
+        "shell_denials": 0,
+        "evidence_complete": 0,
+        "evidence_completeness": null,
+        "recovered": false,
+        "verified": false,
+        "delta_reverified": 0
+      },
+      "run_id": "a277051b2cfc435f",
+      "ts": "2026-09-23T19:05:00+00:00",
+      "repo_version": "f13ba6a",
+      "previous_score": null
+    },
+    {
+      "task_id": "arabic-02-lesson-plan",
+      "category": "arabic_long",
+      "title": "خطة درس برمجة للمبتدئين",
+      "mode": "mock",
+      "verdict": "MOCKED",
+      "score": 0.0,
+      "checks_passed": 0,
+      "checks_total": 1,
+      "checks": [
+        {
+          "name": "artifact:lessons/plan.md",
+          "ok": false,
+          "detail": "missing"
+        }
+      ],
+      "secret_hits": [],
+      "model": "mock",
+      "status_detail": "mock provider run — deterministic checks only",
+      "tools_called": [],
+      "skills_used": [
+        "computer_control",
+        "skill_author",
+        "web_research"
+      ],
+      "requires": [],
+      "metrics": {
+        "wall_ms": 7,
+        "tool_calls": 0,
+        "failed_tool_calls": 0,
+        "failed_shell_commands": 0,
+        "shell_executions": 0,
+        "shell_denials": 0,
+        "evidence_complete": 0,
+        "evidence_completeness": null,
+        "recovered": false,
+        "verified": false,
+        "delta_reverified": 0
+      },
+      "run_id": "b23c600a04b045b8",
+      "ts": "2026-09-23T19:05:00+00:00",
+      "repo_version": "f13ba6a",
+      "previous_score": null
+    },
+    {
+      "task_id": "code-01-fizzbuzz-module",
+      "category": "coding",
+      "title": "Create a fizzbuzz module and verify it via shell",
+      "mode": "mock",
+      "verdict": "MOCKED",
+      "score": 100.0,
+      "checks_passed": 6,
+      "checks_total": 6,
+      "checks": [
+        {
+          "name": "artifact:src/fizzbuzz.py",
+          "ok": true,
+          "detail": "contains ok"
+        },
+        {
+          "name": "artifact:src/output.txt",
+          "ok": true,
+          "detail": "contains ok"
+        },
+        {
+          "name": "reply contains 'fizzbuzz'",
+          "ok": true,
+          "detail": "ok"
+        },
+        {
+          "name": "delta:src/output.txt observed CREATED",
+          "ok": true,
+          "detail": "from shell execution evidence"
+        },
+        {
+          "name": "delta:src/output.txt sha re-verified",
+          "ok": true,
+          "detail": "hash verified"
+        },
+        {
+          "name": "verifier:PASS",
+          "ok": true,
+          "detail": "passed 5/5 · failed 0 · inconclusive 0"
+        }
+      ],
+      "secret_hits": [],
+      "model": "mock",
+      "status_detail": "mock provider run — deterministic checks only",
+      "tools_called": [
+        "write_file",
+        "run_command"
+      ],
+      "skills_used": [
+        "shell_execution"
+      ],
+      "requires": [
+        "shell_tool"
+      ],
+      "metrics": {
+        "wall_ms": 34,
+        "tool_calls": 2,
+        "failed_tool_calls": 0,
+        "failed_shell_commands": 0,
+        "shell_executions": 1,
+        "shell_denials": 0,
+        "evidence_complete": 1,
+        "evidence_completeness": 100.0,
+        "recovered": false,
+        "verified": true,
+        "delta_reverified": 1
+      },
+      "fs_evidence": {
+        "before_root_hash": "sha256:cb0a7629ae1af35f4af425cbfd917db45cb537a7ef4ef33033083aabe9922d59",
+        "after_root_hash": "sha256:c9425def3b7f995f85f354b9d92d2c94fb408d42a3f536fc7dd418e7ddacf507",
+        "delta_changes": 1,
+        "audit_hash": "a19e85287032419fd5e9ec4b5faa847e748a27ebebdfb6b6be853cd28a557724"
+      },
+      "verification": {
+        "version": 1,
+        "verdict": "PASS",
+        "summary": {
+          "total": 5,
+          "passed": 5,
+          "failed": 0,
+          "inconclusive": 0
+        },
+        "checks": [
+          {
+            "kind": "file_exists",
+            "ok": true,
+            "detail": "file present",
+            "target": "src/output.txt"
+          },
+          {
+            "kind": "content_matches",
+            "ok": true,
+            "detail": "contains 'FizzBuzz' — all matched",
+            "target": "src/output.txt"
+          },
+          {
+            "kind": "exit_code",
+            "ok": true,
+            "detail": "exit 0 (expected 0)",
+            "target": ""
+          },
+          {
+            "kind": "delta",
+            "ok": true,
+            "detail": "observed CREATED",
+            "target": "src/output.txt"
+          },
+          {
+            "kind": "delta_sha",
+            "ok": true,
+            "detail": "hash verified",
+            "target": "src/output.txt"
+          }
+        ]
+      },
+      "policy": {
+        "policy_id": "arena-suite-policy",
+        "version": "1.0.0",
+        "allow": 0,
+        "deny": 0,
+        "require_confirmation": 0
+      },
+      "gateway": {
+        "invoked": 0,
+        "refused": 0,
+        "observed": 0,
+        "verified": 0,
+        "checkpointed": 0,
+        "evidence_tail": "c457a85bfe48a493",
+        "chain_verified": true
+      },
+      "registry": {
+        "registered": [
+          "sandbox.command"
+        ],
+        "invocations": 0,
+        "authorized": 0,
+        "denied": 0,
+        "revoked": 0,
+        "schema_failures": 0,
+        "evidence_tail": "c457a85bfe48a493",
+        "chain_verified": true
+      },
+      "recovery": {
+        "state": "COMPLETED",
+        "checkpoint_id": "ckpt_6c572ce2227d43cb9864ec63",
+        "state_version": 1,
+        "evidence_head": "a19e85287032419fd5e9ec4b5faa847e748a27ebebdfb6b6be853cd28a557724",
+        "observation_fingerprint": "sha256:c9425def3b7f995f85f354b9d92d2c94fb408d42a3f536fc7dd418e7ddacf507"
+      },
+      "run_id": "37f841e529a34836",
+      "ts": "2026-09-23T19:05:00+00:00",
+      "repo_version": "f13ba6a",
+      "previous_score": null
+    },
+    {
+      "task_id": "code-02-fix-buggy-mean",
+      "category": "coding",
+      "title": "Fix the division bug in mean.py",
+      "mode": "mock",
+      "verdict": "MOCKED",
+      "score": 100.0,
+      "checks_passed": 2,
+      "checks_total": 2,
+      "checks": [
+        {
+          "name": "artifact:scripts_src/mean.py",
+          "ok": true,
+          "detail": "contains ok"
+        },
+        {
+          "name": "reply contains 'mean'",
+          "ok": true,
+          "detail": "ok"
+        }
+      ],
+      "secret_hits": [],
+      "model": "mock",
+      "status_detail": "mock provider run — deterministic checks only",
+      "tools_called": [],
+      "skills_used": [
+        "python_executor",
+        "csv_analysis",
+        "file_analysis"
+      ],
+      "requires": [],
+      "metrics": {
+        "wall_ms": 9,
+        "tool_calls": 0,
+        "failed_tool_calls": 0,
+        "failed_shell_commands": 0,
+        "shell_executions": 0,
+        "shell_denials": 0,
+        "evidence_complete": 0,
+        "evidence_completeness": null,
+        "recovered": false,
+        "verified": true,
+        "delta_reverified": 0
+      },
+      "run_id": "9c56c08a51244b00",
+      "ts": "2026-09-23T19:05:00+00:00",
+      "repo_version": "f13ba6a",
+      "previous_score": null
+    },
+    {
+      "task_id": "code-03-write-tests",
+      "category": "coding",
+      "title": "Write pytest tests for calc.py",
+      "mode": "mock",
+      "verdict": "MOCKED",
+      "score": 50.0,
+      "checks_passed": 1,
+      "checks_total": 2,
+      "checks": [
+        {
+          "name": "artifact:tests/test_calc.py",
+          "ok": false,
+          "detail": "missing"
+        },
+        {
+          "name": "reply contains 'test'",
+          "ok": true,
+          "detail": "ok"
+        }
+      ],
+      "secret_hits": [],
+      "model": "mock",
+      "status_detail": "mock provider run — deterministic checks only",
+      "tools_called": [],
+      "skills_used": [
+        "computer_control",
+        "file_analysis",
+        "csv_analysis"
+      ],
+      "requires": [],
+      "metrics": {
+        "wall_ms": 9,
+        "tool_calls": 0,
+        "failed_tool_calls": 0,
+        "failed_shell_commands": 0,
+        "shell_executions": 0,
+        "shell_denials": 0,
+        "evidence_complete": 0,
+        "evidence_completeness": null,
+        "recovered": false,
+        "verified": false,
+        "delta_reverified": 0
+      },
+      "run_id": "06577c5dee4246e0",
+      "ts": "2026-09-23T19:05:01+00:00",
+      "repo_version": "f13ba6a",
+      "previous_score": null
+    },
+    {
+      "task_id": "code-04-refactor-split",
+      "category": "coding",
+      "title": "Split process_order into small functions",
+      "mode": "mock",
+      "verdict": "MOCKED",
+      "score": 100.0,
+      "checks_passed": 1,
+      "checks_total": 1,
+      "checks": [
+        {
+          "name": "artifact:orders/process_order.py",
+          "ok": true,
+          "detail": "contains ok"
+        }
+      ],
+      "secret_hits": [],
+      "model": "mock",
+      "status_detail": "mock provider run — deterministic checks only",
+      "tools_called": [],
+      "skills_used": [
+        "csv_analysis",
+        "file_analysis",
+        "computer_control"
+      ],
+      "requires": [],
+      "metrics": {
+        "wall_ms": 12,
+        "tool_calls": 0,
+        "failed_tool_calls": 0,
+        "failed_shell_commands": 0,
+        "shell_executions": 0,
+        "shell_denials": 0,
+        "evidence_complete": 0,
+        "evidence_completeness": null,
+        "recovered": false,
+        "verified": true,
+        "delta_reverified": 0
+      },
+      "run_id": "a0837d6fb2e1470f",
+      "ts": "2026-09-23T19:05:01+00:00",
+      "repo_version": "f13ba6a",
+      "previous_score": null
+    },
+    {
+      "task_id": "code-05-shell-fix-retry",
+      "category": "coding",
+      "title": "Diagnose a crashing script via shell and fix it",
+      "mode": "mock",
+      "verdict": "MOCKED",
+      "score": 100.0,
+      "checks_passed": 5,
+      "checks_total": 5,
+      "checks": [
+        {
+          "name": "artifact:scripts_src/result.txt",
+          "ok": true,
+          "detail": "contains ok"
+        },
+        {
+          "name": "reply contains 'result.txt'",
+          "ok": true,
+          "detail": "ok"
+        },
+        {
+          "name": "delta:scripts_src/result.txt observed CREATED",
+          "ok": true,
+          "detail": "from shell execution evidence"
+        },
+        {
+          "name": "delta:scripts_src/result.txt sha re-verified",
+          "ok": true,
+          "detail": "hash verified"
+        },
+        {
+          "name": "verifier:PASS",
+          "ok": true,
+          "detail": "passed 5/5 · failed 0 · inconclusive 0"
+        }
+      ],
+      "secret_hits": [],
+      "model": "mock",
+      "status_detail": "mock provider run — deterministic checks only",
+      "tools_called": [
+        "run_command",
+        "write_file",
+        "run_command"
+      ],
+      "skills_used": [
+        "shell_execution"
+      ],
+      "requires": [
+        "shell_tool"
+      ],
+      "metrics": {
+        "wall_ms": 78,
+        "tool_calls": 3,
+        "failed_tool_calls": 0,
+        "failed_shell_commands": 1,
+        "shell_executions": 2,
+        "shell_denials": 0,
+        "evidence_complete": 2,
+        "evidence_completeness": 100.0,
+        "recovered": true,
+        "verified": true,
+        "delta_reverified": 1
+      },
+      "fs_evidence": {
+        "before_root_hash": "sha256:fb681ae9c7746729d8b6781ab5c433f41cf120ba3d670428a295ad7a7e7c54c6",
+        "after_root_hash": "sha256:02f57fc9b5e6143157db10b4111d23258ea8a4ba2b90f98dcc52c8b5a25bb8d7",
+        "delta_changes": 1,
+        "audit_hash": "f29738ed850f2c81ab98855f59671d5a1f06981aa55b7d5a795aaee1c0fda5a0"
+      },
+      "verification": {
+        "version": 1,
+        "verdict": "PASS",
+        "summary": {
+          "total": 5,
+          "passed": 5,
+          "failed": 0,
+          "inconclusive": 0
+        },
+        "checks": [
+          {
+            "kind": "file_exists",
+            "ok": true,
+            "detail": "file present",
+            "target": "scripts_src/result.txt"
+          },
+          {
+            "kind": "content_matches",
+            "ok": true,
+            "detail": "equals '14' — all matched",
+            "target": "scripts_src/result.txt"
+          },
+          {
+            "kind": "delta",
+            "ok": true,
+            "detail": "observed CREATED",
+            "target": "scripts_src/result.txt"
+          },
+          {
+            "kind": "delta_sha",
+            "ok": true,
+            "detail": "hash verified",
+            "target": "scripts_src/result.txt"
+          },
+          {
+            "kind": "command",
+            "ok": true,
+            "detail": "verification command succeeded",
+            "target": "python3 scripts_src/app.py"
+          }
+        ]
+      },
+      "policy": {
+        "policy_id": "arena-suite-policy",
+        "version": "1.0.0",
+        "allow": 1,
+        "deny": 0,
+        "require_confirmation": 0
+      },
+      "gateway": {
+        "invoked": 1,
+        "refused": 0,
+        "observed": 1,
+        "verified": 1,
+        "checkpointed": 1,
+        "evidence_tail": "aa51e884142e739d",
+        "chain_verified": true
+      },
+      "registry": {
+        "registered": [
+          "sandbox.command"
+        ],
+        "invocations": 2,
+        "authorized": 1,
+        "denied": 0,
+        "revoked": 0,
+        "schema_failures": 0,
+        "evidence_tail": "aa51e884142e739d",
+        "chain_verified": true
+      },
+      "recovery": {
+        "state": "COMPLETED",
+        "checkpoint_id": "ckpt_3b23b79e7fc048f8b8e3167a",
+        "state_version": 1,
+        "evidence_head": "f29738ed850f2c81ab98855f59671d5a1f06981aa55b7d5a795aaee1c0fda5a0",
+        "observation_fingerprint": "sha256:02f57fc9b5e6143157db10b4111d23258ea8a4ba2b90f98dcc52c8b5a25bb8d7"
+      },
+      "run_id": "bba0622ecd574355",
+      "ts": "2026-09-23T19:05:01+00:00",
+      "repo_version": "f13ba6a",
+      "previous_score": null
+    },
+    {
+      "task_id": "data-01-csv-summary",
+      "category": "data",
+      "title": "Summarize sales.csv totals per region",
+      "mode": "mock",
+      "verdict": "MOCKED",
+      "score": 50.0,
+      "checks_passed": 1,
+      "checks_total": 2,
+      "checks": [
+        {
+          "name": "artifact:reports/sales_summary.md",
+          "ok": false,
+          "detail": "missing"
+        },
+        {
+          "name": "reply contains 'sales'",
+          "ok": true,
+          "detail": "ok"
+        }
+      ],
+      "secret_hits": [],
+      "model": "mock",
+      "status_detail": "mock provider run — deterministic checks only",
+      "tools_called": [],
+      "skills_used": [
+        "csv_analysis",
+        "report_writer",
+        "skill_author"
+      ],
+      "requires": [],
+      "metrics": {
+        "wall_ms": 7,
+        "tool_calls": 0,
+        "failed_tool_calls": 0,
+        "failed_shell_commands": 0,
+        "shell_executions": 0,
+        "shell_denials": 0,
+        "evidence_complete": 0,
+        "evidence_completeness": null,
+        "recovered": false,
+        "verified": false,
+        "delta_reverified": 0
+      },
+      "run_id": "fe989b80326a4d95",
+      "ts": "2026-09-23T19:05:01+00:00",
+      "repo_version": "f13ba6a",
+      "previous_score": null
+    },
+    {
+      "task_id": "data-02-json-transform",
+      "category": "data",
+      "title": "Sort orders by amount",
+      "mode": "mock",
+      "verdict": "MOCKED",
+      "score": 0.0,
+      "checks_passed": 0,
+      "checks_total": 1,
+      "checks": [
+        {
+          "name": "artifact:data/orders_sorted.json",
+          "ok": false,
+          "detail": "missing"
+        }
+      ],
+      "secret_hits": [],
+      "model": "mock",
+      "status_detail": "mock provider run — deterministic checks only",
+      "tools_called": [],
+      "skills_used": [
+        "computer_control",
+        "web_research",
+        "file_analysis"
+      ],
+      "requires": [],
+      "metrics": {
+        "wall_ms": 7,
+        "tool_calls": 0,
+        "failed_tool_calls": 0,
+        "failed_shell_commands": 0,
+        "shell_executions": 0,
+        "shell_denials": 0,
+        "evidence_complete": 0,
+        "evidence_completeness": null,
+        "recovered": false,
+        "verified": false,
+        "delta_reverified": 0
+      },
+      "run_id": "84e186b9716448ae",
+      "ts": "2026-09-23T19:05:01+00:00",
+      "repo_version": "f13ba6a",
+      "previous_score": null
+    },
+    {
+      "task_id": "web-01-summarize-article",
+      "category": "web",
+      "title": "Summarize a web article in Arabic",
+      "mode": "mock",
+      "verdict": "SKIPPED",
+      "score": null,
+      "checks_passed": null,
+      "checks_total": null,
+      "checks": [],
+      "secret_hits": [],
+      "model": null,
+      "status_detail": "missing capabilities: network",
+      "tools_called": [],
+      "skills_used": [],
+      "requires": [
+        "network"
+      ],
+      "metrics": {},
+      "run_id": "bbe40a69537e4582",
+      "ts": "2026-09-23T19:05:01+00:00",
+      "repo_version": "f13ba6a",
+      "previous_score": null
+    },
+    {
+      "task_id": "web-02-extract-links",
+      "category": "web",
+      "title": "Extract documentation links",
+      "mode": "mock",
+      "verdict": "SKIPPED",
+      "score": null,
+      "checks_passed": null,
+      "checks_total": null,
+      "checks": [],
+      "secret_hits": [],
+      "model": null,
+      "status_detail": "missing capabilities: network",
+      "tools_called": [],
+      "skills_used": [],
+      "requires": [
+        "network"
+      ],
+      "metrics": {},
+      "run_id": "012a7c8ec7e845cb",
+      "ts": "2026-09-23T19:05:01+00:00",
+      "repo_version": "f13ba6a",
+      "previous_score": null
+    }
+  ],
+  "summary": {
+    "tasks": 11,
+    "ran": 9,
+    "skipped": 2,
+    "error": 0,
+    "mean_score": 55.6,
+    "secret_hits": 0,
+    "verified": 4,
+    "tool_calls": 5,
+    "failed_tool_calls": 0,
+    "failed_commands": 1,
+    "security_denials": 0,
+    "shell_executions": 3,
+    "evidence_completeness": 100.0,
+    "recovered_tasks": 1,
+    "mean_wall_ms": 19.2,
+    "delta_reverified": 2,
+    "verifier_pass": 2,
+    "verifier_fail": 0,
+    "verifier_inconclusive": 0,
+    "checkpoint_completed": 2,
+    "checkpoint_failed": 0,
+    "checkpoint_diagnosable": 0,
+    "registry_registered": 2,
+    "registry_authorized": 1,
+    "registry_denied": 0,
+    "registry_revoked": 0,
+    "registry_schema_failures": 0,
+    "policy_allow": 1,
+    "policy_deny": 0,
+    "policy_require_confirmation": 0,
+    "gateway_invoked": 1,
+    "gateway_refused": 0
+  },
+  "regressions": []
+}

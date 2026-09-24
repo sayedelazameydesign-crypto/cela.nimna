@@ -153,7 +153,7 @@ risk_level: safe
 
 ## الأدوات والصلاحيات
 
-`nimna tools` → 26 أداة (22 + 3 vector memory + Browser Use V4):
+`nimna tools` → 26 أداة (22 + 3 vector memory + Browser Use V4) + `run_command` (طرفية داخل الحوزة، opt-in عبر `SHELL_TOOL_ENABLED` — evidence موقّع وdefault-deny):
 
 - **safe**: قراءة/حساب — تنفذ مباشرة.
 - **confirm/restricted**: تحتاج موافقة (تعليق). `delete_file` دائماً؛ `write_file/report` عند الكتابة فوق موجود؛ `run_python` مع `subprocess`؛ كل أدوات `computer_control`/`code_execution`.
@@ -342,12 +342,19 @@ docker compose --profile computer up -d desktop    # سطح مكتب معزول 
 nimna doctor --offline   # .env, مفاتيح, Docker, صلاحيات, SQLite, مخططات الأدوات
 pytest -q                # 83 اختبار (mock) — بلا شبكة
 nimna skills validate    # صياغة SKILL.md + restricted
-nimna tools              # 26 أداة مع risk ( +3 vector memory + Browser Use V4)
+nimna tools              # 26 أداة مع risk ( +3 vector memory + Browser Use V4 + run_command gated)
 curl -s localhost:8001/api/health | jq
 websocat ws://localhost:8001/ws/test
 ```
 
 توقف تلقائي عند: تكرار نفس استدعاء أداة 3 مرات، تكرار نص 3 مرات، تجاوز `MAX_*`, أو 5 أخطاء متتالية. كل الحمولات عبر `redact_payload` (***REDACTED***).
+
+**تقييم الفروقات في كل PR (Arena Diff Evaluation):** الـ workflow `arena_diff_eval.yml` يستخرج `git diff origin/main...HEAD`، يشغّل `scripts/evaluate_arena.py` (مقاييس حقيقية + إشارات مخاطر: أسرار، مسارات حساسة، كود بلا اختبارات)، وينشر النتيجة كتعليق في الـ PR. بدون `ARENA_API_URL`/`ARENA_API_KEY` تكون حالة الـ Benchmark `SKIPPED` وليس `PASS` وهمياً. يدعم أيضاً خطوة **LLM-as-a-Judge** اختيارية عبر `OPENAI_API_KEY` (أي مزوّد متوافق مع OpenAI Chat Completions) بنفس قاعدة الأمانة: بدون مفتاح `SKIPPED`، ومع فشل الاتصال/الردّ `ERROR` بلافتة تحذير — حكم النموذج استشاري ولا يستبدل `pytest`. التفاصيل: [`docs/ARENA-DIFF-EVAL.md`](docs/ARENA-DIFF-EVAL.md).
+
+```bash
+git diff origin/main...HEAD > changes.diff
+python scripts/evaluate_arena.py --diff_file changes.diff        # نفس تقرير الـ PR محلياً
+```
 
 ---
 
