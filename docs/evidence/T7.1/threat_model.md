@@ -69,21 +69,15 @@
 1. `auto_approve=True` (تشغيلي-بيئي): يُبطل الحارس — افتراضياً False.
 2. `ALWAYS`: يخفف «لكل استدعاء» إلى «لبقية الـ run» — تصميم مُسمّى.
 3. **مسار `shell_execute` (حزمة computer/VNC) — سطح هجوم متبقٍّ بلا unit test،
-   والحماية الآلية له argv/استضافة-المستوى فقط:**
-   - النقل الحي (`computer.py:638-646`):
-     `docker exec desktop bash -lc 'ulimit -t 30; ulimit -v 524288; …; timeout
-     N bash -lc ''<command>'''` — أي أن التعزيز «داخل الحاوية» هو **سلسلة
-     نصية داخل bash** (ulimits + timeout)، وليس إضافة في argv الـ `docker
-     exec` نفسه؛ وحاوية desktop تُنشأ مسبقاً بـ `docker compose --profile
-     computer` خارج كل ما يختبره هذا المستودع.
-   - **بلا سقف انحدار آلي:** لا unit test يمسك سلسلة ulimit، ولا تعزيزاً في
-     argv الـ exec، ولا شيئاً داخل الحاوية — أي انحدار هناك لا يُمسك اختباراً.
-   - الحماية الآلية المثبتة لهذا المسار **قبل/حول** التنفيذ فقط: denylist
-     قبل عرض الموافقة + turn-scoping + بوابة الموافقة (T7.1-B) + killpg من
-     المضيف بعد `timeout+3` (`_run_with_limits`).
-   - **دخان E لا يغطي هذا المسار إطلاقاً** — E لحاوية python-sandbox في
-     `tools/sandbox.py` (`docker run --network none --cap-drop ALL …`)؛
-     الخلط بين الحاويتين قراءة خاطئة لـ E (ترويسة E النطاقية تصرّح بذلك).
+   وحمايته الآلية argv/استضافة-المستوى فقط بلا سقف انحدار آلي:** النقل الحي
+   (`computer.py:638-646`) هو `docker exec desktop bash -lc 'ulimit -t 30;
+   ulimit -v 524288; …; timeout N bash -lc ''<command>'''` — التعزيز «داخل
+   الحاوية» سلسلة نصية داخل bash لا عناصر في argv الـ `docker exec`، وحاوية
+   desktop تُنشأ بـ compose profile خارج كل ما يختبره المستودع، فأي انحدار
+   هناك لا يُمسك اختباراً؛ المثبت آلياً هو ما يسبق/يحيط بالتنفيذ فقط
+   (denylist قبل عرض الموافقة + turn-scoping + بوابة T7.1-B + killpg من
+   المضيف بعد `timeout+3`)، ودخان E يخص حاوية python-sandbox في
+   `tools/sandbox.py` لا هذا المسار إطلاقاً (ترويسة E النطاقية تصرّح بذلك).
 4. قائمة الحجب regex/نصية = **تخفيف لا بديل** — الحماية البنيوية = عزل الحاوية
    + Fabric عند الربط.
 5. سلامة مخزن الحالة (SQLite) تصير **ضمن سطح الهجوم** بعد B3: ربط الهوية يكشف
