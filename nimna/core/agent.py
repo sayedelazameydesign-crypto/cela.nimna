@@ -571,7 +571,16 @@ class Agent:
         # T7.1-B3 identity binding: the approval covers THIS digest only. A
         # different call at the same index (mutated state) is refused even when
         # the user approved — an approval is never inherited.
-        if decision in (Decision.APPROVE, Decision.ALWAYS) and pending.call_digest:
+        if decision in (Decision.APPROVE, Decision.ALWAYS):
+            if not pending.call_digest:
+                # T7.1-B ع2: FAIL-CLOSED — a pre-binding record (no digest) can
+                # prove WHAT it approved, so it approves NOTHING. Never fail-open.
+                self._audit(state, "approval_binding_missing",
+                            {"tool": pending.tool_name,
+                             "reason": "legacy pending without call_digest — refused"})
+                self._record_denied(state, call)
+                state.consecutive_failures += 1
+                return
             live_digest = self._call_digest(pending.tool_name, call)
             if live_digest != pending.call_digest:
                 self._audit(state, "approval_binding_mismatch",

@@ -17,6 +17,7 @@ from unittest import mock
 
 import pytest
 
+from nimna.core.state import RunStatus
 from nimna.providers.base import ModelResponse, ToolCall
 
 from nimna.execution.gateway import ExecutionGateway
@@ -567,3 +568,84 @@ def test_resume_with_modified_call_is_refused(workspace, settings, provider):
     assert spawn.call_count == 0                       # the mutated call NEVER ran
     events = [e["event"] for e in agent.memory.get_audit("b3")]
     assert "approval_binding_mismatch" in events       # the refusal is audited
+
+
+# --------------------------------------------------------------------------- #
+# ع2 — legacy pending WITHOUT digest: FAIL-CLOSED, never fail-open
+# --------------------------------------------------------------------------- #
+def test_legacy_pending_approval_without_digest_is_refused(workspace, settings, provider):
+    """A pre-B3 stored pending has call_digest == '' — it cannot prove WHAT it
+    approved, so it approves NOTHING: resume refuses, the handler is never
+    reached, and the refusal is audited (approval_binding_missing)."""
+    agent, run_id = _defer_shell(workspace, settings, provider, "echo legacy")
+    raw = agent.memory.get_pending(run_id)
+    raw["pending"]["call_digest"] = ""                 # simulate a pre-B3 record
+    agent.memory.save_pending(run_id, "b3", raw)
+    legacy = agent.tools.get("shell_execute")
+    with mock.patch("nimna.tools.builtin.computer._run_with_limits",
+                    side_effect=AssertionError("INHERITED!")) as spawn:
+        provider.queue("done")
+        result = agent.resume(run_id, True)            # user approves — irrelevant
+    assert result.status == RunStatus.DONE
+    assert spawn.call_count == 0                       # fail-closed: never executed
+    record = result.tool_calls[0]
+    assert record.ok is False
+    events = [e["event"] for e in agent.memory.get_audit("b3")]
+    assert "approval_binding_missing" in events
+
+
+# --------------------------------------------------------------------------- #
+# ع3 — ALWAYS scope: "rest of the STORED RunState lifetime, spanning resume"
+# --------------------------------------------------------------------------- #
+def test_always_scope_spans_resume_via_persisted_run_state(workspace, settings, provider):
+    """Precise scope, proven: ALWAYS granted on shell_execute survives a suspend
+    AND a resume serviced by a DIFFERENT Agent instance (RunState reloaded from
+    SQLite) — a later shell_execute in the same run runs with no new approval.
+    Correct name: rest of the stored RunState's lifetime, including across
+    resume — not merely 'the run' in memory."""
+    from nimna.core.agent import Agent
+    from nimna.core.approval import DeferToClient
+    from nimna.memory import MemoryStore
+    from nimna.skills import SkillManager
+    from nimna.tools import default_registry
+    shared_store = MemoryStore(":memory:")             # one store — resume across instances
+    agent1 = Agent(provider, SkillManager(REPO / "skills"), default_registry(),
+                   shared_store, settings, approval_policy=DeferToClient(),
+                   workspace=settings.workspace_dir)
+    legacy = agent1.tools.get("shell_execute")
+    with mock.patch("nimna.tools.builtin.computer._run_with_limits",
+                    side_effect=AssertionError("EXECUTED!")) as spawn:
+        provider.queue(
+            '{"skills": ["code_execution"], "reason": "r"}',
+            ModelResponse(text="", tool_calls=[ToolCall(name="shell_execute",
+                                                        arguments={"command": "echo one",
+                                                                   "purpose": "grant"})]),
+        )
+        r1 = agent1.run("probe", session_id="p3")
+        assert r1.status == RunStatus.AWAITING_APPROVAL
+        # approve with ALWAYS; then the model issues write_file on an EXISTING
+        # file (overwrite ⇒ confirm) → the run suspends AGAIN with the grant stored
+        provider.queue(
+            ModelResponse(text="", tool_calls=[ToolCall(name="write_file",
+                                                        arguments={"path": "notes.txt",
+                                                                   "content": "over",
+                                                                   "overwrite": True})]),
+        )
+        r2 = agent1.resume(r1.run_id, True, always=True)
+        assert r2.status == RunStatus.AWAITING_APPROVAL   # suspended on write_file
+        # a DIFFERENT agent instance services the resume (state from SQLite)
+        agent2 = Agent(provider, SkillManager(REPO / "skills"), default_registry(),
+                       shared_store, settings,
+                       approval_policy=DeferToClient(), workspace=settings.workspace_dir)
+        provider.queue(
+            ModelResponse(text="", tool_calls=[ToolCall(name="shell_execute",
+                                                        arguments={"command": "echo three",
+                                                                   "purpose": "after-resume"})]),
+            "done",
+        )
+        r3 = agent2.resume(r1.run_id, True)
+        assert r3.status == RunStatus.DONE
+    assert spawn.call_count == 2                       # call1 + call3 executed
+    events = [e["event"] for e in agent1.memory.get_audit("p3")]
+    assert events.count("approval_requested") == 2     # shell#1 + write_file only
+    assert "approval_requested" not in events[-3:]     # call3 crossed with NO new ask
