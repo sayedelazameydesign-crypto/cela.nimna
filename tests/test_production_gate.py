@@ -110,12 +110,17 @@ def test_ancestor_gate_goes_red_on_a_fake_sha(tmp_git_repo):
     assert rc.returncode != 0, "a fake commit must NOT satisfy the ancestor gate"
 
 
-def test_health_endpoint_is_real_runtime_state():
+def test_health_endpoint_is_real_runtime_state(monkeypatch):
     """The endpoint the gate curls returns REAL runtime evidence (offline import)."""
     from fastapi.testclient import TestClient
-    import os
-    os.environ.setdefault("MODEL_PROVIDER", "mock")
-    os.environ.setdefault("DB_PATH", ":memory:")
+    # Isolate this test from a developer's local .env.  nimna.config.load_dotenv()
+    # writes .env values into os.environ process-wide, so a .env carrying
+    # MODEL_PROVIDER=gemini would otherwise leak in and make this test
+    # order-dependent (it would try to build a Gemini provider with no key).
+    # monkeypatch gives the test its own environment and restores it afterwards;
+    # unlike os.environ.setdefault() it is immune to values set by earlier tests.
+    monkeypatch.setenv("MODEL_PROVIDER", "mock")
+    monkeypatch.setenv("DB_PATH", ":memory:")
     from nimna.api.app import create_app  # noqa: import path must stay stable
     client = TestClient(create_app())
     r = client.get("/api/health")
