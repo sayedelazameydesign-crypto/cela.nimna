@@ -28,7 +28,9 @@ Exit codes
 """
 from __future__ import annotations
 
+import argparse
 import json
+import os
 import sys
 import time
 from pathlib import Path
@@ -51,7 +53,52 @@ def check(label: str, passed: bool, detail: str = "") -> bool:
     return passed
 
 
+def _escape_annotation(text: str) -> str:
+    """GitHub workflow commands require %, CR and LF to be percent-escaped."""
+    return text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+
+
+def emit_actions_notice(payload: dict[str, object]) -> None:
+    """Publish the verdict as an annotation when running in GitHub Actions.
+
+    Raw job logs are served from a host that sandboxed readers (and some
+    integrations) cannot reach, so the verdict is emitted as a check-run
+    annotation instead — that endpoint lives on api.github.com and is readable
+    programmatically.  Locally this is a no-op.
+    """
+    if os.environ.get("GITHUB_ACTIONS") != "true":
+        return
+    line = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    if len(line) > 900:
+        line = line[:897] + "..."
+    print(f"::notice title=Nimna live proof (real inference)::PROOF {_escape_annotation(line)}")
+
+
+def write_evidence(path: str, payload: dict[str, object]) -> None:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"\n       evidence written to {target}")
+
+
+def fail_out(payload: dict[str, object], evidence_out: "str | None",
+             failure: object = None) -> int:
+    """Summarise, publish the failure as an annotation, and return exit code 1."""
+    if failure is not None:
+        payload["error"] = f"{type(failure).__name__}: {str(failure)[:200]}"
+    _summary()
+    emit_actions_notice(payload)
+    if evidence_out:
+        write_evidence(evidence_out, payload)
+    return 1
+
+
 def main() -> int:
+    parser = argparse.ArgumentParser(description="Prove real (non-mock) model inference.")
+    parser.add_argument("--evidence-out", dest="evidence_out",
+                        help="Write the machine-readable evidence JSON to this path.")
+    args = parser.parse_args()
+
     from nimna.config import Settings
     from nimna.providers import create_provider, ProviderError
     from nimna.providers.base import Message
@@ -67,6 +114,8 @@ def main() -> int:
     if kind == "mock":
         check("provider is not mock", False,
               "MODEL_PROVIDER=mock — plumbing proof only, NOT an inference proof")
+        emit_actions_notice({"verdict": "REFUSED", "reason": "MODEL_PROVIDER=mock",
+                             "detail": "a mock run can never certify real inference"})
         return 2
 
     # -- credential ---------------------------------------------------------
@@ -74,6 +123,8 @@ def main() -> int:
     source = settings.gemini_key_source if kind == "gemini" else settings.openai_key_source
     if not check("credential present", bool(key),
                  f"supplied by {source}" if key else "set GEMINI_API_KEY (free tier, no billing)"):
+        emit_actions_notice({"verdict": "FAIL", "reason": "no credential",
+                             "provider": kind})
         return 2
 
     print(f"       provider={kind}  model={settings.model_name}  key_source={source}")
@@ -85,7 +136,8 @@ def main() -> int:
         provider = create_provider(settings)
     except ProviderError as exc:
         check("provider constructed", False, str(exc)[:200])
-        return 1
+        return fail_out({"verdict": "FAIL", "stage": "provider construction",
+                         "provider": kind}, args.evidence_out, exc)
     check("provider constructed", True, f"{provider.name} / {provider.model}")
 
     t0 = time.perf_counter()
@@ -97,8 +149,9 @@ def main() -> int:
         )
     except Exception as exc:  # noqa: BLE001 - any failure means no proof
         check("live request completed", False, f"{type(exc).__name__}: {str(exc)[:200]}")
-        _summary()
-        return 1
+        return fail_out({"verdict": "FAIL", "stage": "direct provider call",
+                         "provider": provider.name, "model": provider.model},
+                        args.evidence_out, exc)
     latency_ms = int((time.perf_counter() - t0) * 1000)
 
     check("live request completed", True, f"{latency_ms} ms round-trip")
@@ -118,8 +171,8 @@ def main() -> int:
         result = agent.run("Reply with exactly: PROOF-OK", session_id="live-proof")
     except Exception as exc:  # noqa: BLE001
         check("agent run completed", False, f"{type(exc).__name__}: {str(exc)[:200]}")
-        _summary()
-        return 1
+        return fail_out({"verdict": "FAIL", "stage": "agent loop",
+                         "provider": settings.provider}, args.evidence_out, exc)
 
     status = result.status.value if hasattr(result.status, "value") else str(result.status)
     check("agent run completed", status == "done", f"status={status}")
@@ -132,6 +185,7 @@ def main() -> int:
 
     # -- evidence -----------------------------------------------------------
     evidence = {
+        "verdict": "PASS",
         "provider": provider.name,
         "model": provider.model,
         "key_source": source,
@@ -148,7 +202,14 @@ def main() -> int:
     print("\n-- evidence (paste into docs/evidence) " + "-" * 33)
     print(json.dumps(evidence, ensure_ascii=False, indent=2))
 
-    return 0 if _summary() else 1
+    ok = _summary()
+    if not ok:
+        evidence["verdict"] = "FAIL"
+        evidence["failed_checks"] = [label for label, good, _ in results if not good]
+    emit_actions_notice(evidence)
+    if args.evidence_out:
+        write_evidence(args.evidence_out, evidence)
+    return 0 if ok else 1
 
 
 def _summary() -> bool:
