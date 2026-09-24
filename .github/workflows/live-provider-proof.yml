@@ -49,4 +49,20 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           MODEL_PROVIDER: gemini
           GEMINI_MODEL: gemini-2.5-flash
-        run: python scripts/live_provider_proof.py
+        run: |
+          python scripts/live_provider_proof.py --evidence-out live-proof-evidence.json
+          echo "### Live provider proof" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat live-proof-evidence.json >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      # The verdict is ALSO published as a check-run annotation by the script
+      # (::notice::). Raw job logs are served from a host some readers cannot
+      # reach, while annotations live on api.github.com and stay readable.
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: live-proof-evidence
+          path: live-proof-evidence.json
+          if-no-files-found: warn

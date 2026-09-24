@@ -17,10 +17,31 @@ ffcb0c722fb4cc6bc70f43499459fb69f47b5a6d   (HEAD)
 ffcb0c722fb4cc6bc70f43499459fb69f47b5a6d   (origin/main)
 
 $ git status --porcelain     → فارغ
-$ git rev-list --count HEAD  → 1
 ```
 
-`c3141990` → `fatal: Not a valid object name` + GitHub API `422 No commit found`. **مُستبعَد نهائيًا.**
+### تصحيح F0 — "السجل commit واحد فقط" كان خطأً في القياس، لا حقيقة المستودع
+
+النسخة المحلية في بيئة العمل كانت **shallow clone** (وجود `.git/shallow`)، فكان
+`git rev-list --count HEAD` يعطي `1` و`git log` يعرض commit واحدًا. القياس الصحيح بعد
+`git fetch --unshallow`:
+
+```text
+. before: .git/shallow PRESENT, count=1        ← قياس خاطئ
+. after : .git/shallow GONE, main=63 commits, HEAD=66 (=63 + 3 عمل هذه الجلسة)
+```
+
+**الأثر العملي:** هذا التصحيح كان إلزاميًا لا تجميليًا — بوابة الإنتاج (الخطوة 1) تشترط أن يكون
+`9885f3c3` (T8) سلفًا لـHEAD، وقد كانت تفشل محليًا **بسبب الشالو فقط**:
+
+```text
+قبل الإصلاح : ✘ T8 commit 9885f3c33b... is NOT in HEAD's history
+بعد الإصلاح : ✔ T8 commit is an ancestor of HEAD (9a362e2)
+```
+
+`9885f3c33b90` موجود فعلًا على GitHub — "T7.1 evidence: owner-authorized sh2 …" بتاريخ 2026-09-24 07:19.
+
+أما `c3141990` فالاستبعاد يبقى قائمًا وأقوى: غير موجود في **كامل** الـ63 commit،
+وفي `git rev-parse` محليًا، وفي GitHub API (`422 No commit found`).
 
 ---
 
@@ -228,7 +249,70 @@ MODEL_PROVIDER=gemini + مفتاح غير صالح  → exit=1  [FAIL] live requ
 
 ---
 
-## 8) الحالة والخطوات التالية
+## 8) بوابة الإنتاج — اجتازت كاملةً على CI ✅
+
+`scripts/production_gate.sh` هو تعريف هذا المستودع نفسه لـ"مرشّح إنتاجي": سبع خطوات متسلسلة،
+وبلا أي علم تخطٍّ. نتيجة تشغيلها على PR #14 في GitHub Actions:
+
+```text
+step 1  T8 ancestor                ✔ (9885f3c3 سلف لـ HEAD)
+step 2  CI falsifiability           ✔ no masks
+step 3  compileall                  ✔ clean
+step 4  pytest                      ✔ 318 passed
+step 5  pip-audit (blocking)        ✔ no known vulnerabilities
+step 6  runtime health (real HTTP)  ✔ GET /api/health → 200
+step 7  docker build               ✔ image built: nimna:production-candidate
+VERDICT: candidate CERTIFIED by this run
+```
+
+والمحصلة على `main` بعد الدمج: `086daeb`.
+
+### تشغيلها محليًا — 5 نجحت / 3 فشلت، والفشلان بيئيان بحت
+
+| الخطوة | محليًا | السبب (بيئي، لا علاقة له بالمستودع) |
+|---|---|---|
+| 5 — toolchain + pip-audit | ✘ | `pip install -U` يفشل بـ **PEP 668** (`externally-managed-environment`) لأن Python نظامي (Debian)؛ ترقية pip لم تتم فبقيت `pip 23.0.1` بـ20 ثغرة معروفة. على CI (setup-python) لا توجد PEP 668 فتمر. |
+| 7 — docker build | ✘ | لا وجود لـDocker CLI في هذه البيئة. على CI (`ubuntu-latest`) يبني الصورة فعلًا. |
+
+الخطة الأصلية كانت تعتبر Docker عائقًا أولًا. القياس الصحيح: **Docker اجتاز على CI بالفعل**،
+والعائق الحقيقي المتبقي هو إثبات inference كما في F7.
+
+---
+
+## 9) حالة الـworkflow الحي وحاجز الصلاحيات
+
+الـworkflow سُجِّل بعد الدمج وأصبح قابلًا للتشغيل:
+
+```text
+$ gh workflow list
+Live provider proof (real inference)   active   365881318
+```
+
+**لكن GitHub منح هذا التكامل صلاحية قراءة فقط.** المُثبت جاهز تمامًا، والعائق إداري بحت:
+
+| العملية | النتيجة |
+|---|---|
+| قراءة حالة التشغيلات والنتائج (`gh run list`, `check-runs`) | ✅ تعمل |
+| قراءة الـannotations (`check-runs/{id}/annotations`) | ✅ تعمل |
+| تنزيل السجل الخام (`--log`) | ⛔ محجوب (نطاق مختلف عن `api.github.com`) |
+| تشغيل الـworkflow (`workflow_dispatch`) | ⛔ `403 Resource not accessible by integration` |
+| إضافة السرّ (`secrets`) | ⛔ `403` — والمفتاح لا يمرّ في المحادثة أصلًا |
+
+لذلك **خطوتان بشريتان لا مفرّ منهما** قبل الحصول على PASS حقيقي:
+
+```text
+1. Settings → Secrets and variables → Actions → New repository secret
+   Name: GEMINI_API_KEY     Value: AQ.... (من aistudio.google.com/apikey، مجاني بلا بطاقة)
+2. Actions → "Live provider proof (real inference)" → Run workflow
+```
+
+ولتجاوز حجب السجلات، جُعل المُثبت ينشر حكمه **كـannotation** (قناة `api.github.com`):
+عند الفشل أو النجاح يطبع `::notice::PROOF {...}` ويُرفع الدليل كـartifact،
+فأستطيع قراءة النتيجة وتوثيقها دون تنزيل logs.
+
+---
+
+## 10) الحالة والخطوات التالية
 
 ```text
 [✓] 0  تثبيت الهوية والـSHA            → ffcb0c7
@@ -238,11 +322,9 @@ MODEL_PROVIDER=gemini + مفتاح غير صالح  → exit=1  [FAIL] live requ
 [✓] 4  API + Memory + Approval        → مُثبت حيًّا (WS بدل SSE)
 [✓] —  إصلاح عزل الاختبارات            → monkeypatch، والتحقق في حالتين معاديتين
 [✓] —  cost guard vs Gemini المجاني    → يسمح فعليًا (0.0/known/free_tier)
-[⛔] —  طلب Gemini حقيقي في هذه البيئة  → مستحيل: لا إنترنت عامّ (F7)
-[ ] 5  بناء Docker                    → محجوب: لا Docker في البيئة
+[✓] —  بوابة الإنتاج السبعة على CI     → CERTIFIED (086daeb)
+[✓] —  workflow حي مسجَّل             → id 365881318
+[⏸] —  PASS حقيقي من Gemini            → محجوب على خطوتين بشريتين (§9)
 [ ] 6  نشر مجاني أولي (Render Free)
 [ ] 7  Smoke / rollback verification
 ```
-
-**العائق التالي ليس Docker — بل إثبات inference الحقيقي**، وهو يتطلب بيئة لها خروج للإنترنت.
-أسرع مسار: المفتاح في `.env` محليًا ثم `scripts/live_provider_proof.py`. وبعدها Docker ثم Render Free.
