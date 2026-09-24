@@ -34,6 +34,9 @@ real health/runtime evidence → pytest + static → docker build → production
 7. **اختبارات البوابة نفسها:** `tests/test_production_gate.py` (9، منها عدادية:
    نسخة workflow مُعبَّثة بقناع ⇒ المدقق يحمرّها؛ sha وهمي ⇒ بوابة الأنستور
    حمراء) — السيت الكامل: **318 passed**.
+8. **مصادقة + CORS + حدود + ترويسات (PR لاحق):** البوابة (الخطوة 6) وZAP يشغّلان الخادم الآن
+   بـ`NIMNA_ENV=production` ومفتاح عابر مولَّد لكل تشغيل (مُقنَّع، ليس سراً مخزناً)، ويثبتان
+   `401` بلا مفتاح و`200` معه، وZAP يثبت الترويسات الأمنية. التفاصيل: `SECURITY.md` و`docs/API-SECURITY.md`.
 
 ## التشغيل
 ```bash

@@ -160,8 +160,14 @@ def cmd_serve(args: argparse.Namespace) -> int:
 
     from .api.app import create_app
 
+    from .api.security import SecurityConfigError
+
     settings = _settings(args)
-    app = create_app(settings)
+    try:
+        app = create_app(settings)
+    except SecurityConfigError as exc:
+        print(f"nimna serve: refusing to start — {exc}", file=sys.stderr)
+        return 2
     uvicorn.run(app, host=args.host or settings.host, port=args.port or settings.port,
                 log_level=settings.log_level.lower())
     return 0
@@ -271,6 +277,13 @@ def cmd_doctor(args: argparse.Namespace) -> int:
         # still report key status for convenience
         check(f"  ↳ Gemini key: {'configured via ' + settings.gemini_key_source if settings.gemini_api_key else 'not configured'}", True)
         check(f"  ↳ NVIDIA key: {'configured via ' + settings.openai_key_source if settings.openai_api_key else 'not configured'}", True)
+
+    # API access control (same validation create_app() runs before booting)
+    from .api.security import SecurityConfig, SecurityConfigError
+    try:
+        check(f"API security: {SecurityConfig.from_settings(settings).describe()}", True)
+    except SecurityConfigError as exc:
+        check("API security", False, str(exc))
 
     check(f"workspace {settings.workspace_dir}", settings.workspace_dir.exists() or True, "will be created" if not settings.workspace_dir.exists() else "exists")
     try:

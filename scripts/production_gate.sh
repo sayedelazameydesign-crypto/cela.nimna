@@ -50,6 +50,9 @@ fi
 
 step 6 "Runtime health evidence — real HTTP against a real server"
 HEALTH_PORT=8765; export MODEL_PROVIDER=mock DB_PATH="$(mktemp -d /tmp/gate_db.XXXX)/gate.db"
+# production posture: the server refuses to boot without NIMNA_API_KEY, so the
+# gate generates an ephemeral key (never printed) instead of weakening the mode
+export NIMNA_ENV=production NIMNA_API_KEY="$("$PY" -c 'import secrets; print(secrets.token_urlsafe(32))')"
 "$PY" -m uvicorn nimna.api.app:app --host 127.0.0.1 --port "$HEALTH_PORT" > /tmp/gate_uv.log 2>&1 &
 UPID=$!
 trap 'kill "$UPID" 2>/dev/null' EXIT
@@ -60,6 +63,13 @@ for i in $(seq 1 30); do
 done
 if [ "$HEALTH" = "ok" ]; then
   ok "GET /api/health → $(head -c 160 /tmp/gate_health.json)…"
+  NOKEY=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${HEALTH_PORT}/api/tools")
+  WITHKEY=$(curl -s -o /dev/null -w '%{http_code}' -H "X-Nimna-Key: ${NIMNA_API_KEY}" "http://127.0.0.1:${HEALTH_PORT}/api/tools")
+  if [ "$NOKEY" = "401" ] && [ "$WITHKEY" = "200" ]; then
+    ok "auth enforced: /api/tools → 401 without key, 200 with X-Nimna-Key"
+  else
+    bad "auth gate broken: /api/tools without key=$NOKEY, with key=$WITHKEY (expected 401/200)"
+  fi
 else
   bad "server never answered /api/health — tail:"; tail -3 /tmp/gate_uv.log
 fi

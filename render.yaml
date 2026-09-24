@@ -38,6 +38,15 @@ services:
       - key: BROWSER_USE_API_KEY   # مغلق افتراضياً (BROWSER_USE_ENABLED=false)
         sync: false
 
+      # -- أمن الـAPI (nimna/api/security.py) ------------------------------
+      # NIMNA_ENV=production ⇒ بلا NIMNA_API_KEY يرفض الخادم الإقلاع (fail-closed).
+      # لا generateValue: Render يولّد base64 (فيه '/' و'=') وهي غير صالحة كرمز
+      # WebSocket sub-protocol. ولّد المفتاح بـ secrets.token_urlsafe(32) والصقه.
+      - key: NIMNA_ENV
+        value: "production"
+      - key: NIMNA_API_KEY
+        sync: false
+
       # -- الشبكة --------------------------------------------------------
       - key: HOST
         value: "0.0.0.0"

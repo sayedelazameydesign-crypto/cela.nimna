@@ -5,7 +5,7 @@ from nimna.providers.base import ModelResponse, ToolCall
 
 
 def test_api_flow(agent, provider, workspace):
-    client = TestClient(create_app(agent.settings, agent=agent))
+    client = TestClient(create_app(agent.settings, agent=agent), headers={"X-Nimna-Key": agent.settings.api_keys[0]})
     assert client.get("/api/health").json()["provider"] == "mock"
     assert "csv_analysis" in {s["name"] for s in client.get("/api/skills").json()["skills"]}
     assert client.get("/api/skills/csv_analysis").json()["meta"]["name"] == "csv_analysis"

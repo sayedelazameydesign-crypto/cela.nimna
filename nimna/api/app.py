@@ -12,6 +12,11 @@
     GET  /api/sessions/{id}/audit
     GET  /api/memories
     POST /api/skills/reload
+
+Security (nimna/api/security.py): every path except ``/``, ``/api/health`` and
+``/static/*`` requires the ``X-Nimna-Key`` header (WebSocket: header or the
+``nimna.key.<key>`` sub-protocol). The app refuses to build in production
+without ``NIMNA_API_KEY``.
 """
 import logging
 import uuid
@@ -20,7 +25,6 @@ from typing import Any, Optional
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.concurrency import run_in_threadpool
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
@@ -32,6 +36,7 @@ from ..core.state import AgentResult
 from ..evidence import EvidenceJournal
 from ..models import ModelRegistry
 from ..observability import summarize_events
+from .security import SecurityConfig, install_security, select_ws_subprotocol
 
 log = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).parent / "static"
@@ -50,10 +55,13 @@ class ApprovalRequest(BaseModel):
 
 def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = None) -> FastAPI:
     settings = settings or Settings.from_env()
+    # validate BEFORE building anything: an unsafe config must not boot
+    # (raises SecurityConfigError, e.g. production without NIMNA_API_KEY)
+    security = SecurityConfig.from_settings(settings)
     agent = agent or build_agent(settings, approval_policy=DeferToClient())
 
     app = FastAPI(title="Nimna – reusable-skills agent", version="0.1.0")
-    app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+    install_security(app, security)
     app.state.agent = agent
     app.state.settings = settings
     app.state.evidence = EvidenceJournal(agent.memory)
@@ -422,7 +430,8 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
         if not session_id or len(session_id) > 64 or not session_id.replace("-", "").replace("_", "").isalnum():
             await websocket.close(code=1008)
             return
-        await websocket.accept()
+        # negotiate only 'nimna.v1'; the 'nimna.key.*' credential protocol is never echoed
+        await websocket.accept(subprotocol=select_ws_subprotocol(websocket.scope))
         # Rate limit: 10 messages per second, sliding window
         msg_times: list[float] = []
         last_pong = time.monotonic()

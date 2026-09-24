@@ -121,6 +121,10 @@ def test_health_endpoint_is_real_runtime_state(monkeypatch):
     # unlike os.environ.setdefault() it is immune to values set by earlier tests.
     monkeypatch.setenv("MODEL_PROVIDER", "mock")
     monkeypatch.setenv("DB_PATH", ":memory:")
+    # the gate runs the server in production posture with an ephemeral key
+    import secrets
+    monkeypatch.setenv("NIMNA_ENV", "production")
+    monkeypatch.setenv("NIMNA_API_KEY", secrets.token_urlsafe(32))
     from nimna.api.app import create_app  # noqa: import path must stay stable
     client = TestClient(create_app())
     r = client.get("/api/health")

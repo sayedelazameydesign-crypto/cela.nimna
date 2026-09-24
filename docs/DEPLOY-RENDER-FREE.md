@@ -34,7 +34,8 @@ Render يقرأ الملف تلقائياً (Blueprint / infrastructure-as-code)
 | `COST_GUARD_ENABLED/HARD: "true"`, `MAX_SPEND_USD: "0"` | بوابة تكلفة صلبة | `nimna/models/registry.py::CostGuard.authorize` — انظر §5 |
 | `SANDBOX_BACKEND: "subprocess"` | `run_python` بلا docker.sock | `nimna/config.py`: `sandbox_backend` (docker اختيارياً) |
 | `AGENT_AUTO_APPROVE: "false"`, `BROWSER_USE_ENABLED: "false"`, `COMPUTER_ENABLED: "false"` | لا موافقات صورية، لا سطح تحكم | `nimna/tools/builtin/computer.py`, `docs/browser_use_v4.md` |
-| الأسرار بـ `sync: false` | تُضبط من اللوحة فقط | `GEMINI_API_KEY`, `GOOGLE_API_KEY`, `OPENAI_API_KEY`, `NVIDIA_API_KEY`, `BROWSER_USE_API_KEY`, `REDIS_URL` |
+| `NIMNA_ENV: "production"` + `NIMNA_API_KEY` (`sync: false`) | مصادقة API إلزامية؛ بلا مفتاح لا إقلاع | `nimna/api/security.py::SecurityConfig.from_settings` — انظر `docs/API-SECURITY.md` |
+| الأسرار بـ `sync: false` | تُضبط من اللوحة فقط | `GEMINI_API_KEY`, `GOOGLE_API_KEY`, `OPENAI_API_KEY`, `NVIDIA_API_KEY`, `BROWSER_USE_API_KEY`, `NIMNA_API_KEY`, `REDIS_URL` |
 
 **لا شيء في `render.yaml` يحمل مفتاحاً.** `scripts/evaluate_arena.py` في كل PR يفتش الـdiff
 عن أسرار، و`00-integrity.yml` يفشل إن تُعقِّب `.env`.
@@ -71,6 +72,16 @@ is not met within 15 minutes, Render cancels the deploy"). **اضبط المفت
 اضغط Deploy**، لا العكس. المشروع لا يسقط إلى `MockProvider` بصمت: إقلاع بمزوّد وهمي
 أخطر من فشل صريح.
 
+**وبالمثل بلا `NIMNA_API_KEY` لا إقلاع** (`NIMNA_ENV=production` مثبت في الـBlueprint):
+
+```text
+nimna.api.security.SecurityConfigError: NIMNA_API_KEY is required when NIMNA_ENV=production (the default). ...
+```
+
+خادم بلا مصادقة على الإنترنت أخطر من خادم لا يقلع. لا تستخدم `generateValue` لهذا المفتاح:
+Render يولّد base64 (يحتوي `/` و`=`) وهي محارف غير صالحة كـWebSocket sub-protocol الذي
+تستخدمه الواجهة. ولّده محلياً: `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
+
 ---
 
 ## 3) خطوات النشر
@@ -81,7 +92,8 @@ is not met within 15 minutes, Render cancels the deploy"). **اضبط المفت
    مع OpenAI — وهذا سبب تثبيت `MODEL_PROVIDER=gemini` هنا وفي الـworkflow.
 2. **Dashboard → New + → Blueprint** واختر المستودع `sayedelazameydesign-crypto/cela.nimna`.
    سيكتشف Render `render.yaml` ويعرض خدمة `cela-nimna` بخطة Free.
-3. **Environment**: أضف `GEMINI_API_KEY` (و`GOOGLE_API_KEY` اختياري كـfallback). البقية
+3. **Environment**: أضف `NIMNA_API_KEY` (إلزامي، ≥ 32 حرفاً — انظر §2) و`GEMINI_API_KEY`
+   (و`GOOGLE_API_KEY` اختياري كـfallback). البقية
    مثبتة في الـBlueprint؛ إن أردت مسار NVIDIA/OpenAI المتوافق فأضف `OPENAI_API_KEY` +
    `OPENAI_BASE_URL` من اللوحة ولا تكتبهما في الملف.
 4. **Manual Deploy** (لأن `autoDeployTrigger: "off"`). في Logs ابحث عن سطر uvicorn على
@@ -90,9 +102,10 @@ is not met within 15 minutes, Render cancels the deploy"). **اضبط المفت
 
 ```bash
 BASE=https://<your-service>.onrender.com
-curl -s "$BASE/api/health" | jq '{status,provider,model,skills,tools,port}'
-curl -s "$BASE/api/provenance" | jq '.runtime_fingerprint'
-curl -s "$BASE/api/chat" -H 'Content-Type: application/json' \
+curl -s "$BASE/api/health" | jq '{status,provider,model,skills,tools,port}'   # عام
+curl -s -o /dev/null -w '%{http_code}\n' "$BASE/api/tools"                   # 401 بلا مفتاح
+curl -s "$BASE/api/provenance" -H "X-Nimna-Key: $NIMNA_API_KEY" | jq '.runtime_fingerprint'
+curl -s "$BASE/api/chat" -H "X-Nimna-Key: $NIMNA_API_KEY" -H 'Content-Type: application/json' \
   -d '{"message":"حلّل workspace/sales.csv باختصار"}' | jq '{status,reply}'
 ```
 
@@ -241,6 +254,9 @@ curl -sS https://<service>.onrender.com/api/health | jq '{status,provider,model,
 | العَرَض | السبب المرجّح | الفحص |
 |---|---|---|
 | Deploy فاشل/Rebooting بلا سبب ظاهر | لا `GEMINI_API_KEY` → `ProviderError` عند الإقلاع (§2) | Logs؛ ثم `curl $BASE/api/health` |
+| Deploy فاشل + `SecurityConfigError` في Logs | `NIMNA_API_KEY` غير مضبوط/قصير/ضعيف (§2) | اضبطه من اللوحة (≥ 32 حرفاً، `token_urlsafe`) |
+| `401` على `/api/*` | ترويسة `X-Nimna-Key` مفقودة/خاطئة | `curl -H "X-Nimna-Key: …" $BASE/api/tools` |
+| `429` على `/api/chat` | تجاوز 30 طلب/دقيقة لكل مفتاح | انتظر `Retry-After` ثانية |
 | `502` على أول طلب | الخدمة نائمة (~دقيقة إيقاظ) | أعد الطلب بعد 60s |
 | Deploy يُلغى بعد 15 دقيقة | `healthCheckPath` لا يرجع 2xx/3xx خلال 5s | `curl -i $BASE/api/health` — المسار يجب أن يكون `/api/health` |
 | `status: error` + `cost guard blocked…` | سقف صفر مع مزوّد غير معلن التسعير (§5) | `jq .governance.cost /api/health` |

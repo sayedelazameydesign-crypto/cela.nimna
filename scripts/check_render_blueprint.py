@@ -39,7 +39,7 @@ SECRET_LITERAL = re.compile(
     r"|gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|xox[baprs]-)\b"
 )
 ENV_READ = re.compile(
-    r"(?:_env(?:_bool|_int|_float|_optional_float|_list)?|_key_source|os\.getenv"
+    r"(?:_env(?:_bool|_int_unvalidated|_int|_float|_optional_float|_list)?|_key_source|os\.getenv"
     r"|os\.environ\.get|_env_flag)\(\s*[\"']([A-Z][A-Z0-9_]{2,})[\"']"
 )
 

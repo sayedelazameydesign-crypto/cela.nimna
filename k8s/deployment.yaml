@@ -27,6 +27,9 @@ spec:
         - {name: SANDBOX_BACKEND, value: "subprocess"}
         - {name: MODEL_PROVIDER, valueFrom: {secretKeyRef: {name: nimna-secrets, key: MODEL_PROVIDER, optional: true}}}
         - {name: GEMINI_API_KEY, valueFrom: {secretKeyRef: {name: nimna-secrets, key: GEMINI_API_KEY, optional: true}}}
+        # API auth: NOT optional — the pod must not start without it (the app also refuses to boot)
+        - {name: NIMNA_ENV, value: "production"}
+        - {name: NIMNA_API_KEY, valueFrom: {secretKeyRef: {name: nimna-secrets, key: NIMNA_API_KEY}}}
         envFrom: [{configMapRef: {name: nimna-config, optional: true}}]
         readinessProbe: {httpGet: {path: /api/health, port: http}, initialDelaySeconds: 8, periodSeconds: 10}
         livenessProbe: {httpGet: {path: /api/health, port: http}, initialDelaySeconds: 15, periodSeconds: 20}

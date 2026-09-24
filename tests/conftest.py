@@ -12,6 +12,7 @@ from nimna.skills import SkillManager
 from nimna.tools import default_registry
 
 REPO = Path(__file__).resolve().parent.parent
+TEST_API_KEY = "test-key-0123456789abcdefghijklmnopqrstuv"  # fixture only, never a real secret
 
 
 @pytest.fixture
@@ -33,6 +34,10 @@ def settings(workspace: Path) -> Settings:
     s.db_path = Path(":memory:")
     # tests run without Docker – keep subprocess so run_python stays "confirm"
     s.sandbox_backend = "subprocess"
+    # API security: development mode with a key, so API tests exercise auth
+    s.env = "development"
+    s.api_keys = [TEST_API_KEY]
+    s.allowed_origins = None
     return s
 
 

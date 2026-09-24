@@ -63,6 +63,18 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _env_int_unvalidated(name: str, default: int) -> int | str:
+    """Like _env_int, but hands back the raw text of a non-integer value instead of
+    silently using the default, so a validator can refuse it (security limits)."""
+    value = _env(name)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return value
+
+
 def _env_float(name: str, default: float) -> float:
     value = _env(name)
     if value is None:
@@ -196,6 +208,17 @@ class Settings:
     port: int = 8000
     log_level: str = "INFO"
 
+    # API access control (nimna/api/security.py). NIMNA_ENV defaults to
+    # production so a forgotten variable fails CLOSED (server refuses to boot
+    # without NIMNA_API_KEY). Keys are excluded from repr() so they never land
+    # in logs or tracebacks.
+    env: str = "production"  # production | development
+    api_keys: list[str] = field(default_factory=list, repr=False)  # NIMNA_API_KEY, comma-separated for rotation
+    allowed_origins: list[str] | None = None  # NIMNA_ALLOWED_ORIGINS; None => env default
+    # int | raw text: a non-integer value is kept so SecurityConfig refuses to boot
+    chat_rate_limit_per_minute: int | str = 30  # per API key, POST /api/chat
+    ws_max_connections_per_key: int | str = 10  # concurrent /ws/* connections per API key
+
     @classmethod
     def from_env(cls, env_file: str | os.PathLike | None = ".env") -> "Settings":
         if env_file:
@@ -271,6 +294,12 @@ class Settings:
             host=_env("HOST", "0.0.0.0") or "0.0.0.0",
             port=_env_int("PORT", 8000),
             log_level=(_env("LOG_LEVEL", "INFO") or "INFO").upper(),
+            env=(_env("NIMNA_ENV", "production") or "production").lower(),
+            api_keys=_env_list("NIMNA_API_KEY", []),
+            allowed_origins=(_env_list("NIMNA_ALLOWED_ORIGINS", [])
+                             if _env("NIMNA_ALLOWED_ORIGINS") is not None else None),
+            chat_rate_limit_per_minute=_env_int_unvalidated("NIMNA_CHAT_RATE_LIMIT", 30),
+            ws_max_connections_per_key=_env_int_unvalidated("NIMNA_WS_MAX_CONNECTIONS", 10),
         )
 
     # -- helpers ---------------------------------------------------------

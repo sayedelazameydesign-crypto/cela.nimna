@@ -57,6 +57,7 @@ body{background:var(--bg);color:var(--text);font-family:'Inter','IBM Plex Sans A
   <div class="flex items-center gap-2">
     <div id="wsBadge" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-medium" style="background:var(--panel);border-color:var(--border)"><span id="wsDot" class="size-2 rounded-full bg-zinc-500"></span><span id="wsTxt">HTTP</span></div>
     <div id="swarmBadge" class="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-medium" style="background:var(--panel);border-color:var(--border)"><span id="swarmDot" class="size-2 rounded-full bg-zinc-600"></span><span id="swarmTxt">Swarm • off</span></div>
+    <button id="keyBtn" title="مفتاح الوصول (X-Nimna-Key)" aria-label="API key" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border text-[11px] hover:bg-white/5" style="border-color:var(--border);color:var(--muted)">🔑 <span id="keyTxt">مفتاح</span></button>
     <button id="cmdBtn" class="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border text-[11px] hover:bg-white/5" style="border-color:var(--border);color:var(--muted)">⌘K <span class="mono bg-white/10 px-1 rounded">palette</span></button>
     <button id="newBtn" class="px-3.5 py-1.5 rounded-full bg-[#7c3aed] hover:bg-[#6d28d9] text-white text-[12px] font-semibold hidden sm:flex">＋ جلسة جديدة</button>
   </div>
@@ -205,10 +206,56 @@ body{background:var(--bg);color:var(--text);font-family:'Inter','IBM Plex Sans A
   </div>
 </div>
 
+<dialog id="keyDlg" class="rounded-2xl border p-0 w-[min(420px,92vw)] backdrop:bg-black/60" style="background:var(--panel);border-color:var(--border);color:var(--text)">
+  <form method="dialog" class="p-4 space-y-3">
+    <div class="font-semibold text-[13px]">مفتاح الوصول إلى الخادم</div>
+    <div id="keyMsg" class="text-[11px]" style="color:var(--muted)">هذا الخادم يتطلب ترويسة X-Nimna-Key. يُحفظ المفتاح في هذا التبويب فقط (sessionStorage).</div>
+    <input id="keyInput" type="password" autocomplete="off" spellcheck="false" dir="ltr" placeholder="NIMNA_API_KEY" class="w-full h-10 px-3 rounded-xl border bg-transparent outline-none mono text-[12px]" style="border-color:var(--border)">
+    <div class="flex gap-2 justify-end">
+      <button value="clear" class="px-3 py-1.5 rounded-xl border text-[12px]" style="border-color:var(--border);color:var(--muted)">مسح</button>
+      <button value="cancel" class="px-3 py-1.5 rounded-xl border text-[12px]" style="border-color:var(--border)">إلغاء</button>
+      <button value="save" class="px-3 py-1.5 rounded-xl text-[12px] text-white" style="background:var(--accent)">حفظ</button>
+    </div>
+  </form>
+</dialog>
+
 <script>
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 let sessionId=localStorage.getItem('nimna.session')||null, ws=null, pending=null, latestB64=null;
 const escapeHtml=s=>s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// --- API key (X-Nimna-Key) -------------------------------------------------
+const KEY_STORE='nimna.apiKey';
+const getKey=()=>sessionStorage.getItem(KEY_STORE)||'';
+function updateKeyBadge(){ const t=document.getElementById('keyTxt'); if(t) t.textContent=getKey()?'مضبوط':'مفتاح'; }
+let keyPrompt=null;
+function askKey(message){
+  if(keyPrompt) return keyPrompt;
+  keyPrompt=new Promise(resolve=>{
+    const dlg=$('#keyDlg'), inp=$('#keyInput');
+    if(message) $('#keyMsg').textContent=message;
+    inp.value='';
+    const done=()=>{
+      dlg.removeEventListener('close',done);
+      const v=inp.value.trim(); inp.value='';
+      if(dlg.returnValue==='save' && v){ sessionStorage.setItem(KEY_STORE,v); updateKeyBadge(); resolve(true); }
+      else { if(dlg.returnValue==='clear'){ sessionStorage.removeItem(KEY_STORE); updateKeyBadge(); } resolve(false); }
+    };
+    dlg.addEventListener('close',done);
+    dlg.returnValue=''; dlg.showModal(); inp.focus();
+  }).finally(()=>{ keyPrompt=null; });
+  return keyPrompt;
+}
+// every /api call goes through here: attaches the key, asks for it once on 401
+async function api(path, opts={}, retried=false){
+  const headers=Object.assign({}, opts.headers||{});
+  const k=getKey(); if(k) headers['X-Nimna-Key']=k;
+  const r=await fetch(path, Object.assign({}, opts, {headers}));
+  if(r.status===401 && !retried){
+    const msg=k?'المفتاح غير صحيح — أدخل مفتاحاً صالحاً.':'هذا الخادم يتطلب مفتاح وصول (X-Nimna-Key).';
+    if(await askKey(msg)) return api(path, opts, true);
+  }
+  return r;
+}
 const fmt=()=>new Date().toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});
 
 function setWS(on){$('#wsDot').className='size-2 rounded-full '+(on?'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,.6)]':'bg-zinc-500');$('#wsTxt').textContent=on?'Live':'HTTP';}
@@ -282,7 +329,7 @@ function renderResult(res){
       const ok=c.ok;
       if(c.name==='take_screenshot'){
         addTimeline('📸','يتم الآن التقاط الشاشة','تحليل بصري + شبكة نيون', ok?'emerald':'amber');
-        if(ok) fetch('/api/computer/screenshot').then(r=>r.json()).then(j=>{if(j.image_b64) updateScreen(j.image_b64); showBbox(640,400,'فحص الشاشة',false)}).catch(()=>{});
+        if(ok) api('/api/computer/screenshot').then(r=>r.json()).then(j=>{if(j.image_b64) updateScreen(j.image_b64); showBbox(640,400,'فحص الشاشة',false)}).catch(()=>{});
       } else if(c.name==='get_element_coordinates'){
         const x=c.arguments?.x||c.arguments?.element_name, y=c.arguments?.y;
         addTimeline('🎯','يتم تحديد العنصر','OCR + شبكة — '+ (c.arguments?.element_name||''), ok?'emerald':'amber');
@@ -340,20 +387,27 @@ async function postChat(msg){
   $('#timelineTrack').classList.remove('hidden');
   try{
     if(ws && ws.readyState===1){ ws.send(JSON.stringify({message:msg, session_id:sessionId})); return;}
-    const res=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg, session_id:sessionId})}).then(async r=>{const j=await r.json(); if(!r.ok) throw new Error(j.detail||r.statusText); return j;});
+    const res=await api('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg, session_id:sessionId})}).then(async r=>{const j=await r.json(); if(!r.ok) throw new Error(j.detail||r.statusText); return j;});
     renderResult(res);
   }catch(e){ addMsg('assistant','خطأ: '+e.message); }
 }
+let wsDelay=2500;
 function connectWS(){
   try{
+    // exactly one live socket per tab: detach + close the previous one first
+    // (the server caps concurrent WebSocket connections per API key)
+    if(ws){ ws.onclose=null; try{ ws.close(); }catch(_){} }
     const proto=location.protocol==='https:'?'wss:':'ws:';
     const url=proto+'//'+location.host+'/ws/'+(sessionId||'default');
-    ws=new WebSocket(url);
-    ws.onopen=()=>setWS(true); ws.onclose=()=>{setWS(false); setTimeout(connectWS,2500)}; ws.onerror=()=>setWS(false);
-    ws.onmessage=e=>{
+    const k=getKey(); const protocols=k?['nimna.v1','nimna.key.'+k]:['nimna.v1'];
+    const sock=new WebSocket(url, protocols); ws=sock;
+    sock.onopen=()=>{ wsDelay=2500; setWS(true); };
+    sock.onclose=()=>{ setWS(false); if(ws===sock){ setTimeout(connectWS,wsDelay); wsDelay=Math.min(wsDelay*2,30000); } };
+    sock.onerror=()=>setWS(false);
+    sock.onmessage=e=>{
       try{
         const d=JSON.parse(e.data);
-        if(d.type==='ping'){ ws.send(JSON.stringify({type:'pong'})); return;}
+        if(d.type==='ping'){ sock.send(JSON.stringify({type:'pong'})); return;}
         if(d.type==='result') renderResult(d.result);
         else if(d.type==='status') addThought(d.message||'يفكر...','', '#00ffa3');
       }catch(err){ console.log(e.data)}
@@ -363,19 +417,19 @@ function connectWS(){
 async function boot(){
   updateSess();
   try{
-    const h=await fetch('/api/health').then(r=>r.json());
+    const h=await api('/api/health').then(r=>r.json());
     $('#providerLbl').textContent=h.provider+' • '+(h.model||'');
     $('#modelLbl').textContent=h.verify?'verify on':'verify off';
     $('#limitsLbl').textContent=`${h.limits.max_steps} خطوات • ${h.limits.max_tool_calls} أدوات`;
     // Swarm badge
-    try{ const sw=h.swarm||await fetch('/api/swarm/status').then(r=>r.json()); const on=!!sw.enabled; $('#swarmTxt').textContent='Swarm • '+(on?'on':'off')+(sw.parallel?' • parallel':''); $('#swarmDot').className='size-2 rounded-full '+(on?'bg-emerald-500 animate-pulse':'bg-zinc-500'); $('#swarmBadge').title=`Agents: ${(sw.agents||[]).join(', ')} | max:${sw.max_agents} self-heal:${sw.self_healing_retries||sw.self_heal||3}`;}catch(e){}
-    const s=await fetch('/api/skills').then(r=>r.json());
+    try{ const sw=h.swarm||await api('/api/swarm/status').then(r=>r.json()); const on=!!sw.enabled; $('#swarmTxt').textContent='Swarm • '+(on?'on':'off')+(sw.parallel?' • parallel':''); $('#swarmDot').className='size-2 rounded-full '+(on?'bg-emerald-500 animate-pulse':'bg-zinc-500'); $('#swarmBadge').title=`Agents: ${(sw.agents||[]).join(', ')} | max:${sw.max_agents} self-heal:${sw.self_healing_retries||sw.self_heal||3}`;}catch(e){}
+    const s=await api('/api/skills').then(r=>r.json());
     $('#skillCnt').textContent=s.skills.length;
-    $('#toolCnt').textContent=(await fetch('/api/tools').then(r=>r.json())).tools.length;
+    $('#toolCnt').textContent=(await api('/api/tools').then(r=>r.json())).tools.length;
     $('#skillsList').innerHTML=s.skills.map(k=>`<div class="rounded-xl border p-2.5 flex gap-2" style="background:var(--panel2);border-color:var(--border)"><span class="size-7 rounded-lg grid place-items-center shrink-0 border text-[12px]" style="background:var(--panel);border-color:var(--border)">${k.name==='computer_control'?'🖥️':k.name==='code_execution'?'💻':k.name==='web_research'?'◉':'🧩'}</span><div class="flex-1 min-w-0"><div class="flex items-center gap-1"><b class="text-[11px]">${escapeHtml(k.display_name||k.name)}</b><span class="mono text-[9px] px-1 py-0.5 rounded border" style="background:var(--panel);border-color:var(--border);color:var(--muted)">v${k.version}</span><span class="text-[9px] px-1 py-0.5 rounded-full border ${k.risk_level==='restricted'?'bg-red-500/10 border-red-500/20 text-red-400':'bg-emerald-500/10 border-emerald-500/20 text-emerald-400'}">${k.risk_level}</span></div><div class="text-[10px] leading-relaxed line-clamp-2" style="color:var(--muted)">${escapeHtml(k.description||'').slice(0,80)}</div></div></div>`).join('');
-    $('#toolsList').innerHTML=(await fetch('/api/tools').then(r=>r.json())).tools.map(t=>`<span class="mono text-[9px] px-1.5 py-1 rounded-full border" style="background:var(--panel2);border-color:var(--border);color:var(--muted)">${t.name}</span>`).join('');
+    $('#toolsList').innerHTML=(await api('/api/tools').then(r=>r.json())).tools.map(t=>`<span class="mono text-[9px] px-1.5 py-1 rounded-full border" style="background:var(--panel2);border-color:var(--border);color:var(--muted)">${t.name}</span>`).join('');
     if(sessionId){
-      const m=await fetch('/api/sessions/'+sessionId+'/messages').then(r=>r.json()).catch(()=>({messages:[]}));
+      const m=await api('/api/sessions/'+sessionId+'/messages').then(r=>r.json()).catch(()=>({messages:[]}));
       if(m.messages?.length){ $('#emptyChat').style.display='none'; for(const msg of m.messages) addMsg(msg.role, msg.content); }
     }
     connectWS();
@@ -392,17 +446,19 @@ $('#btnGrid').addEventListener('click',()=>{ const l=$('#bboxLayer'); l.classLis
 $('#btnFullscreen').addEventListener('click',()=>{ const el=$('#screenWrap'); if(document.fullscreenElement) document.exitFullscreen(); else el.requestFullscreen();});
 $('#toggleTerminal').addEventListener('click',()=>{ const b=$('#terminalBody'); b.classList.toggle('hidden'); $('#toggleTerminal').textContent=b.classList.contains('hidden')?'+':'−';});
 $('#clearTimeline').addEventListener('click',()=>{ $('#timelineList').innerHTML='<div class="shrink-0 rounded-xl border border-dashed px-3 py-2 text-[11px] text-center min-w-[180px]" style="border-color:var(--border);color:var(--muted);background:var(--panel2)">تم المسح</div>'; $('#timelineTrack').classList.add('hidden');});
-$('#newBtn').addEventListener('click',()=>{ sessionId=null; localStorage.removeItem('nimna.session'); updateSess(); $('#messages').innerHTML=''; $('#emptyChat').style.display='block'; if(ws) ws.close(); connectWS();});
+$('#newBtn').addEventListener('click',()=>{ sessionId=null; localStorage.removeItem('nimna.session'); updateSess(); $('#messages').innerHTML=''; $('#emptyChat').style.display='block'; connectWS();});
 $('#approvalBg').addEventListener('click',hideApproval);
-$('#apprOk').addEventListener('click',async()=>{ if(!pending) return; const id=pending.approval_id; $('#apprOk').disabled=true; try{const res=await fetch('/api/approvals/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({approved:true,always:false})}).then(async r=>{const j=await r.json(); if(!r.ok) throw new Error(j.detail); return j;}); hideApproval(); renderResult(res);}catch(e){alert(e.message); $('#apprOk').disabled=false;}});
-$('#apprNo').addEventListener('click',async()=>{ if(!pending) return; const id=pending.approval_id; try{const res=await fetch('/api/approvals/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({approved:false})}).then(async r=>{const j=await r.json(); if(!r.ok) throw new Error(j.detail); return j;}); hideApproval(); renderResult(res);}catch(e){alert(e.message);}});
-$('#apprAlways').addEventListener('click',async()=>{ if(!pending) return; const id=pending.approval_id; try{const res=await fetch('/api/approvals/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({approved:true,always:true})}).then(async r=>{const j=await r.json(); if(!r.ok) throw new Error(j.detail); return j;}); hideApproval(); renderResult(res);}catch(e){alert(e.message);}});
+$('#apprOk').addEventListener('click',async()=>{ if(!pending) return; const id=pending.approval_id; $('#apprOk').disabled=true; try{const res=await api('/api/approvals/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({approved:true,always:false})}).then(async r=>{const j=await r.json(); if(!r.ok) throw new Error(j.detail); return j;}); hideApproval(); renderResult(res);}catch(e){alert(e.message); $('#apprOk').disabled=false;}});
+$('#apprNo').addEventListener('click',async()=>{ if(!pending) return; const id=pending.approval_id; try{const res=await api('/api/approvals/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({approved:false})}).then(async r=>{const j=await r.json(); if(!r.ok) throw new Error(j.detail); return j;}); hideApproval(); renderResult(res);}catch(e){alert(e.message);}});
+$('#apprAlways').addEventListener('click',async()=>{ if(!pending) return; const id=pending.approval_id; try{const res=await api('/api/approvals/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({approved:true,always:true})}).then(async r=>{const j=await r.json(); if(!r.ok) throw new Error(j.detail); return j;}); hideApproval(); renderResult(res);}catch(e){alert(e.message);}});
 document.addEventListener('keydown',e=>{ if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k'){ e.preventDefault(); $('#cmdPal').classList.remove('hidden'); $('#cmdInput').focus();} if(e.key==='Escape'){ $('#approvalSheet').classList.add('hidden'); $('#cmdPal').classList.add('hidden');}});
 $('#cmdBtn').addEventListener('click',()=>{ $('#cmdPal').classList.remove('hidden'); $('#cmdInput').focus();}); $('#cmdBg').addEventListener('click',()=>$('#cmdPal').classList.add('hidden'));
 const cmds=[{k:'screenshot',l:'التقط صورة',a:()=>postChat('التقط صورة')},{k:'tasks',l:'المهام',a:()=>{}},{k:'memory',l:'الذاكرة',a:()=>{}},{k:'projects',l:'المشاريع',a:()=>{}},{k:'files',l:'الملفات',a:()=>{}}];
 function renderCmd(q=''){ const f=cmds.filter(c=>!q||c.l.includes(q)); $('#cmdList').innerHTML=f.map(c=>`<button class="w-full text-start px-3 py-2 rounded-xl hover:bg-white/5 flex items-center gap-2" data-k="${c.k}"><span class="size-7 rounded-lg grid place-items-center border" style="background:var(--panel2);border-color:var(--border)">⌘</span>${c.l}</button>`).join('');}
 $('#cmdInput')?.addEventListener('input',e=>renderCmd(e.target.value)); renderCmd();
 $$('.nav-link').forEach(a=>a.addEventListener('click',e=>{e.preventDefault(); $$('.nav-link').forEach(x=>{x.className='nav-link flex items-center gap-2.5 px-2.5 py-2 rounded-xl hover:bg-white/5'; x.style.color='var(--muted)'}); a.className='nav-link flex items-center gap-2.5 px-2.5 py-2 rounded-xl bg-white text-zinc-900 font-medium'; a.style.color='';}));
+$('#keyBtn').addEventListener('click',async()=>{ const had=getKey(); await askKey('أدخل مفتاح الوصول (X-Nimna-Key) أو امسحه.'); if(getKey()!==had) boot();});
+updateKeyBadge();
 boot();
 </script>
 </body>
