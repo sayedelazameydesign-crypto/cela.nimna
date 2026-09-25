@@ -92,7 +92,8 @@ ignore = [
   "S112",       # TODO(phase1): try-except-continue → logging (4)
   "S603","S607",# TODO(phase1): subprocess — مسارات مطلقة (10+6)
   "S104",       # TODO(phase1-P2-3): افتراض ربط 0.0.0.0 (4)
-  "S301",       # TODO(phase1-P2-2): pickle على Redis → JSON (1) — الوحيد الخطير فعلًا
+  # S301 غير موجود هنا — أُصلح فعلاً في 2026-09-25: codec كاش الرؤية = JSON
+  # موقّع ببادئة J1، لا pickle إطلاقًا (انظر § decision-S301 في تقرير التدقيق)
   # S324 غير موجود هنا — أُصلح فعليًا في 2026-09-25: sha256 بدل md5 ×6
   # (لا عقد خارجي مع md5 — تحقق: grep md5 nimna/ scripts/ = 0)
 

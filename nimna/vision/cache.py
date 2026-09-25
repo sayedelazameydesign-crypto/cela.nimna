@@ -15,6 +15,7 @@ Usage:
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import time
 from typing import Any
@@ -33,6 +34,29 @@ def _hash_image(data: bytes, w: int = 0, h: int = 0) -> str:
         return hashlib.sha256(img.tobytes()).hexdigest()[:12]
     except Exception:
         return hashlib.sha256(data[:4096]).hexdigest()[:12]
+
+
+# ── codec (S301, قرار 2026-09-25): JSON موقّع ببادئة إصدار — لا pickle إطلاقًا ──
+# التتبع الإمبيريكي (تقرير التدقيق § decision-S301): الموضع الوحيد للكتابة
+# (agent.py) يخزّن dict من 4 حقول نصية حصراً → JSON مباشر بلا غلاف قيم.
+# أي بايتات بلا بادئة J1 (بما فيها مخلفات pickle قبل الإصلاح) = cache miss —
+# لا يُفكّ تسلسلها بشيء، وتموت بـTTL (≤600 ثانية) دون أي migration.
+_PREFIX_JSON = b"J1"
+
+
+def _dumps(value: Any) -> bytes:
+    return _PREFIX_JSON + json.dumps(value, ensure_ascii=False).encode("utf-8")
+
+
+def _loads(data: bytes) -> Any | None:
+    """قراءة صارمة: J1+JSON فقط. كل ما عدا ذلك → None (miss لا crash)."""
+    if data[:2] == _PREFIX_JSON:
+        try:
+            return json.loads(data[2:].decode("utf-8"))
+        except Exception:
+            return None
+    return None
+
 
 def _key(data: bytes, w: int, h: int) -> str:
     h12 = _hash_image(data, w, h)
@@ -64,9 +88,11 @@ class VisionCache:
             try:
                 raw = self._redis.get(k)  # type: ignore
                 if raw is not None:
-                    _STATS["hits"] += 1
-                    import pickle
-                    return pickle.loads(raw)
+                    val = _loads(raw)
+                    if val is not None:
+                        _STATS["hits"] += 1
+                        return val
+                    # بادئة غائبة/تالفة (مخلفات pickle قديمة) → miss لا crash
             except Exception:
                 pass
         # fallback memory
@@ -86,8 +112,7 @@ class VisionCache:
         _STATS["sets"] += 1
         if self.enabled:
             try:
-                import pickle
-                self._redis.setex(k, self.ttl, pickle.dumps(value))  # type: ignore
+                self._redis.setex(k, self.ttl, _dumps(value))  # type: ignore
                 return
             except Exception:
                 pass
