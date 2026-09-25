@@ -279,5 +279,8 @@ python scripts/check_fastapi_cloud_link.py
    `CostPolicyError` at start-up instead of silently blocking every request. Changing
    `GEMINI_MODEL` means extending that list (free on your account) **or** setting explicit
    `MODEL_COST_*_USD_PER_1K` prices plus a positive `MAX_SPEND_USD` — see the checklist above.
+   Note that `MAX_SPEND_USD` is a **per-process-lifetime** cap: the `spent_usd` ledger lives in
+   memory, resets on every restart/redeploy and is not shared across instances. It is *not* a
+   monthly or account-level limit — set that at the provider.
 5. Do **not** add `on.push: main` to `.github/workflows/fastapi-cloud-deploy.yml`. That workflow is a manual token redeploy only.
 6. Repo contract: `fastapi-cloud.yaml`. Gate: `python scripts/check_fastapi_cloud_link.py`.
