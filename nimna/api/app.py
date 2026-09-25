@@ -425,6 +425,17 @@ def create_app(settings: Settings | None = None, agent: Agent | None = None) -> 
             entries.append({"name": e.name, "path": str(e.relative_to(ws)), "is_dir": e.is_dir(), "size": e.stat().st_size if e.is_file() else 0})
         return {"path": path, "entries": entries}
 
+    # -- /metrics (P3-1): مقياس HPA المخصص — عام عمداً (Prometheus داخل العنقود
+    # يجمعه من هذا المنفذ مباشرة)؛ الحمولة عدّادات فقط بلا أي أسرار — قرار موثق
+    # في docs/REPO-AUDIT-2026-09-25.md § decision-metrics.
+    @app.get("/metrics")
+    def metrics_endpoint():
+        from fastapi.responses import Response
+
+        from .metrics import render_metrics
+        body, ctype = render_metrics()
+        return Response(content=body, media_type=ctype)
+
     # -- websocket (live dashboard) - hardened --------------------------------------
     @app.websocket("/ws/{session_id}")
     async def ws_dashboard(websocket: WebSocket, session_id: str):
@@ -437,6 +448,10 @@ def create_app(settings: Settings | None = None, agent: Agent | None = None) -> 
             return
         # negotiate only 'nimna.v1'; the 'nimna.key.*' credential protocol is never echoed
         await websocket.accept(subprotocol=select_ws_subprotocol(websocket.scope))
+        # HPA custom metric (k8s/hpa.yaml): زيادة عند القبول، والتنقيص في finally أدناه
+        from .metrics import active_websockets, ws_connections_total
+        active_websockets.inc()
+        ws_connections_total.inc()
         # Rate limit: 10 messages per second, sliding window
         msg_times: list[float] = []
         last_pong = time.monotonic()
@@ -525,6 +540,11 @@ def create_app(settings: Settings | None = None, agent: Agent | None = None) -> 
         finally:
             try:
                 ping_task.cancel()
+            except Exception:
+                pass
+            try:
+                from .metrics import active_websockets
+                active_websockets.dec()
             except Exception:
                 pass
 

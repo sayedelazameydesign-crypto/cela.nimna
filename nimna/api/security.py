@@ -59,7 +59,7 @@ _API_KEY_HEADER_RAW = API_KEY_HEADER.lower().encode("latin-1")
 WS_SUBPROTOCOL = "nimna.v1"
 WS_KEY_PROTOCOL_PREFIX = "nimna.key."
 
-PUBLIC_EXACT_PATHS = frozenset({"/", "/api/health"})
+PUBLIC_EXACT_PATHS = frozenset({"/", "/api/health", "/metrics"})
 PUBLIC_PREFIXES = ("/static/",)
 
 PRODUCTION = "production"

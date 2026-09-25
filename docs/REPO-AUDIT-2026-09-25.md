@@ -332,3 +332,16 @@ code-01-fizzbuzz-module: policy → allow=0 deny=0   (verify بلا عبور)
 🟠 المرحلة 3: /metrics prometheus (مقياس HPA غير المنفَّذ)
 ⚪ متبقيات Phase-0 الصغيرة: T0.4 sys.path fallback · T0.5 توحيد checkout · T0.6 أرقام README
 ```
+
+### decision-metrics — تنفيذ `/metrics` ومقياس HPA (P3-1 يُغلق، 2026-09-25)
+
+**حسم الاتجاه بالترياج أولًا:** سؤال الاستثناء («هل يخفي S110/S112 أخطاء صامتة قائمة الآن؟») فُحص إمبيريكيًا قبل فتح العمل: `execution/` مواضعه الستة كلها موثقة بnoqa صريح بدلالات fail-closed، و`memory/` fallbacks بالتصميم، و`provenance/` تخطي ملفات غير قابلة للقراءة — **لا مؤشر على مشكلة قائمة** ⟹ توصية `/metrics` أولًا نُفِّذت كما هي.
+
+**التنفيذ:**
+1. `nimna/api/metrics.py` (جديد): Gauge `active_websockets` + Counter `ws_connections_total` عبر prometheus_client ([infra])، مع **تدهور معلن**: بغيابه تُصار بـexposition يدوي بسلاستين — العداد صادق في الحالتين. `ws_active_value()` واجهة قراءة موحدة للاختبارات.
+2. التوصيل في `ws_dashboard` (app.py): زيادة عند القبول، **تنقيص في finally القائم** — لا تسريب عدّاد عند أي مسار انقطاع.
+3. **قرار أمني موثق:** `/metrics` أُدرج في `PUBLIC_EXACT_PATHS` (كانت 401 عبر الوسيط) — معيار scraping داخل العنقود (k8s annotations بلا headers مخصصة)؛ الحمولة عدّادات بلا أي أسرار. الوسيط نفسه لم يُمس سوى قائمة السماح.
+4. **تصحيح نصف كاذب مجاور** في `k8s/hpa.yaml` ConfigMap: سطر PubSub كان يقول «code publishes to Redis» — صُحح إلى «NOT yet implemented (P3-2 open)؛ DB هو مصدر الحقيقة بين النسخ» — أمانة الوثيقة قبل التزيين.
+5. اختبارات 3: عمومية المسار وصيغة exposition · دورة حياة WS كاملة عبر subprotocol المفتاح (ارتفاع+1 ثم عودة دقيقة) · صرامة الصيغة (HELP/TYPE/قيمة).
+
+**التحقق:** ruff أخضر · bandit medium+high ما زال 6 (لا جديد) · **pytest 520/520** (517+3) · suite 7/0 · دخان حي: `GET /metrics` بلا مفتاح = 200 بصيغة exposition والمقياسان صفرًا.

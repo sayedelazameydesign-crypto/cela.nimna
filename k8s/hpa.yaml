@@ -32,6 +32,9 @@ metadata:
 data:
   README.md: |
     HPA requires metrics-server and (for WS metric) prometheus-adapter.
-    Expose `active_websockets` via /metrics (prometheus_client).
+    `active_websockets` IS exposed via /metrics since 2026-09-25
+    (nimna/api/metrics.py; prometheus_client with a manual exposition fallback).
     Without adapter, HPA still works on CPU/memory.
-    PubSub: no K8s resource — code in nimna/api/app.py publishes to Redis.
+    PubSub: NOT yet implemented in code (open item P3-2 in
+    docs/REPO-AUDIT-2026-09-25.md) — pending runs are DB-backed; that DB is the
+    cross-replica source of truth. Do not rely on Redis broadcast until P3-2 lands.
