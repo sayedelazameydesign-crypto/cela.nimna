@@ -1,7 +1,7 @@
 """Serialisable run state (lets a run pause for approval and resume later)."""
 import uuid
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -40,7 +40,7 @@ class ToolCallRecord(BaseModel):
     arguments: dict[str, Any] = Field(default_factory=dict)
     ok: bool = True
     duration_ms: int = 0
-    approved: Optional[bool] = None
+    approved: bool | None = None
     result_preview: str = ""
 
 
@@ -60,7 +60,7 @@ class RunState(BaseModel):
     last_text: str = ""
     repeat_text_count: int = 0
     status: RunStatus = RunStatus.RUNNING
-    pending: Optional[PendingApproval] = None
+    pending: PendingApproval | None = None
     pending_call_index: int = 0
     final_text: str = ""
     verify_attempts: int = 0
@@ -68,13 +68,13 @@ class RunState(BaseModel):
     selection_reason: str = ""
     plan: list[str] = Field(default_factory=list)
     usage: dict[str, int] = Field(default_factory=dict)
-    error: Optional[str] = None
+    error: str | None = None
     started_at: float = Field(default_factory=lambda: 0.0)
     # visual duplication detector (Computer Use)
     screenshot_hashes: list[str] = Field(default_factory=list)
     consecutive_identical_screenshots: int = 0
 
-    def last_assistant(self) -> Optional[Message]:
+    def last_assistant(self) -> Message | None:
         for message in reversed(self.messages):
             if message.role == "assistant":
                 return message
@@ -92,14 +92,14 @@ class AgentResult(BaseModel):
     session_id: str
     status: RunStatus
     reply: str = ""
-    pending: Optional[PendingApproval] = None
+    pending: PendingApproval | None = None
     skills_used: list[str] = Field(default_factory=list)
     tool_calls: list[ToolCallRecord] = Field(default_factory=list)
     steps: int = 0
     selection_reason: str = ""
     plan: list[str] = Field(default_factory=list)
     usage: dict[str, int] = Field(default_factory=dict)
-    error: Optional[str] = None
+    error: str | None = None
 
     @classmethod
     def from_state(cls, state: RunState) -> "AgentResult":

@@ -20,7 +20,7 @@ import re
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 from ..config import Settings
 from ..providers.base import Message
@@ -67,7 +67,7 @@ class SwarmTask:
     task: str
     depends_on: list[str] = field(default_factory=list)
     status: str = "pending"
-    result: Optional[dict] = None
+    result: dict | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {"id": self.id, "agent": self.agent, "task": self.task, "depends_on": self.depends_on, "status": self.status, "result": self.result}
@@ -291,7 +291,7 @@ class PlannerSwarm:
             return "\n\n".join(parts) or "تم التنفيذ."
 
 
-def _extract_json(text: str) -> Optional[dict]:
+def _extract_json(text: str) -> dict | None:
     if not text:
         return None
 

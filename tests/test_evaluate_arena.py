@@ -8,8 +8,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 REPO = Path(__file__).resolve().parent.parent
 SCRIPT = REPO / "scripts" / "evaluate_arena.py"
 
@@ -291,7 +289,7 @@ def _judge_content(verdict="PASS", score=87, summary="تغطية جيدة وال
     return json.dumps({"verdict": verdict, "score": score, "summary": summary}, ensure_ascii=False)
 
 
-def _fake_chat_response(content: str) -> "_FakeResponse":
+def _fake_chat_response(content: str) -> _FakeResponse:
     payload = json.dumps({"choices": [{"message": {"role": "assistant", "content": content}}]}).encode("utf-8")
     return _FakeResponse(payload)
 

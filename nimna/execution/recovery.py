@@ -32,10 +32,11 @@ import hashlib
 import json
 import os
 import uuid
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any
 
 CHECKPOINT_FORMAT = "nimna-checkpoint"
 CHECKPOINT_VERSION = 1
@@ -147,7 +148,7 @@ class Checkpoint:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Any) -> "Checkpoint":
+    def from_dict(cls, data: Any) -> Checkpoint:
         if not isinstance(data, dict):
             raise CorruptedCheckpoint("checkpoint payload is not an object")
         fields = {f.name for f in __import__("dataclasses").fields(cls)}
@@ -170,7 +171,7 @@ class RecoveryOutcome:
     detail: dict[str, Any] = field(default_factory=dict)
 
     @property
-    def ok(self) -> Optional[bool]:
+    def ok(self) -> bool | None:
         """True resumed · False refused/error/aborted · None pending re-observation."""
         if self.action is RecoveryAction.RESUMED:
             return True
@@ -250,7 +251,7 @@ class CheckpointStore:
         are skipped for *selection* — but if checkpoint files exist and none is
         readable, the corruption surfaces as CorruptedCheckpoint (RECOVERY_ERROR
         downstream), never disguised as "no checkpoint"."""
-        best: Optional[Checkpoint] = None
+        best: Checkpoint | None = None
         files = sorted(self.directory.glob("*.ckpt.json"))
         valid_unmatched = False
         for path in files:
@@ -293,10 +294,10 @@ class CheckpointStore:
 # Recovery manager (state machine + evidence-checked resume)
 # --------------------------------------------------------------------------- #
 class RecoveryManager:
-    def __init__(self, store: CheckpointStore, *, now_fn: Optional[Callable[[], datetime]] = None,
+    def __init__(self, store: CheckpointStore, *, now_fn: Callable[[], datetime] | None = None,
                  allow_replay: bool = False):
         self.store = store
-        self._now = now_fn or (lambda: datetime.now(timezone.utc))
+        self._now = now_fn or (lambda: datetime.now(UTC))
         self.allow_replay = allow_replay      # explicit opt-in to re-run a COMPLETED mission
         self._state: dict[str, RecoveryState] = {}
         self._history: dict[str, list[dict[str, Any]]] = {}
@@ -310,7 +311,7 @@ class RecoveryManager:
                                       "reason": "registered", "at": self._now().isoformat(timespec="milliseconds")}]
         return initial
 
-    def state(self, mission_id: str) -> Optional[RecoveryState]:
+    def state(self, mission_id: str) -> RecoveryState | None:
         return self._state.get(mission_id)
 
     def history(self, mission_id: str) -> list[dict[str, Any]]:
@@ -360,9 +361,9 @@ class RecoveryManager:
             return 1
 
     def checkpoint(self, mission_id: str, *, step_id: str,
-                   plan_state: Optional[dict[str, Any]] = None,
-                   authorization_state: Optional[dict[str, Any]] = None,
-                   execution_state: Optional[dict[str, Any]] = None,
+                   plan_state: dict[str, Any] | None = None,
+                   authorization_state: dict[str, Any] | None = None,
+                   execution_state: dict[str, Any] | None = None,
                    observation_fingerprint: str,
                    evidence_head: str = "", resumable: bool = True,
                    notes: str = "") -> Checkpoint:
@@ -402,9 +403,9 @@ class RecoveryManager:
         return checkpoint
 
     # -- resume ------------------------------------------------------------- #
-    def resume(self, mission_id: str, *, current_fingerprint: Optional[str] = None,
-               evidence_head: Optional[str] = None,
-               kill_switch: Optional[Callable[[], tuple[bool, str]]] = None) -> RecoveryOutcome:
+    def resume(self, mission_id: str, *, current_fingerprint: str | None = None,
+               evidence_head: str | None = None,
+               kill_switch: Callable[[], tuple[bool, str]] | None = None) -> RecoveryOutcome:
         """Evidence-checked resume. Order matters: integrity → legality →
         resumable → kill-switch → authorization → evidence chain → fingerprint.
         Every refusal names its reason; nothing is coerced into RESUMED."""
@@ -470,7 +471,7 @@ class RecoveryManager:
             try:
                 expires = datetime.fromisoformat(str(expires_at))
                 if expires.tzinfo is None:
-                    expires = expires.replace(tzinfo=timezone.utc)
+                    expires = expires.replace(tzinfo=UTC)
             except ValueError:
                 self._commit_transition(mission_id, RecoveryState.FAILED, "malformed expires_at")
                 return _outcome(RecoveryAction.REFUSED, "authorization expires_at is malformed",

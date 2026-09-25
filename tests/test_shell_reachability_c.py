@@ -2,17 +2,13 @@
 без gateway ولا مهارة (gateway=None + legacy + بلا مهارة ⇒ غير قابل للوصول)."""
 from __future__ import annotations
 
-from unittest import mock
-import pytest
-from nimna.core.state import RunState
-from nimna.providers.base import ToolCall
-
 from nimna.config import Settings
+from nimna.core.agent import Agent
+from nimna.core.approval import DeferToClient
+from nimna.core.state import RunState
 from nimna.memory import MemoryStore
 from nimna.providers import MockProvider
 from nimna.skills import SkillManager
-from nimna.core.agent import Agent
-from nimna.core.approval import DeferToClient
 from nimna.tools import default_registry
 from nimna.tools.base import ToolContext
 
@@ -33,7 +29,10 @@ def test_default_is_off_all_three_layers(settings):
     """الأمر الحي: الافتراضي False في الطبقات الثلاث."""
     fresh = Settings.from_env(env_file=None)
     assert fresh.shell_tool_enabled is False                      # config/runtime
-    import dataclasses, nimna.config as cfg, inspect
+    import dataclasses
+    import inspect
+
+    import nimna.config as cfg
     (f,) = [f for f in dataclasses.fields(cfg.Settings) if f.name == "shell_tool_enabled"]
     assert f.default is False                                     # تعريف الحقل
     src = inspect.getsource(cfg.Settings.from_env)
@@ -68,7 +67,6 @@ def test_registration_gate_reads_env_while_handler_gate_reads_settings(settings,
     """البوابتان حقيقيتان ومنفصلتان: التسجيل يقرأ env مباشرة، والمعالج يقرأ
     Settings — الاثنان افتراضياً معطّلان معاً (يُثبت اختباراً لا وصفاً)."""
     from nimna.tools.builtin import shell as shell_mod
-    from nimna.tools import ToolRegistry
     monkeypatch.setenv("SHELL_TOOL_ENABLED", "1")
     reg = default_registry()
     assert "run_command" in [d["name"] for d in reg.describe()]     # env فتحت التسجيل

@@ -29,9 +29,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any
 
 from .observation import FilesystemDelta, WorkspaceObserver
 from .policy import (
@@ -44,12 +45,14 @@ from .policy import (
     t5_capability_resolver,
     t5_policy_adapter,
 )
-from .recovery import CheckpointStore, RecoveryManager, RecoveryState
+from .recovery import CheckpointStore, RecoveryManager
 from .tool_registry import (
     EvidenceChain,
     InvocationStatus,
     ToolDescriptor,
     ToolRegistry,
+)
+from .tool_registry import (
     invoke as _registry_invoke,
 )
 from .verification import DeterministicVerifier
@@ -71,7 +74,7 @@ class InvocationContext:
     session_id: str = ""
     mission_id: str = ""
     granted_capabilities: tuple[str, ...] = ()
-    authorization: Optional[AuthorizationGrant] = None
+    authorization: AuthorizationGrant | None = None
     requested_operation: str = ""
     resource: str = "workspace"
     verify_spec: tuple[dict[str, Any], ...] = ()
@@ -104,10 +107,10 @@ class GatewayOutcome:
     reason: str
     result: Any = None
     invocation_id: str = ""
-    observation: Optional[dict[str, Any]] = None
-    verification: Optional[dict[str, Any]] = None
-    checkpoint: Optional[dict[str, Any]] = None
-    record: Optional[dict[str, Any]] = None       # the unified evidence record
+    observation: dict[str, Any] | None = None
+    verification: dict[str, Any] | None = None
+    checkpoint: dict[str, Any] | None = None
+    record: dict[str, Any] | None = None       # the unified evidence record
     duration_ms: int = 0
 
     def to_dict(self) -> dict[str, Any]:
@@ -136,7 +139,7 @@ class ExecutionGateway:
     def __init__(self, registry: ToolRegistry, *, catalog: CapabilityCatalog,
                  policy: Policy, authorizer: Authorizer, workspace_root: Path,
                  checkpoint_store: CheckpointStore,
-                 evidence: Optional[EvidenceChain] = None,
+                 evidence: EvidenceChain | None = None,
                  actor: str = "agent",
                  compat_tools: tuple[str, ...] = ()) -> None:
         self._registry = registry              # private: no public handler access
@@ -177,8 +180,8 @@ class ExecutionGateway:
                          verify_spec: tuple[dict[str, Any], ...] = (),
                          resource: str = "workspace",
                          requested_operation: str = "",
-                         grant: Optional[AuthorizationGrant] = None,
-                         granted_capabilities: Optional[tuple[str, ...]] = None):
+                         grant: AuthorizationGrant | None = None,
+                         granted_capabilities: tuple[str, ...] | None = None):
         """The binding entry both Agent and swarm agents share: builds the
         InvocationContext (grants default to the operator binding; granted
         capabilities default to the union of registered tools) and crosses."""
@@ -261,7 +264,7 @@ class ExecutionGateway:
         executed_ok = outcome5.status is InvocationStatus.EXECUTED
 
         # 4) observation AFTER + delta
-        observation_payload: Optional[dict[str, Any]] = None
+        observation_payload: dict[str, Any] | None = None
         if handler_called and filesystem_tool:
             try:
                 after = WorkspaceObserver(self._workspace).snapshot()
@@ -271,7 +274,7 @@ class ExecutionGateway:
                 observation_payload = {"error": f"post-observation failed: {exc.__class__.__name__}"}
 
         # 5) deterministic verification (T3) — only for executed calls that ask for it
-        verification_payload: Optional[dict[str, Any]] = None
+        verification_payload: dict[str, Any] | None = None
         verification_failed = False
         if handler_called and context.verify_spec:
             try:
@@ -289,7 +292,7 @@ class ExecutionGateway:
                                         "error": f"{exc.__class__.__name__}: {str(exc)[:150]}"}
 
         # 6) checkpoint (T4) — one provenance record per invocation
-        checkpoint_payload: Optional[dict[str, Any]] = None
+        checkpoint_payload: dict[str, Any] | None = None
         if handler_called:
             checkpoint_payload = self._checkpoint_invocation(tool_id, context, descriptor,
                                                              outcome5, verification_payload,
@@ -312,7 +315,7 @@ class ExecutionGateway:
     # -- internals ---------------------------------------------------------- #
     def _checkpoint_invocation(self, tool_id: str, context: InvocationContext,
                                descriptor: ToolDescriptor, outcome5, verification_payload,
-                               observation_payload) -> Optional[dict[str, Any]]:
+                               observation_payload) -> dict[str, Any] | None:
         try:
             self._mission_seq += 1
             mission = f"{context.mission_id or 'gw'}:{tool_id}:{self._mission_seq}"
@@ -354,11 +357,11 @@ class ExecutionGateway:
                             reason=reason, invocation_id="", observation=None,
                             verification=None, checkpoint=None, result=None, duration_ms=0)
 
-    def _record(self, tool_id: str, descriptor: Optional[ToolDescriptor],
+    def _record(self, tool_id: str, descriptor: ToolDescriptor | None,
                 context: InvocationContext, outcome5, *, ok: bool, decision: str,
                 executed: bool, execution_status: str, reason: str, invocation_id: str,
-                observation: Optional[dict[str, Any]], verification: Optional[dict[str, Any]],
-                checkpoint: Optional[dict[str, Any]], result: Any,
+                observation: dict[str, Any] | None, verification: dict[str, Any] | None,
+                checkpoint: dict[str, Any] | None, result: Any,
                 duration_ms: int) -> GatewayOutcome:
         grant = context.authorization
         grant_digest = _digest({"actor": grant.actor, "tool_id": grant.tool_id,
@@ -398,7 +401,7 @@ class ExecutionGateway:
                               checkpoint=checkpoint, record=stored, duration_ms=duration_ms)
 
     @staticmethod
-    def _observation_digest(observation: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    def _observation_digest(observation: dict[str, Any] | None) -> dict[str, Any] | None:
         if observation is None:
             return None
         if observation.get("error"):

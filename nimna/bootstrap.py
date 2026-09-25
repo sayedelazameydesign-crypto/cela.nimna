@@ -1,6 +1,6 @@
 """Wire the components together (provider + skills + tools + memory -> Agent)."""
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from .config import Settings
 from .core.agent import Agent
@@ -11,10 +11,10 @@ from .skills.manager import SkillManager
 from .tools import ToolRegistry, default_registry
 
 
-def build_agent(settings: Optional[Settings] = None, *, provider: Optional[ModelProvider] = None,
-                approval_policy: Optional[ApprovalPolicy] = None, tools: Optional[ToolRegistry] = None,
-                memory: Optional[MemoryStore] = None, skills: Optional[SkillManager] = None,
-                execution_gateway: Optional[Any] = None) -> Agent:
+def build_agent(settings: Settings | None = None, *, provider: ModelProvider | None = None,
+                approval_policy: ApprovalPolicy | None = None, tools: ToolRegistry | None = None,
+                memory: MemoryStore | None = None, skills: SkillManager | None = None,
+                execution_gateway: Any | None = None) -> Agent:
     settings = settings or Settings.from_env()
     logging.basicConfig(level=getattr(logging, settings.log_level, logging.INFO),
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")

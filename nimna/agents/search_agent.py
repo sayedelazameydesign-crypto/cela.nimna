@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from .base import BaseSwarmAgent
 
+
 class SearchAgent(BaseSwarmAgent):
     name = "search"
     description = "Research & web retrieval with vector context"

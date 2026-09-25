@@ -1,7 +1,6 @@
 """Report writing tool (markdown files under workspace/reports)."""
 import re
 from datetime import datetime
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -11,7 +10,7 @@ from ..base import Risk, ToolContext, ToolError, ToolRegistry
 class WriteReportParams(BaseModel):
     title: str = Field(..., min_length=1, description="Report title (used as heading and file name).")
     content_markdown: str = Field(..., min_length=1, description="Report body in Markdown (sections, tables, bullets).")
-    filename: Optional[str] = Field(None, description="Optional file name (without directories); defaults to a slug of the title.")
+    filename: str | None = Field(None, description="Optional file name (without directories); defaults to a slug of the title.")
     overwrite: bool = Field(False, description="Replace an existing report with the same name (needs approval).")
 
 

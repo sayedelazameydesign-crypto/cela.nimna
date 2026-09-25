@@ -1,4 +1,12 @@
-from .base import Risk, Tool, ToolContext, ToolError, ToolRegistry, ToolValidationError, serialize_result
+from .base import (
+    Risk,
+    Tool,
+    ToolContext,
+    ToolError,
+    ToolRegistry,
+    ToolValidationError,
+    serialize_result,
+)
 
 
 def default_registry() -> ToolRegistry:

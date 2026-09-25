@@ -37,8 +37,9 @@ import re
 import threading
 import time
 from collections import deque
+from collections.abc import Awaitable, Callable, Iterable, MutableMapping
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Iterable, MutableMapping, Optional
+from typing import Any
 from urllib.parse import urlsplit
 
 log = logging.getLogger(__name__)
@@ -140,13 +141,13 @@ class SecurityConfig:
     env: str
     api_keys: tuple[str, ...] = field(default=(), repr=False)
     allowed_origins: tuple[str, ...] = ()
-    allow_origin_regex: Optional[str] = None
+    allow_origin_regex: str | None = None
     chat_rate_limit_per_minute: int = 30
     ws_max_connections_per_key: int = 10
 
     # -- construction ----------------------------------------------------
     @classmethod
-    def from_settings(cls, settings: Any) -> "SecurityConfig":
+    def from_settings(cls, settings: Any) -> SecurityConfig:
         raw_env = str(getattr(settings, "env", PRODUCTION) or PRODUCTION).strip().lower()
         env = _ENV_ALIASES.get(raw_env)
         if env is None:
@@ -186,7 +187,7 @@ class SecurityConfig:
             )
 
         configured = getattr(settings, "allowed_origins", None)
-        origin_regex: Optional[str] = None
+        origin_regex: str | None = None
         if configured is None:
             origins: tuple[str, ...] = ()
             if env == DEVELOPMENT:
@@ -220,12 +221,12 @@ class SecurityConfig:
     def auth_mode(self) -> str:
         return "api-key" if self.api_keys else "loopback-only"
 
-    def identity_for(self, presented: Optional[str]) -> Optional[str]:
+    def identity_for(self, presented: str | None) -> str | None:
         """Return the bucket identity of a valid key, else None (constant-time compare)."""
         if not presented or not self.api_keys:
             return None
         candidate = presented.encode("utf-8", "surrogatepass")
-        match: Optional[str] = None
+        match: str | None = None
         for key in self.api_keys:
             if hmac.compare_digest(candidate, key.encode("utf-8")):
                 match = key  # no early exit: timing does not depend on the key index
@@ -314,14 +315,14 @@ def is_public_path(path: str) -> bool:
     return any(path.startswith(prefix) and len(path) > len(prefix) for prefix in PUBLIC_PREFIXES)
 
 
-def _header(scope: Scope, name: bytes) -> Optional[str]:
+def _header(scope: Scope, name: bytes) -> str | None:
     for key, value in scope.get("headers") or []:
         if key.lower() == name:
             return value.decode("latin-1").strip()
     return None
 
 
-def presented_key(scope: Scope) -> Optional[str]:
+def presented_key(scope: Scope) -> str | None:
     key = _header(scope, _API_KEY_HEADER_RAW)
     if key:
         return key
@@ -332,12 +333,12 @@ def presented_key(scope: Scope) -> Optional[str]:
     return None
 
 
-def select_ws_subprotocol(scope: Scope) -> Optional[str]:
+def select_ws_subprotocol(scope: Scope) -> str | None:
     """The only sub-protocol ever negotiated back; the key protocol is never echoed."""
     return WS_SUBPROTOCOL if WS_SUBPROTOCOL in (scope.get("subprotocols") or []) else None
 
 
-def _is_loopback(host: Optional[str]) -> bool:
+def _is_loopback(host: str | None) -> bool:
     if not host:
         return False
     try:
@@ -397,7 +398,7 @@ class APIGuardMiddleware:
         self.chat_limiter = chat_limiter
         self.ws_limiter = ws_limiter
 
-    def authenticate(self, scope: Scope) -> Optional[str]:
+    def authenticate(self, scope: Scope) -> str | None:
         if self.config.api_keys:
             return self.config.identity_for(presented_key(scope))
         # development without a key: loopback clients only

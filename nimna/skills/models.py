@@ -7,7 +7,7 @@ Only the front matter is shown to the planner; the body is loaded on demand
 """
 import re
 from pathlib import Path
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -18,7 +18,7 @@ SEMVER_RE = re.compile(r"^\d+(\.\d+){0,2}([-.+].*)?$")
 class SkillMeta(BaseModel):
     name: str
     description: str
-    display_name: Optional[str] = None
+    display_name: str | None = None
     version: str = "0.1.0"
     triggers: list[str] = Field(default_factory=list)
     allowed_tools: list[str] = Field(default_factory=list)

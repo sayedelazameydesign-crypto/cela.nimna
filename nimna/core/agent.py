@@ -16,7 +16,7 @@ import json
 import logging
 import time
 import uuid
-from typing import Any, Optional
+from typing import Any
 
 # Sprint 1 infra: VisionCache (Redis + in-memory) and Anomaly Kill Switch (lazy imports for tests)
 try:
@@ -32,19 +32,19 @@ except Exception:  # pragma: no cover
 # Swarm (Sprint 2) — lazy import to keep tests light
 def _get_swarm_components():
     try:
-        from .planner_swarm import PlannerSwarm
         from ..agents import AGENT_CLASSES
+        from .planner_swarm import PlannerSwarm
         return PlannerSwarm, AGENT_CLASSES
     except Exception:
         return None, None
 
 from ..config import Settings
 from ..evidence import EvidenceJournal
-from ..governance import PolicyVerdict, PolicyEngine
+from ..governance import PolicyEngine, PolicyVerdict
 from ..memory.store import MemoryStore
 from ..models import BudgetExceededError, CostGuard, GovernedModelProvider, ModelRegistry
-from ..providers.base import Message, ModelProvider, ProviderError, ToolCall
 from ..provenance.manifest import build_manifest
+from ..providers.base import Message, ModelProvider, ProviderError, ToolCall
 from ..skills.manager import SkillManager
 from ..tools.base import Tool, ToolContext, ToolRegistry, ToolValidationError, serialize_result
 from .approval import ApprovalPolicy, AutoApprove, DeferToClient
@@ -77,9 +77,9 @@ Operating rules:
 class Agent:
     def __init__(self, provider: ModelProvider, skills: SkillManager, tools: ToolRegistry,
                  memory: MemoryStore, settings: Settings,
-                 approval_policy: Optional[ApprovalPolicy] = None, *,
-                 workspace: Optional[Any] = None, use_llm_planner: bool = True,
-                 execution_gateway: Optional[Any] = None):
+                 approval_policy: ApprovalPolicy | None = None, *,
+                 workspace: Any | None = None, use_llm_planner: bool = True,
+                 execution_gateway: Any | None = None):
         # Put the budget gate at the provider boundary so planner, verifier,
         # normal turns, and swarm calls share one policy.  The wrapper forwards
         # provider-specific attributes (for example MockProvider.calls).
@@ -142,7 +142,7 @@ class Agent:
             pass
         return False
 
-    def run_swarm(self, user_message: str, session_id: Optional[str] = None) -> AgentResult:
+    def run_swarm(self, user_message: str, session_id: str | None = None) -> AgentResult:
         """Swarm orchestration: DAG -> parallel sub-agents -> synthesis."""
         import asyncio
         session_id = session_id or uuid.uuid4().hex[:12]
@@ -190,7 +190,7 @@ class Agent:
             log.exception("swarm run crashed")
             return self._fail(state, f"internal error: {type(exc).__name__}: {exc}")
 
-    def run(self, user_message: str, session_id: Optional[str] = None) -> AgentResult:
+    def run(self, user_message: str, session_id: str | None = None) -> AgentResult:
         # Swarm fast-path (if enabled and request is composite)
         try:
             if self._should_swarm(user_message):
@@ -248,7 +248,7 @@ class Agent:
         except ProviderError as exc:
             return self._fail(state, f"model provider error: {exc}")
 
-    def pending_approvals(self, session_id: Optional[str] = None) -> list[dict[str, Any]]:
+    def pending_approvals(self, session_id: str | None = None) -> list[dict[str, Any]]:
         return self.memory.list_pending(session_id)
 
     # ------------------------------------------------------------------
@@ -642,7 +642,7 @@ class Agent:
         return result, outcome.ok, int((time.perf_counter() - started) * 1000)
 
     def _run_tool(self, state: RunState, tool: Tool, call: ToolCall, ctx: ToolContext,
-                  approved: Optional[bool]) -> None:
+                  approved: bool | None) -> None:
         self._audit(state, "tool_call", {"tool": tool.name, "arguments": call.arguments})
         gateway = getattr(self, "execution_gateway", None)
         if gateway is None:
@@ -700,7 +700,8 @@ class Agent:
         # next model turn sees the desktop (observe → plan → act loop).
         if tool.name == "take_screenshot" and ok:
             try:
-                import base64, json
+                import base64
+                import json
                 data = json.loads(result) if result else {}
                 # unwrap truncation wrapper if needed
                 if data.get("truncated") and isinstance(data.get("result"), str):
@@ -770,8 +771,9 @@ class Agent:
                                 import hashlib
                                 # lightweight perceptual hash: 16x16 grayscale
                                 try:
-                                    from PIL import Image
                                     import io
+
+                                    from PIL import Image
                                     img = Image.open(io.BytesIO(raw)).convert("L").resize((16,16))
                                     h = hashlib.md5(img.tobytes()).hexdigest()[:12]
                                 except Exception:
@@ -824,7 +826,8 @@ class Agent:
         # also inject annotated screenshot from get_element_coordinates
         if tool.name == "get_element_coordinates" and ok:
             try:
-                import base64 as _b64, json as _json
+                import base64 as _b64
+                import json as _json
                 _data = _json.loads(result) if result else {}
                 if _data.get("truncated") and isinstance(_data.get("result"), str):
                     try:
@@ -932,7 +935,7 @@ class Agent:
         self._audit(state, "run_failed", {"error": message})
         return AgentResult.from_state(state)
 
-    def _audit(self, state: RunState, event: str, payload: Optional[dict[str, Any]] = None) -> None:
+    def _audit(self, state: RunState, event: str, payload: dict[str, Any] | None = None) -> None:
         try:
             self.evidence.record(state.session_id, state.run_id, event, payload)
         except Exception:  # pragma: no cover - never let logging break a run

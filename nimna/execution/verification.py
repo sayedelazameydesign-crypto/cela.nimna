@@ -42,9 +42,10 @@ import enum
 import hashlib
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any
 
 from .observation import FilesystemDelta, WorkspaceObserver
 
@@ -74,7 +75,7 @@ class SpecError(ValueError):
 @dataclass
 class CheckResult:
     kind: str
-    ok: Optional[bool]          # True / False / None (inconclusive)
+    ok: bool | None          # True / False / None (inconclusive)
     detail: str
     target: str = ""
 
@@ -147,10 +148,10 @@ class DeterministicVerifier:
         self,
         spec: list[dict[str, Any]] | None,
         *,
-        shell_exit_code: Optional[int] = None,
+        shell_exit_code: int | None = None,
         shell_timed_out: bool = False,
-        fs_delta: Optional[dict[str, Any]] = None,
-        exec_fn: Optional[Callable[[str, int], Any]] = None,
+        fs_delta: dict[str, Any] | None = None,
+        exec_fn: Callable[[str, int], Any] | None = None,
     ) -> VerificationReport:
         """Run the spec. ``shell_exit_code``/``fs_delta`` carry the execution
         evidence; ``exec_fn(command, timeout_ms)`` runs bounded verification
@@ -202,7 +203,7 @@ class DeterministicVerifier:
         return VerificationReport(verdict, results)
 
     # ------------------------------------------------------------------ #
-    def _resolve(self, raw: str) -> tuple[Optional[Path], str]:
+    def _resolve(self, raw: str) -> tuple[Path | None, str]:
         """Contain a spec path inside the workspace (lexical then resolved)."""
         rel = str(raw).strip()
         if not rel or "\x00" in rel:
@@ -273,7 +274,7 @@ class DeterministicVerifier:
         detail = "; ".join(label for label, _ in conditions) + (" — all matched" if not failed else f" — failed: {'; '.join(failed)}")
         return CheckResult("content_matches", not failed, detail, target=path_label)
 
-    def _exit_code(self, entry: dict[str, Any], shell_exit_code: Optional[int], timed_out: bool) -> CheckResult:
+    def _exit_code(self, entry: dict[str, Any], shell_exit_code: int | None, timed_out: bool) -> CheckResult:
         expected = int(entry.get("equals", 0))
         if timed_out or shell_exit_code is None:
             return CheckResult("exit_code", None,
@@ -281,7 +282,7 @@ class DeterministicVerifier:
         ok = shell_exit_code == expected
         return CheckResult("exit_code", ok, f"exit {shell_exit_code} (expected {expected})")
 
-    def _delta(self, entry: dict[str, Any], fs_delta: Optional[dict[str, Any]]) -> CheckResult:
+    def _delta(self, entry: dict[str, Any], fs_delta: dict[str, Any] | None) -> CheckResult:
         path_label = str(entry["path"])
         if not fs_delta:
             return CheckResult("delta", None, "no filesystem delta evidence", target=path_label)
@@ -295,7 +296,7 @@ class DeterministicVerifier:
                            (f"observed {kinds}" if ok else f"observed {kinds}, expected {change}"),
                            target=path_label)
 
-    def _delta_sha(self, entry: dict[str, Any], fs_delta: Optional[dict[str, Any]]) -> CheckResult:
+    def _delta_sha(self, entry: dict[str, Any], fs_delta: dict[str, Any] | None) -> CheckResult:
         path_label = str(entry["path"])
         if not fs_delta:
             return CheckResult("delta_sha", None, "no filesystem delta evidence", target=path_label)
@@ -328,7 +329,7 @@ class DeterministicVerifier:
                            f"valid JSON object with required keys {required or '(none declared)'}",
                            target=path_label)
 
-    def _command(self, entry: dict[str, Any], exec_fn: Optional[Callable[[str, int], Any]]) -> CheckResult:
+    def _command(self, entry: dict[str, Any], exec_fn: Callable[[str, int], Any] | None) -> CheckResult:
         command = str(entry["command"]).strip()
         if len(command) > MAX_VERIFY_COMMAND_CHARS:
             return CheckResult("command", None, "verification command too long", target=command[:80])

@@ -1,6 +1,7 @@
 """Execution Fabric — standalone execution primitives (observation, and the
 ones that follow: verification, recovery). Each primitive is independent of
 any single tool so Shell, Browser and File tools can share them."""
+from .gateway import ExecutionGateway, GatewayOutcome, InvocationContext
 from .observation import (
     Change,
     ChangeKind,
@@ -12,20 +13,6 @@ from .observation import (
     WorkspaceObserver,
     resolve_inside_workspace,
 )
-from .verification import CheckResult, DeterministicVerifier, SpecError, Verdict, VerificationReport
-from .recovery import (
-    Checkpoint,
-    CheckpointStore,
-    CorruptedCheckpoint,
-    IllegalTransition,
-    MissingCheckpoint,
-    RecoveryAction,
-    RecoveryManager,
-    RecoveryState,
-    RecoveryOutcome,
-    UnknownMission,
-)
-from .gateway import ExecutionGateway, GatewayOutcome, InvocationContext
 from .policy import (
     AuthorizationGrant,
     Authorizer,
@@ -41,6 +28,18 @@ from .policy import (
     t5_authorizer_adapter,
     t5_capability_resolver,
     t5_policy_adapter,
+)
+from .recovery import (
+    Checkpoint,
+    CheckpointStore,
+    CorruptedCheckpoint,
+    IllegalTransition,
+    MissingCheckpoint,
+    RecoveryAction,
+    RecoveryManager,
+    RecoveryOutcome,
+    RecoveryState,
+    UnknownMission,
 )
 from .tool_registry import (
     AuthorizationDecision,
@@ -60,6 +59,7 @@ from .tool_registry import (
     invoke,
     validate_instance,
 )
+from .verification import CheckResult, DeterministicVerifier, SpecError, Verdict, VerificationReport
 
 __all__ = [
     "Change", "ChangeKind", "FileEntry", "FilesystemDelta",

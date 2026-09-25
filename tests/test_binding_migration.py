@@ -11,18 +11,14 @@ The same routing holds for swarm agents.
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from unittest import mock
 
 import pytest
 
 from nimna.core.state import RunStatus
-from nimna.providers.base import ModelResponse, ToolCall
-
 from nimna.execution.gateway import ExecutionGateway
 from nimna.execution.policy import (
-    AuthorizationGrant,
     Authorizer,
     CapabilityCatalog,
     Effect,
@@ -31,6 +27,7 @@ from nimna.execution.policy import (
 )
 from nimna.execution.recovery import CheckpointStore
 from nimna.execution.tool_registry import ToolDescriptor, ToolRegistry
+from nimna.providers.base import ModelResponse, ToolCall
 
 POLICY_VERSION = "1.0.0"
 REPO = Path(__file__).resolve().parent.parent
@@ -303,7 +300,6 @@ def test_shell_execute_unbound_reaches_handler_but_production_defaults_hold(work
     handler — and in the production default (no VNC/desktop) the tool's own
     guards hold: dangerous commands are blocked pre-execution (no process),
     safe read-only commands run in the restricted workspace-local fallback."""
-    from nimna.core.state import RunStatus
     from nimna.tools.base import ToolError
     agent = _bound_agent(workspace, settings, provider, None)   # unbound, on purpose
     assert agent.execution_gateway is None
@@ -439,8 +435,8 @@ def test_always_scope_is_rest_of_run_by_name_DOCUMENTED(workspace, settings, pro
     """ALWAYS on shell_execute ⇒ every LATER shell_execute in the SAME run
     executes with no new approval (by-name grant persisted in RunState). Named
     design: per-run, per-tool-name, NOT per-call."""
-    from nimna.core.approval import CallbackPolicy
     from nimna.core.agent import Agent
+    from nimna.core.approval import CallbackPolicy
     from nimna.core.state import Decision
     from nimna.memory import MemoryStore
     from nimna.skills import SkillManager
@@ -472,13 +468,12 @@ def test_always_scope_is_rest_of_run_by_name_DOCUMENTED(workspace, settings, pro
 def test_always_never_beats_the_denylist_DOCUMENTED(workspace, settings, provider):
     """ALWAYS granted ⇒ a later `rm -rf /` STILL cannot execute: the content
     denylist fires pre-approval and dominates any grant."""
-    from nimna.core.approval import CallbackPolicy
     from nimna.core.agent import Agent
+    from nimna.core.approval import CallbackPolicy
     from nimna.core.state import Decision
     from nimna.memory import MemoryStore
     from nimna.skills import SkillManager
     from nimna.tools import default_registry
-    from nimna.tools.base import ToolError
     answers = iter([Decision.ALWAYS])
     agent = Agent(provider, SkillManager(REPO / "skills"), default_registry(),
                   MemoryStore(":memory:"), settings,

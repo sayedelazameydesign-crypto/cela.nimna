@@ -1,7 +1,7 @@
 """Evidence facade over the canonical SQLite audit journal."""
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 
 class EvidenceJournal:
@@ -16,10 +16,10 @@ class EvidenceJournal:
 
     def record(
         self,
-        session_id: Optional[str],
-        run_id: Optional[str],
+        session_id: str | None,
+        run_id: str | None,
         event: str,
-        payload: Optional[dict[str, Any]] = None,
+        payload: dict[str, Any] | None = None,
     ) -> None:
         self.store.log(session_id, run_id, event, payload)
 

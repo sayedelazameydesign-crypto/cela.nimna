@@ -18,7 +18,6 @@ import sys
 import time
 import uuid
 from pathlib import Path
-from typing import Optional
 
 from pydantic import BaseModel
 
@@ -29,7 +28,7 @@ MAX_OUTPUT = 10_000
 
 class SandboxResult(BaseModel):
     backend: str
-    exit_code: Optional[int]
+    exit_code: int | None
     stdout: str
     stderr: str
     timed_out: bool = False
@@ -141,7 +140,7 @@ def run_in_docker(code: str, workspace: Path, *, timeout: int, memory_mb: int, i
 
 
 def run_python_code(code: str, settings: Settings, workspace: Path,
-                    timeout: Optional[int] = None) -> SandboxResult:
+                    timeout: int | None = None) -> SandboxResult:
     timeout = min(timeout or settings.sandbox_timeout, 300)
     workspace.mkdir(parents=True, exist_ok=True)
     if settings.sandbox_backend == "docker":

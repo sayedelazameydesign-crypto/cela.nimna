@@ -17,7 +17,7 @@ from __future__ import annotations
 import hashlib
 import os
 import time
-from typing import Any, Optional
+from typing import Any
 
 # in-memory fallback (LRU-ish)
 _FALLBACK: dict[str, tuple[Any, float]] = {}
@@ -26,8 +26,9 @@ _STATS = {"hits": 0, "misses": 0, "sets": 0}
 
 def _hash_image(data: bytes, w: int = 0, h: int = 0) -> str:
     try:
-        from PIL import Image
         import io
+
+        from PIL import Image
         img = Image.open(io.BytesIO(data)).convert("L").resize((16, 16))
         return hashlib.md5(img.tobytes()).hexdigest()[:12]
     except Exception:
@@ -38,7 +39,7 @@ def _key(data: bytes, w: int, h: int) -> str:
     return f"vision:{h12}:{w}x{h}"
 
 class VisionCache:
-    def __init__(self, redis_url: Optional[str] = None, ttl: int = 600):
+    def __init__(self, redis_url: str | None = None, ttl: int = 600):
         self.ttl = ttl
         self.redis_url = redis_url or os.getenv("REDIS_URL", "")
         self._redis = None
@@ -56,7 +57,7 @@ class VisionCache:
     def enabled(self) -> bool:
         return self._enabled and self._redis is not None
 
-    def get(self, data: bytes, w: int = 0, h: int = 0) -> Optional[Any]:
+    def get(self, data: bytes, w: int = 0, h: int = 0) -> Any | None:
         k = _key(data, w, h)
         # try Redis
         if self.enabled:
@@ -122,9 +123,9 @@ class VisionCache:
                 pass
 
 # singleton
-_singleton: Optional[VisionCache] = None
+_singleton: VisionCache | None = None
 
-def get_vision_cache(redis_url: Optional[str] = None, ttl: Optional[int] = None) -> VisionCache:
+def get_vision_cache(redis_url: str | None = None, ttl: int | None = None) -> VisionCache:
     global _singleton
     if _singleton is None:
         ttl = ttl or int(os.getenv("VISION_CACHE_TTL", "600"))

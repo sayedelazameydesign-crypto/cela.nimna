@@ -44,9 +44,9 @@ import hashlib
 import os
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
-from typing import Any, Optional
+from typing import Any
 
 
 class ScopeError(ValueError):
@@ -64,7 +64,7 @@ class ChangeKind(str, enum.Enum):
 @dataclass
 class ObservationScope:
     """Bounds of one observation. Defaults observe the workspace only."""
-    root: Optional[Path] = None            # None = the workspace root itself
+    root: Path | None = None            # None = the workspace root itself
     include: list[str] = field(default_factory=lambda: ["*"])
     exclude: list[str] = field(default_factory=list)
     max_files: int = 2_000                 # entries (files + dirs + symlinks)
@@ -81,7 +81,7 @@ class ObservationScope:
         }
 
 
-def _metadata_dict(entry: "FileEntry") -> dict[str, Any]:
+def _metadata_dict(entry: FileEntry) -> dict[str, Any]:
     data: dict[str, Any] = {"type": entry.type, "size": entry.size, "mode": entry.mode}
     if entry.sha256 is not None:
         data["sha256"] = entry.sha256
@@ -97,7 +97,7 @@ class FileEntry:
     type: str                       # file | dir | symlink | inaccessible
     size: int = 0
     mode: str = ""
-    sha256: Optional[str] = None    # None for dirs / symlinks / oversize / unhashed
+    sha256: str | None = None    # None for dirs / symlinks / oversize / unhashed
     note: str = ""
 
     def to_dict(self) -> dict[str, Any]:
@@ -139,9 +139,9 @@ class Snapshot:
 class Change:
     kind: ChangeKind
     path: str
-    before: Optional[dict[str, Any]] = None
-    after: Optional[dict[str, Any]] = None
-    old_path: Optional[str] = None       # RENAMED only
+    before: dict[str, Any] | None = None
+    after: dict[str, Any] | None = None
+    old_path: str | None = None       # RENAMED only
 
     def to_dict(self) -> dict[str, Any]:
         data: dict[str, Any] = {"path": self.path, "kind": self.kind.value}
@@ -180,7 +180,7 @@ class FilesystemDelta:
         return self.before_root_hash != self.after_root_hash or bool(self.changes)
 
     @classmethod
-    def from_payload(cls, payload: dict[str, Any]) -> "FilesystemDelta":
+    def from_payload(cls, payload: dict[str, Any]) -> FilesystemDelta:
         """Rebuild a delta from its evidence form (audit payload / suite JSON)."""
         changes = [
             Change(ChangeKind(item["kind"]), item["path"],
@@ -199,7 +199,7 @@ class FilesystemDelta:
         )
 
 
-def _digest_file(path: Path, max_file_bytes: int, budget: list[int]) -> tuple[Optional[str], str]:
+def _digest_file(path: Path, max_file_bytes: int, budget: list[int]) -> tuple[str | None, str]:
     """sha256 of file content within the per-file cap and the total budget.
 
     Returns ``(sha256_or_None, note)``. Hashing is the only content access.
@@ -233,7 +233,7 @@ def _root_hash(entries: dict[str, FileEntry]) -> str:
     digest = hashlib.sha256()
     for path in sorted(entries):
         entry = entries[path]
-        digest.update(f"{path}\0{entry.type}\0{entry.size}\0{entry.mode}\0{entry.sha256 or '-'}\n".encode("utf-8"))
+        digest.update(f"{path}\0{entry.type}\0{entry.size}\0{entry.mode}\0{entry.sha256 or '-'}\n".encode())
     return "sha256:" + digest.hexdigest()
 
 
@@ -313,7 +313,7 @@ class WorkspaceObserver:
         return Snapshot(
             snapshot_id="snap_" + uuid.uuid4().hex[:12],
             root=str(root),
-            created_at=datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
+            created_at=datetime.now(UTC).isoformat(timespec="milliseconds"),
             scope=self.scope.public_dict(),
             entries=entries,
             root_hash=_root_hash(entries),
@@ -407,7 +407,7 @@ class WorkspaceObserver:
         return results
 
     # -- internals -------------------------------------------------------- #
-    def _rel(self, path: str) -> Optional[str]:
+    def _rel(self, path: str) -> str | None:
         # Lexical containment only: resolving here would FOLLOW symlinks and
         # silently drop legitimate in-jail symlink entries from the snapshot.
         try:
@@ -449,6 +449,6 @@ class WorkspaceObserver:
         sha, note = _digest_file(full, self.scope.max_file_bytes, budget)
         return FileEntry(path=rel, type="file", size=size, mode=mode, sha256=sha, note=note)
 
-    def _hash_now(self, path: Path) -> Optional[str]:
+    def _hash_now(self, path: Path) -> str | None:
         sha, _ = _digest_file(path, self.scope.max_file_bytes, [self.scope.max_bytes])
         return sha

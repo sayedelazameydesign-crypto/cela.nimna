@@ -5,7 +5,7 @@ import math
 import statistics
 from collections import Counter, defaultdict
 from datetime import datetime
-from typing import Any, Literal, Optional
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -15,7 +15,7 @@ MISSING = {"", "na", "n/a", "nan", "null", "none", "-", "--", "?"}
 DATE_FORMATS = ("%Y-%m-%d", "%Y/%m/%d", "%d/%m/%Y", "%m/%d/%Y", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S")
 
 
-def _to_number(value: str) -> Optional[float]:
+def _to_number(value: str) -> float | None:
     text = value.strip().replace(",", "")
     if text.endswith("%"):
         text = text[:-1]
@@ -36,7 +36,7 @@ def _is_date(value: str) -> bool:
     return False
 
 
-def _load_table(ctx: ToolContext, path: str, delimiter: Optional[str], max_rows: int = 200_000):
+def _load_table(ctx: ToolContext, path: str, delimiter: str | None, max_rows: int = 200_000):
     target = ctx.resolve_path(path, must_exist=True)
     if not target.is_file():
         raise ToolError(f"'{path}' is not a file")
@@ -123,18 +123,18 @@ def _describe(values: list[float]) -> dict[str, Any]:
 class ReadCsvParams(BaseModel):
     path: str = Field(..., description="CSV file inside the workspace.")
     max_rows: int = Field(10, ge=1, le=200, description="Sample rows to return.")
-    delimiter: Optional[str] = Field(None, description="Delimiter; auto-detected when omitted.")
+    delimiter: str | None = Field(None, description="Delimiter; auto-detected when omitted.")
 
 
 class StatisticsParams(BaseModel):
     path: str = Field(..., description="CSV file inside the workspace.")
-    columns: Optional[list[str]] = Field(None, description="Numeric columns to analyse (default: all numeric).")
-    group_by: Optional[str] = Field(None, description="Optional categorical column to aggregate by.")
+    columns: list[str] | None = Field(None, description="Numeric columns to analyse (default: all numeric).")
+    group_by: str | None = Field(None, description="Optional categorical column to aggregate by.")
     aggregate: Literal["sum", "mean", "count", "min", "max"] = Field(
         "sum", description="Aggregation used when group_by is set."
     )
     top_n: int = Field(20, ge=1, le=200, description="Max groups to return (sorted by aggregate desc).")
-    delimiter: Optional[str] = Field(None, description="Delimiter; auto-detected when omitted.")
+    delimiter: str | None = Field(None, description="Delimiter; auto-detected when omitted.")
 
 
 class ChartParams(BaseModel):
@@ -144,7 +144,7 @@ class ChartParams(BaseModel):
     kind: Literal["bar", "line", "pie"] = "bar"
     aggregate: Literal["sum", "mean", "count"] = "sum"
     output: str = Field("reports/chart.png", description="Output PNG path inside the workspace.")
-    title: Optional[str] = None
+    title: str | None = None
     top_n: int = Field(15, ge=1, le=100)
 
 

@@ -27,8 +27,9 @@ requires either extending that list or budgeting the model explicitly.
 from __future__ import annotations
 
 import math
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Mapping, Optional
+from typing import Any
 
 from ..config import DEFAULT_GEMINI_FREE_TIER_MODELS
 
@@ -70,8 +71,8 @@ class CostProfile:
     from an accidental missing price.
     """
 
-    input_usd_per_1k: Optional[float] = None
-    output_usd_per_1k: Optional[float] = None
+    input_usd_per_1k: float | None = None
+    output_usd_per_1k: float | None = None
     known: bool = False
     free_tier: bool = False
 
@@ -84,7 +85,7 @@ class CostProfile:
     def zero_cost(self) -> bool:
         return self.known and (self.input_usd_per_1k or 0.0) == 0.0 and (self.output_usd_per_1k or 0.0) == 0.0
 
-    def estimate(self, input_tokens: int, output_tokens: int) -> Optional[float]:
+    def estimate(self, input_tokens: int, output_tokens: int) -> float | None:
         if not self.known or self.input_usd_per_1k is None or self.output_usd_per_1k is None:
             return None
         return (max(0, input_tokens) / 1000.0) * self.input_usd_per_1k + (
@@ -175,7 +176,7 @@ class ModelSelection:
 class ModelRegistry:
     """Small in-process registry; a persistent registry can implement this contract later."""
 
-    def __init__(self, profiles: Optional[Iterable[ModelProfile]] = None):
+    def __init__(self, profiles: Iterable[ModelProfile] | None = None):
         self._profiles: dict[str, ModelProfile] = {}
         for profile in profiles or ():
             self.register(profile)
@@ -186,7 +187,7 @@ class ModelRegistry:
         self._profiles[profile.id] = profile
         return profile
 
-    def get(self, model_id: str) -> Optional[ModelProfile]:
+    def get(self, model_id: str) -> ModelProfile | None:
         return self._profiles.get(model_id)
 
     def list(self) -> list[ModelProfile]:
@@ -196,8 +197,8 @@ class ModelRegistry:
         self,
         requirements: ModelRequirements,
         *,
-        max_cost_usd: Optional[float] = None,
-        preferred_provider: Optional[str] = None,
+        max_cost_usd: float | None = None,
+        preferred_provider: str | None = None,
     ) -> ModelSelection:
         required = requirements.required_capabilities()
         candidates = [
@@ -231,7 +232,7 @@ class ModelRegistry:
         return [profile.to_dict() for profile in self._profiles.values()]
 
     @classmethod
-    def for_settings(cls, settings: Any, provider: Optional[Mapping[str, Any]] = None) -> "ModelRegistry":
+    def for_settings(cls, settings: Any, provider: Mapping[str, Any] | None = None) -> ModelRegistry:
         """Build the active entry from settings.
 
         Additional providers can register profiles without changing the Agent
@@ -309,7 +310,7 @@ class CostGuard:
         self.blocked_count = 0
 
     @classmethod
-    def from_settings(cls, settings: Any, provider: Optional[Mapping[str, Any]] = None) -> "CostGuard":
+    def from_settings(cls, settings: Any, provider: Mapping[str, Any] | None = None) -> CostGuard:
         """Build the guard from runtime settings and refuse a guard that blocks everything.
 
         Raises :class:`CostPolicyError` (boot refusal) — see :meth:`assert_boot_policy`.
@@ -327,7 +328,7 @@ class CostGuard:
         guard.assert_boot_policy()
         return guard
 
-    def boot_policy_violation(self) -> Optional[str]:
+    def boot_policy_violation(self) -> str | None:
         """Why this guard could never authorize a request — or ``None`` if it can.
 
         Pure (no counters touched).  Mirrors :meth:`authorize` for the smallest
@@ -409,7 +410,7 @@ class CostGuard:
         self.request_count += 1
         return BudgetReservation(estimate, output_tokens)
 
-    def settle(self, reservation: BudgetReservation, usage: Optional[Mapping[str, Any]] = None) -> float:
+    def settle(self, reservation: BudgetReservation, usage: Mapping[str, Any] | None = None) -> float:
         """Release a reservation and record actual usage when prices are known."""
         self._reserved_usd = max(0.0, self._reserved_usd - reservation.estimate_usd)
         actual = reservation.estimate_usd

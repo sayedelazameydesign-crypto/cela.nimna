@@ -10,8 +10,9 @@ import hashlib
 import platform
 import subprocess
 import sys
+from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Optional
+from typing import Any
 
 from .hashchain import sha256_hex
 
@@ -20,7 +21,7 @@ _EXCLUDED_DIRS = {".git", ".pytest_cache", "__pycache__", ".venv", "node_modules
 _EXCLUDED_NAMES = {".env", ".env.local", ".env.production"}
 
 
-def _git_commit(root: Path) -> Optional[str]:
+def _git_commit(root: Path) -> str | None:
     try:
         result = subprocess.run(
             ["git", "-C", str(root), "rev-parse", "HEAD"],
@@ -35,7 +36,7 @@ def _git_commit(root: Path) -> Optional[str]:
         return None
 
 
-def _file_digest(path: Path) -> Optional[str]:
+def _file_digest(path: Path) -> str | None:
     try:
         if not path.is_file() or path.stat().st_size > _MAX_FILE_BYTES:
             return None
@@ -87,9 +88,9 @@ def _safe_settings(settings: Any) -> dict[str, Any]:
 def build_manifest(
     *,
     settings: Any = None,
-    provider: Optional[Mapping[str, Any]] = None,
-    skills: Optional[Iterable[Any]] = None,
-    tools: Optional[Iterable[Any]] = None,
+    provider: Mapping[str, Any] | None = None,
+    skills: Iterable[Any] | None = None,
+    tools: Iterable[Any] | None = None,
     root: Path | str = ".",
 ) -> dict[str, Any]:
     root_path = Path(root).resolve()

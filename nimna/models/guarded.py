@@ -7,7 +7,7 @@ integrations that inspect a provider's call history.
 """
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from ..providers.base import Message, ModelProvider, ModelResponse, ToolSpec
 from .registry import BudgetReservation, CostGuard
@@ -34,10 +34,10 @@ class GovernedModelProvider(ModelProvider):
     def generate(
         self,
         messages: list[Message],
-        tools: Optional[list[ToolSpec]] = None,
+        tools: list[ToolSpec] | None = None,
         *,
-        temperature: Optional[float] = None,
-        max_tokens: Optional[int] = None,
+        temperature: float | None = None,
+        max_tokens: int | None = None,
     ) -> ModelResponse:
         reservation: BudgetReservation = self.guard.authorize(messages, max_tokens or 0)
         try:

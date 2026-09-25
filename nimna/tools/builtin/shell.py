@@ -53,15 +53,14 @@ import shlex
 import signal
 import subprocess
 import time
-import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field
 
-from ...execution.observation import FilesystemDelta, WorkspaceObserver
-from ..base import Risk, ToolContext, ToolRegistry
+from ...execution.observation import WorkspaceObserver
+from ..base import ToolContext, ToolRegistry
 
 TOOL_NAME = "run_command"
 ENV_FLAG = "SHELL_TOOL_ENABLED"
@@ -108,7 +107,7 @@ class ShellResult(BaseModel):
     status: ShellStatus
     stdout: str = ""
     stderr: str = ""
-    exit_code: Optional[int] = None
+    exit_code: int | None = None
     duration_ms: int = 0
     timed_out: bool = False
     filesystem_delta: list[dict[str, Any]] = Field(default_factory=list)
@@ -245,7 +244,7 @@ def classify_command(command: str) -> CommandClassification:
         if token in {"|", ">", ">>", "<", "2>", "2>&1", "&>", "&&", "||"}:
             continue
         if _path_is_escape(token):
-            classification.add("shell.escape", f"outside-workspace path signal")
+            classification.add("shell.escape", "outside-workspace path signal")
             break
 
     # command substitution writing outside (defensive signal)
@@ -272,7 +271,7 @@ def shlex_split_safe(command: str) -> list[str]:
 # --------------------------------------------------------------------------- #
 # Executor — the ordered pipeline
 # --------------------------------------------------------------------------- #
-def _audit(memory: Any, session_id: Optional[str], run_id: Optional[str],
+def _audit(memory: Any, session_id: str | None, run_id: str | None,
            event: str, payload: dict[str, Any]) -> None:
     if memory is None:
         return
@@ -327,7 +326,7 @@ def _resolve_cwd(workspace_root: Path, rel: str) -> Path:
 
 
 def _spawn(command: str, cwd: Path, env: dict[str, str], stdin_text: str,
-           timeout_s: float, memory_mb: int) -> tuple[bytes, bytes, Optional[int], bool, int]:
+           timeout_s: float, memory_mb: int) -> tuple[bytes, bytes, int | None, bool, int]:
     """Run under /bin/sh -c with a new process group; kill the group on timeout."""
     from ..sandbox import _make_limiter  # reuse the exact POSIX rlimits of the python sandbox
 
@@ -361,8 +360,8 @@ def _spawn(command: str, cwd: Path, env: dict[str, str], stdin_text: str,
 
 def execute_shell(request: ShellRequest, *, settings: Any, workspace_root: Path,
                   explicit_consent: bool = False,
-                  memory: Any = None, session_id: Optional[str] = None,
-                  run_id: Optional[str] = None) -> ShellResult:
+                  memory: Any = None, session_id: str | None = None,
+                  run_id: str | None = None) -> ShellResult:
     """Full P1-T1 pipeline. Every deny happens BEFORE execution; everything is audited."""
     command_hash = "sha256:" + hashlib.sha256(request.command.strip().encode("utf-8")).hexdigest()
 
@@ -415,7 +414,7 @@ def execute_shell(request: ShellRequest, *, settings: Any, workspace_root: Path,
     max_out = int(getattr(settings, "shell_max_output_bytes", MAX_OUTPUT_BYTES) or MAX_OUTPUT_BYTES)
     observer = WorkspaceObserver(workspace_root)   # default scope: the workspace jail only
     before = observer.snapshot()
-    started_at = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+    started_at = datetime.now(UTC).isoformat(timespec="milliseconds")
     try:
         out_bytes, err_bytes, exit_code, timed_out, duration_ms = _spawn(
             request.command, cwd_path, env, request.stdin, timeout_s,

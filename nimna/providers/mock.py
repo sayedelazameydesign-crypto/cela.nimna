@@ -7,26 +7,27 @@
   exercised end-to-end without any network access.
 """
 import re
-from typing import Any, Callable, Optional, Union
+from collections.abc import Callable
+from typing import Any, Union
 
 from .base import Message, ModelProvider, ModelResponse, ToolSpec
 
-Scripted = Union[ModelResponse, str, Callable[[list[Message], Optional[list[ToolSpec]]], Any]]
+Scripted = Union[ModelResponse, str, Callable[[list[Message], list[ToolSpec] | None], Any]]
 
 
 class MockProvider(ModelProvider):
     name = "mock"
     model = "mock"
 
-    def __init__(self, responses: Optional[list[Scripted]] = None):
+    def __init__(self, responses: list[Scripted] | None = None):
         self._responses: list[Scripted] = list(responses or [])
         self.calls: list[dict[str, Any]] = []
 
     def queue(self, *responses: Scripted) -> None:
         self._responses.extend(responses)
 
-    def generate(self, messages: list[Message], tools: Optional[list[ToolSpec]] = None, *,
-                 temperature: Optional[float] = None, max_tokens: Optional[int] = None) -> ModelResponse:
+    def generate(self, messages: list[Message], tools: list[ToolSpec] | None = None, *,
+                 temperature: float | None = None, max_tokens: int | None = None) -> ModelResponse:
         self.calls.append({"messages": [m.model_copy() for m in messages], "tools": list(tools or [])})
         if self._responses:
             item = self._responses.pop(0)
@@ -40,7 +41,7 @@ class MockProvider(ModelProvider):
         return self._default_answer(messages, tools)
 
     @staticmethod
-    def _default_answer(messages: list[Message], tools: Optional[list[ToolSpec]]) -> ModelResponse:
+    def _default_answer(messages: list[Message], tools: list[ToolSpec] | None) -> ModelResponse:
         system = next((m.content for m in messages if m.role == "system"), "")
         skills = re.findall(r"^### Skill: (.+)$", system, flags=re.MULTILINE)
         last_user = next((m.content for m in reversed(messages) if m.role == "user"), "")

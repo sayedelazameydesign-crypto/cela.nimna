@@ -6,7 +6,7 @@ model name change.  Implemented with ``httpx`` to avoid a heavy SDK.
 """
 import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 
@@ -41,8 +41,8 @@ class OpenAICompatibleProvider(ModelProvider):
     name = "openai"
 
     def __init__(self, api_key: str, base_url: str, model: str, *, temperature: float = 0.2,
-                 timeout: float = 120.0, extra_headers: Optional[dict[str, str]] = None,
-                 extra_body: Optional[dict[str, Any]] = None):
+                 timeout: float = 120.0, extra_headers: dict[str, str] | None = None,
+                 extra_body: dict[str, Any] | None = None):
         if not base_url:
             raise ProviderError("OPENAI_BASE_URL is not set")
         headers = {"Content-Type": "application/json"}
@@ -94,8 +94,8 @@ class OpenAICompatibleProvider(ModelProvider):
         return {"role": msg.role, "content": msg.content}
 
     # -- main call -------------------------------------------------------
-    def generate(self, messages: list[Message], tools: Optional[list[ToolSpec]] = None, *,
-                 temperature: Optional[float] = None, max_tokens: Optional[int] = None) -> ModelResponse:
+    def generate(self, messages: list[Message], tools: list[ToolSpec] | None = None, *,
+                 temperature: float | None = None, max_tokens: int | None = None) -> ModelResponse:
         payload: dict[str, Any] = {
             "model": self.model,
             "messages": [self._to_wire(m) for m in messages],

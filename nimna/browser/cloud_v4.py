@@ -12,13 +12,13 @@ from __future__ import annotations
 
 import os
 import time
+from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Iterator, Mapping, Optional
+from typing import Any
 from urllib.parse import quote
 
 import httpx
-
 
 VALID_REASONING_EFFORTS = frozenset({"low", "medium", "high", "xhigh", "max"})
 TERMINAL_RUN_STATUSES = frozenset({"completed", "complete", "succeeded", "success", "failed", "error", "cancelled", "canceled", "stopped"})
@@ -27,14 +27,14 @@ TERMINAL_RUN_STATUSES = frozenset({"completed", "complete", "succeeded", "succes
 class BrowserUseError(RuntimeError):
     """Cloud API error with a safe message (never includes the API key)."""
 
-    def __init__(self, message: str, *, status_code: Optional[int] = None, response: Any = None):
+    def __init__(self, message: str, *, status_code: int | None = None, response: Any = None):
         super().__init__(message)
         self.status_code = status_code
         self.response = response
 
 
 class BrowserUseRateLimitError(BrowserUseError):
-    def __init__(self, message: str, *, retry_after_seconds: float = 0.0, status_code: Optional[int] = 429):
+    def __init__(self, message: str, *, retry_after_seconds: float = 0.0, status_code: int | None = 429):
         super().__init__(message, status_code=status_code)
         self.retry_after_seconds = max(0.0, float(retry_after_seconds))
 
@@ -42,7 +42,7 @@ class BrowserUseRateLimitError(BrowserUseError):
 @dataclass(frozen=True)
 class BrowserSession:
     id: str
-    cdp_url: Optional[str] = None
+    cdp_url: str | None = None
     raw: Mapping[str, Any] | None = None
 
 
@@ -59,10 +59,10 @@ class _FiveSecondLimiter:
 
     def __init__(self, window_seconds: float = 5.0):
         self.window_seconds = window_seconds
-        self.limit: Optional[int] = None
+        self.limit: int | None = None
         self._timestamps: list[float] = []
 
-    def update(self, value: Optional[str]) -> None:
+    def update(self, value: str | None) -> None:
         try:
             parsed = int(value or "")
             if parsed > 0:
@@ -89,13 +89,13 @@ class BrowserUseV4Client:
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         *,
         base_url: str = "https://api.browser-use.com",
         timeout: float = 60.0,
         poll_interval: float = 2.0,
-        transport: Optional[httpx.BaseTransport] = None,
-        http_client: Optional[httpx.Client] = None,
+        transport: httpx.BaseTransport | None = None,
+        http_client: httpx.Client | None = None,
     ):
         self.api_key = (api_key or os.getenv("BROWSER_USE_API_KEY") or "").strip()
         if not self.api_key:
@@ -128,7 +128,7 @@ class BrowserUseV4Client:
         if self._owns_client:
             self.client.close()
 
-    def __enter__(self) -> "BrowserUseV4Client":
+    def __enter__(self) -> BrowserUseV4Client:
         return self
 
     def __exit__(self, *_: Any) -> None:
@@ -150,7 +150,7 @@ class BrowserUseV4Client:
                     continue
         return 0.0
 
-    def _request(self, method: str, path: str, *, json_body: Optional[dict[str, Any]] = None) -> Any:
+    def _request(self, method: str, path: str, *, json_body: dict[str, Any] | None = None) -> Any:
         self._limiter.wait_if_needed()
         try:
             response = self.client.request(method, path, json=json_body)
@@ -209,7 +209,7 @@ class BrowserUseV4Client:
         )
 
     @staticmethod
-    def _validate_reasoning(model: Optional[str], reasoning_effort: Optional[str]) -> None:
+    def _validate_reasoning(model: str | None, reasoning_effort: str | None) -> None:
         if not reasoning_effort:
             return
         if model and model.lower().replace(" ", "-") in {"gpt-6-astra", "gpt-6-astra-preview"}:
@@ -222,8 +222,8 @@ class BrowserUseV4Client:
         self,
         task: str,
         *,
-        model: Optional[str] = None,
-        reasoning_effort: Optional[str] = None,
+        model: str | None = None,
+        reasoning_effort: str | None = None,
         **run_options: Any,
     ) -> BrowserRun:
         if not task or not task.strip():
@@ -246,7 +246,7 @@ class BrowserUseV4Client:
             raise BrowserUseError("Browser Use returned an invalid run status response")
         return BrowserRun(str(data.get("id") or run_id), str(data.get("status", "unknown")), data.get("result"), data)
 
-    def wait_for_completion(self, run_id: str, *, timeout: Optional[float] = None) -> BrowserRun:
+    def wait_for_completion(self, run_id: str, *, timeout: float | None = None) -> BrowserRun:
         deadline = time.monotonic() + (self.timeout if timeout is None else max(0.0, timeout))
         while True:
             if time.monotonic() >= deadline:
@@ -273,7 +273,7 @@ class BrowserUseV4Client:
                 )
             time.sleep(min(self.poll_interval, remaining))
 
-    def run_agent_task(self, task: str, *, timeout: Optional[float] = None, **options: Any) -> dict[str, Any]:
+    def run_agent_task(self, task: str, *, timeout: float | None = None, **options: Any) -> dict[str, Any]:
         run = self.create_run(task, **options)
         completed = self.wait_for_completion(run.id, timeout=timeout)
         return {

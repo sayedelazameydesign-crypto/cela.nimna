@@ -7,7 +7,6 @@
 import json
 import logging
 import re
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -47,7 +46,7 @@ class SkillSelection(BaseModel):
     source: str = "llm"  # llm | keywords | none
 
 
-def extract_json(text: str) -> Optional[dict]:
+def extract_json(text: str) -> dict | None:
     """Tolerant JSON extraction (handles ```json fences and surrounding prose)."""
     if not text:
         return None
@@ -77,7 +76,7 @@ class SkillSelector:
         self.max_skills = max_skills
         self.use_llm = use_llm
 
-    def select(self, request: str, history: Optional[list[Message]] = None) -> SkillSelection:
+    def select(self, request: str, history: list[Message] | None = None) -> SkillSelection:
         if len(self.skills) == 0:
             return SkillSelection(source="none", reason="no skills installed")
 

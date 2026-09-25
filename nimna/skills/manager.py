@@ -4,7 +4,6 @@ from __future__ import annotations
 import logging
 import re
 from pathlib import Path
-from typing import Optional
 
 from .loader import SkillParseError, parse_skill_file
 from .models import Skill, SkillMeta
@@ -78,7 +77,7 @@ class SkillManager:
         except KeyError:
             raise KeyError(f"unknown skill '{name}'. Available: {', '.join(self.names()) or 'none'}")
 
-    def find(self, name: str) -> Optional[Skill]:
+    def find(self, name: str) -> Skill | None:
         return self._skills.get(name)
 
     def catalog_text(self) -> str:
@@ -125,7 +124,7 @@ class SkillManager:
             text = text[:max_chars] + f"\n\n[... truncated, {len(text) - max_chars} more characters]"
         return text
 
-    def validate_all(self, registry_names: Optional[set[str]] = None) -> dict[str, list[str]]:
+    def validate_all(self, registry_names: set[str] | None = None) -> dict[str, list[str]]:
         """Return {skill_name: [warnings]} for every discovered skill.
 
         When ``registry_names`` is supplied, unknown ``allowed_tools`` are flagged.

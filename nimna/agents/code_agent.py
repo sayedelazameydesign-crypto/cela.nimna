@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import logging
-from ..providers.base import Message
 
+from ..providers.base import Message
 from .base import BaseSwarmAgent
 
 log = logging.getLogger(__name__)

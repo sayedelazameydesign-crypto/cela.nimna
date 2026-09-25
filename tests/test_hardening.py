@@ -1,16 +1,13 @@
 """Hardening tests from the review checklist (§6)."""
 import json
-import os
-import socket
 from pathlib import Path
 
 import pytest
 
 from nimna.core.state import RunStatus
-from nimna.providers.base import Message, ModelResponse, ToolCall
+from nimna.providers.base import ModelResponse, ToolCall
 from nimna.tools import ToolContext, ToolError
 from nimna.tools.builtin.web import _assert_public_url
-
 
 # -- filesystem jail -------------------------------------------------------
 
@@ -229,7 +226,8 @@ def test_skill_unknown_tools_are_warned(settings, skills):
     # csv_analysis lists only known tools, so no unknown warning
     assert "unknown tools" not in " ".join(report["csv_analysis"]).lower()
     # inject a bogus skill
-    import tempfile, textwrap
+    import tempfile
+    import textwrap
     with tempfile.TemporaryDirectory() as td:
         d = Path(td) / "evil"
         d.mkdir()
@@ -262,8 +260,8 @@ def test_secret_is_redacted_from_audit_log(workspace, settings, skills):
     assert "REDACTED" in dumped or "***" in dumped
 
 def test_tool_result_redacts_secrets(workspace, settings, skills):
-    from nimna.tools import default_registry
     from nimna.memory import MemoryStore
+    from nimna.tools import default_registry
     reg = default_registry()
     ctx = ToolContext(settings=settings, workspace=workspace, session_id="s", memory=MemoryStore(":memory:"), skills=skills)
     out, ok, _ = reg.execute("write_file", {"path": "out.txt", "content": "hello"}, ctx)

@@ -1,5 +1,5 @@
 """Long-term memory tools (SQLite backed)."""
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -15,7 +15,7 @@ class MemorySaveParams(BaseModel):
 class MemorySearchParams(BaseModel):
     query: str = Field(..., min_length=1, description="Keywords to look for.")
     limit: int = Field(5, ge=1, le=20)
-    kind: Optional[Literal["note", "preference", "result"]] = None
+    kind: Literal["note", "preference", "result"] | None = None
 
 
 def register(registry: ToolRegistry) -> None:

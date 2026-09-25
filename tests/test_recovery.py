@@ -12,7 +12,7 @@ authorization expired ⇒ no execution · kill-switch stops recovery.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -173,7 +173,7 @@ def test_authorization_revoked_or_expired_blocks_execution(ws: Path):
     assert outcome.action is RecoveryAction.REFUSED and "revoked" in outcome.reason
 
     manager.register("m2")
-    past = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+    past = (datetime.now(UTC) - timedelta(minutes=5)).isoformat()
     manager.checkpoint("m2", step_id="step-1", observation_fingerprint=fp(ws),
                        evidence_head=EVIDENCE_A,
                        authorization_state={"granted": True, "expires_at": past})

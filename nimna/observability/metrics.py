@@ -1,8 +1,9 @@
 """Dependency-free run metrics derived from canonical audit events."""
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 
 @dataclass

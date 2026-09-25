@@ -13,21 +13,20 @@ Self-Healing is implemented at CodeAgent level (override after_tool_error).
 """
 from __future__ import annotations
 
-import time
 import logging
-from typing import Any, Optional
+import time
+from typing import Any
 
 from ..config import Settings
-from ..core.state import RunState
-from ..providers.base import Message, ModelProvider
 from ..memory.store import MemoryStore
-from ..tools.base import ToolRegistry, ToolContext
+from ..providers.base import Message, ModelProvider
+from ..tools.base import ToolContext, ToolRegistry
 
 log = logging.getLogger(__name__)
 
 
 class SwarmResult:
-    def __init__(self, agent: str, task: str, ok: bool, output: str, tool_calls: list[dict], usage: dict, error: Optional[str] = None):
+    def __init__(self, agent: str, task: str, ok: bool, output: str, tool_calls: list[dict], usage: dict, error: str | None = None):
         self.agent = agent
         self.task = task
         self.ok = ok
@@ -87,7 +86,7 @@ class BaseSwarmAgent:
             on_skill_loaded=lambda x: None,
         )
 
-    def _system_message(self, task: str, context: Optional[dict] = None) -> str:
+    def _system_message(self, task: str, context: dict | None = None) -> str:
         ctx = ""
         if context and context.get("shared_results"):
             ctx = "\n\n## Shared context from sibling agents\n" + "\n".join(
@@ -96,7 +95,7 @@ class BaseSwarmAgent:
         # inject vector memory hint (self-healing context) if available
         return f"{self.system_prompt}\n\nTask: {task}\n{ctx}\n\nConstraints: Use only tools {', '.join(self.allowed_tools) or 'none'}. Answer in the language of the task (Arabic if Arabic). Be concise but cite tool outputs."
 
-    def run(self, task: str, session_id: Optional[str] = None, context: Optional[dict] = None) -> SwarmResult:
+    def run(self, task: str, session_id: str | None = None, context: dict | None = None) -> SwarmResult:
         """Synchronous bounded loop — called via to_thread for parallelism."""
         import uuid
 
@@ -202,11 +201,11 @@ class BaseSwarmAgent:
         return res
 
     # hook for self-healing (CodeAgent overrides)
-    def _on_tool_error(self, task: str, call: Any, result: str, messages: list[Message], context: Optional[dict]) -> bool:
+    def _on_tool_error(self, task: str, call: Any, result: str, messages: list[Message], context: dict | None) -> bool:
         return False
 
     # async wrapper
-    async def arun(self, task: str, session_id: Optional[str] = None, context: Optional[dict] = None) -> SwarmResult:
+    async def arun(self, task: str, session_id: str | None = None, context: dict | None = None) -> SwarmResult:
         import asyncio
 
         # Use get_running_loop().run_in_executor to avoid blocking

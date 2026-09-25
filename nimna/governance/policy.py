@@ -6,9 +6,9 @@ blueprint without weakening the existing approval gate.
 """
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Iterable, Optional
 
 
 class ToolRisk(str, Enum):
@@ -54,7 +54,7 @@ class PolicyEngine:
         *,
         tool_name: str,
         declared_risk: str = "safe",
-        allowed_tools: Optional[Iterable[str]] = None,
+        allowed_tools: Iterable[str] | None = None,
         contains_secret: bool = False,
         explicit_consent: bool = False,
     ) -> PolicyResult:

@@ -1,7 +1,8 @@
 """Approval policies for tools with risk == "confirm"."""
 import json
 import sys
-from typing import Callable, Protocol
+from collections.abc import Callable
+from typing import Protocol
 
 from ..providers.base import ToolCall
 from ..tools.base import Tool

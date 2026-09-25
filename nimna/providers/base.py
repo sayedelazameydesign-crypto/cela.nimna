@@ -9,7 +9,8 @@ import logging
 import time
 import uuid
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Literal, Optional, TypeVar
+from collections.abc import Callable
+from typing import Any, Literal, TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -33,11 +34,11 @@ class Message(BaseModel):
     content: str = ""
     tool_calls: list[ToolCall] = Field(default_factory=list)
     # for role == "tool"
-    tool_call_id: Optional[str] = None
-    name: Optional[str] = None
+    tool_call_id: str | None = None
+    name: str | None = None
     # provider specific payload for faithful replay (e.g. Gemini `Content`
     # including thought signatures). JSON serialisable.
-    raw: Optional[dict[str, Any]] = None
+    raw: dict[str, Any] | None = None
     # Vision gateway — base64 images attached to this turn (Gemini/OpenAI multimodal).
     # Each entry: {"data": "<base64>", "mime_type": "image/png"}
     images: list[dict[str, str]] = Field(default_factory=list)
@@ -55,8 +56,8 @@ class Message(BaseModel):
         return cls(role="user", content=content, images=[{"data": image_b64, "mime_type": mime_type}])
 
     @classmethod
-    def assistant(cls, content: str = "", tool_calls: Optional[list[ToolCall]] = None,
-                  raw: Optional[dict[str, Any]] = None) -> "Message":
+    def assistant(cls, content: str = "", tool_calls: list[ToolCall] | None = None,
+                  raw: dict[str, Any] | None = None) -> "Message":
         return cls(role="assistant", content=content, tool_calls=tool_calls or [], raw=raw)
 
     @classmethod
@@ -77,9 +78,9 @@ class ToolSpec(BaseModel):
 class ModelResponse(BaseModel):
     text: str = ""
     tool_calls: list[ToolCall] = Field(default_factory=list)
-    raw: Optional[dict[str, Any]] = None
+    raw: dict[str, Any] | None = None
     usage: dict[str, int] = Field(default_factory=dict)
-    finish_reason: Optional[str] = None
+    finish_reason: str | None = None
 
     @property
     def has_tool_calls(self) -> bool:
@@ -92,14 +93,14 @@ class ModelResponse(BaseModel):
 class ProviderError(Exception):
     """Base error for provider failures."""
 
-    def __init__(self, message: str, *, retryable: bool = False, status: Optional[int] = None):
+    def __init__(self, message: str, *, retryable: bool = False, status: int | None = None):
         super().__init__(message)
         self.retryable = retryable
         self.status = status
 
 
 class RateLimitError(ProviderError):
-    def __init__(self, message: str = "rate limited", status: Optional[int] = 429):
+    def __init__(self, message: str = "rate limited", status: int | None = 429):
         super().__init__(message, retryable=True, status=status)
 
 
@@ -113,7 +114,7 @@ def with_retries(fn: Callable[[], T], *, attempts: int = 3, base_delay: float = 
     Free tiers rate-limit aggressively, so exponential back-off is essential.
     """
     delay = base_delay
-    last: Optional[Exception] = None
+    last: Exception | None = None
     for attempt in range(1, attempts + 1):
         try:
             return fn()
@@ -135,8 +136,8 @@ class ModelProvider(ABC):
     model: str = ""
 
     @abstractmethod
-    def generate(self, messages: list[Message], tools: Optional[list[ToolSpec]] = None, *,
-                 temperature: Optional[float] = None, max_tokens: Optional[int] = None) -> ModelResponse:
+    def generate(self, messages: list[Message], tools: list[ToolSpec] | None = None, *,
+                 temperature: float | None = None, max_tokens: int | None = None) -> ModelResponse:
         """Run one model turn. ``messages`` may start with a system message."""
 
     def describe(self) -> dict[str, Any]:

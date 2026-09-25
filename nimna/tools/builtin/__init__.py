@@ -1,6 +1,19 @@
 """Built-in tool packs. Each module exposes ``register(registry)``."""
 from ..base import ToolRegistry
-from . import browser_use, computer, csv_tools, edit, files, memory_tools, python_exec, reports, shell, skill_tools, vector_tools, web
+from . import (
+    browser_use,
+    computer,
+    csv_tools,
+    edit,
+    files,
+    memory_tools,
+    python_exec,
+    reports,
+    shell,
+    skill_tools,
+    vector_tools,
+    web,
+)
 
 PACKS = {
     "edit": edit,  # T8 — precise file edit (Fabric-first)

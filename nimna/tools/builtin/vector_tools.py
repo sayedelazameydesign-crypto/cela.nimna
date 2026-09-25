@@ -9,7 +9,6 @@ Contract: collection ∈ {user_context, execution_history, code_knowledge}
 - execution_history: سجلات Shell للـ Self-Healing (الأخطاء + الحلول)
 - code_knowledge: snippets والحلول الشائعة
 """
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -22,12 +21,12 @@ class VectorSaveParams(BaseModel):
     collection: str = Field(..., description="user_context | execution_history | code_knowledge")
     text: str = Field(..., min_length=3, max_length=8000, description="النص المراد حفظه دلالياً")
     tags: list[str] = Field(default_factory=list, description="وسوم للتصفية لاحقاً")
-    metadata: Optional[dict] = Field(None, description="بيانات إضافية (اختياري)")
+    metadata: dict | None = Field(None, description="بيانات إضافية (اختياري)")
 
 
 class VectorSearchParams(BaseModel):
     query: str = Field(..., min_length=1, max_length=2000, description="استعلام دلالي")
-    collections: Optional[list[str]] = Field(None, description="قائمة collections للبحث (افتراضياً الكل)")
+    collections: list[str] | None = Field(None, description="قائمة collections للبحث (افتراضياً الكل)")
     limit: int = Field(5, ge=1, le=20)
 
 

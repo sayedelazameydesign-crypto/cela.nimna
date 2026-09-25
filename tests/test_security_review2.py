@@ -1,16 +1,14 @@
 """Second-review hardening tests (docker socket, rebinding, scoping)."""
-import os
+import ipaddress
 import pathlib
-import re
 import socket
 from pathlib import Path
 
 import pytest
 
-from nimna.tools.builtin.web import _assert_public_url, _is_blocked_ip
 from nimna.tools import ToolContext, ToolError
 from nimna.tools.base import _redact_string
-import ipaddress
+from nimna.tools.builtin.web import _assert_public_url, _is_blocked_ip
 
 
 def test_docker_socket_is_not_required_by_default():
@@ -79,8 +77,8 @@ def test_dns_rebinding_is_blocked(monkeypatch):
 def test_permanent_approval_is_scope_bound(agent, provider, workspace, settings):
     # agent has two skills that both allow write_file: python_executor and skill_author
     # Ensure ALWAYS is scoped to skill set+version
-    from nimna.providers.base import ModelResponse, ToolCall
     from nimna.core.state import RunStatus
+    from nimna.providers.base import ModelResponse, ToolCall
     # Prepare agent with two skills
     settings.sandbox_backend = "subprocess"  # make run_python confirm, but we test write_file
     # Use file_analysis + skill_author both allow write_file? Check: skill_author allows write_file, file_analysis does not
@@ -125,8 +123,8 @@ def test_permanent_approval_is_scope_bound(agent, provider, workspace, settings)
 
 
 def test_resume_cannot_mutate_approved_call(agent, provider, workspace):
-    from nimna.providers.base import ModelResponse, ToolCall
     from nimna.core.state import RunStatus
+    from nimna.providers.base import ModelResponse, ToolCall
     agent.skills.get("file_analysis").meta.allowed_tools.append("delete_file")
     (workspace / "victim.txt").write_text("x", encoding="utf-8")
     (workspace / "other.txt").write_text("y", encoding="utf-8")
@@ -148,7 +146,6 @@ def test_resume_cannot_mutate_approved_call(agent, provider, workspace):
 
 def test_duplicate_resume_is_rejected(agent, provider, workspace):
     from nimna.providers.base import ModelResponse, ToolCall
-    from nimna.core.state import RunStatus
     agent.skills.get("file_analysis").meta.allowed_tools.append("delete_file")
     (workspace / "dup.txt").write_text("z", encoding="utf-8")
     provider.queue(
@@ -168,9 +165,9 @@ def test_duplicate_resume_is_rejected(agent, provider, workspace):
 
 
 def test_secret_is_absent_from_exception_trace(workspace, settings, skills):
-    from nimna.tools import default_registry
+
     from nimna.memory import MemoryStore
-    import traceback
+    from nimna.tools import default_registry
     registry = default_registry()
     ctx = ToolContext(settings=settings, workspace=workspace, session_id="s", memory=MemoryStore(":memory:"), skills=skills)
     # Craft a tool that leaks secret in exception
@@ -193,8 +190,8 @@ def test_secret_is_absent_from_exception_trace(workspace, settings, skills):
 
 
 def test_restart_recovers_pending_run(tmp_path: Path):
-    from nimna.memory import MemoryStore
     from nimna.core.state import RunState
+    from nimna.memory import MemoryStore
     db = tmp_path / "restart.db"
     store = MemoryStore(str(db))
     state = RunState(session_id="s", user_message="hello")

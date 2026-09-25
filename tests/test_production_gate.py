@@ -11,7 +11,6 @@ import subprocess
 from pathlib import Path
 
 import pytest
-
 import yaml
 
 REPO = Path(__file__).resolve().parent.parent

@@ -18,11 +18,11 @@ import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from ..base import Risk, ToolContext, ToolError, ToolRegistry
+from ..base import ToolContext, ToolError, ToolRegistry
 
 # 1x1 transparent PNG fallback (when Pillow is unavailable)
 _FALLBACK_PNG_B64 = (
@@ -70,7 +70,7 @@ def _screenshot_dir(ctx: ToolContext) -> Path:
 def _generate_placeholder_png(text: str = "Nimna Desktop — simulated") -> tuple[bytes, str]:
     """Return (png_bytes, b64) — tries Pillow, falls back to 1x1."""
     try:
-        from PIL import Image, ImageDraw, ImageFont  # type: ignore
+        from PIL import Image, ImageDraw  # type: ignore
 
         w, h = 1280, 800
         img = Image.new("RGB", (w, h), color=(15, 20, 25))
@@ -111,8 +111,9 @@ def _generate_placeholder_png(text: str = "Nimna Desktop — simulated") -> tupl
 def _overlay_grid(data: bytes, opacity: int = 38) -> bytes:
     """Overlay a faint coordinate grid to help the model locate elements."""
     try:
-        from PIL import Image, ImageDraw, ImageFont
         import io
+
+        from PIL import Image, ImageDraw
         img = Image.open(io.BytesIO(data)).convert("RGB")
         w, h = img.size
         # downscale huge images for model (max 1280 width)
@@ -142,15 +143,16 @@ def _hash_image(data: bytes) -> str:
     import hashlib
     # perceptual-ish: downscale to 16x16 grayscale and hash
     try:
-        from PIL import Image
         import io
+
+        from PIL import Image
         img = Image.open(io.BytesIO(data)).convert("L").resize((16,16))
         return hashlib.md5(img.tobytes()).hexdigest()[:12]
     except Exception:
         import hashlib
         return hashlib.md5(data[:4096]).hexdigest()[:12]
 
-def _try_real_screenshot(ctx: ToolContext) -> Optional[tuple[bytes, str]]:
+def _try_real_screenshot(ctx: ToolContext) -> tuple[bytes, str] | None:
     """Attempt to fetch a real screenshot from the desktop container.
 
     Strategies (in order):
@@ -302,7 +304,8 @@ def _is_blocked_command(cmd: str) -> str | None:
 
 def _run_with_limits(cmd: list[str], timeout: int, cwd: str | None = None, env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
     """Run with strict resource limits (CPU, mem, files, procs) and process-group kill on timeout."""
-    import resource, signal
+    import resource
+    import signal
     clean_env = env if env is not None else _clean_env()
     def _preexec():
         try:
@@ -346,7 +349,7 @@ def _run_with_limits(cmd: list[str], timeout: int, cwd: str | None = None, env: 
             except Exception:
                 out, err = "", "timeout"
             raise sp.TimeoutExpired(cmd, timeout, output=out, stderr=err)
-    except (ValueError, OSError) as e:
+    except (ValueError, OSError):
         # preexec not supported (e.g. Windows) — fall back without pgkill
         return sp.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd, env=clean_env, stdin=sp.DEVNULL)
 
@@ -356,6 +359,7 @@ def _locate_element_on_image(data: bytes, query: str) -> tuple[int, int] | None:
     # Try OCR (pytesseract) if installed
     try:
         import io
+
         from PIL import Image
         try:
             import pytesseract  # type: ignore
@@ -475,8 +479,9 @@ def register(registry: ToolRegistry) -> None:
         x, y = located if located else est
         # Save annotated screenshot with grid + marker
         try:
-            from PIL import Image, ImageDraw
             import io
+
+            from PIL import Image, ImageDraw
             img = Image.open(io.BytesIO(data)).convert("RGB")
             draw = ImageDraw.Draw(img)
             # draw marker

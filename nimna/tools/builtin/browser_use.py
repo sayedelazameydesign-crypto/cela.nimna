@@ -6,8 +6,6 @@ browser budget is zero.
 """
 from __future__ import annotations
 
-from typing import Optional
-
 from pydantic import BaseModel, Field
 
 from ...browser import BrowserUseV4Client
@@ -16,8 +14,8 @@ from ..base import ToolError, ToolRegistry
 
 class BrowserUseRunParams(BaseModel):
     task: str = Field(..., min_length=1, max_length=8000, description="Task for the hosted Browser Use agent.")
-    model: Optional[str] = Field(None, description="Optional model id accepted by the Cloud V4 API.")
-    reasoning_effort: Optional[str] = Field(None, description="Model-specific reasoning value, e.g. xhigh for GPT-6 Astra.")
+    model: str | None = Field(None, description="Optional model id accepted by the Cloud V4 API.")
+    reasoning_effort: str | None = Field(None, description="Model-specific reasoning value, e.g. xhigh for GPT-6 Astra.")
     timeout_seconds: int = Field(120, ge=5, le=1800, description="Client wait timeout; it does not cancel a server-side run.")
 
 

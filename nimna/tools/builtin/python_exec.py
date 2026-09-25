@@ -1,5 +1,4 @@
 """`run_python` tool backed by the sandbox module."""
-from typing import Optional
 
 from pydantic import BaseModel, Field
 
@@ -9,7 +8,7 @@ from ..sandbox import run_python_code
 
 class RunPythonParams(BaseModel):
     code: str = Field(..., description="Python 3 source code to execute. Print what you want to see.")
-    timeout_seconds: Optional[int] = Field(None, ge=1, le=300, description="Override the default timeout.")
+    timeout_seconds: int | None = Field(None, ge=1, le=300, description="Override the default timeout.")
     purpose: str = Field("", description="One line explaining what the code does (shown to the user).")
 
 

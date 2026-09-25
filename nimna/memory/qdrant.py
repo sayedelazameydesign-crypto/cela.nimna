@@ -30,7 +30,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 COLLECTIONS = {
     "user_context": {
@@ -58,7 +58,7 @@ def _hash_embedding(text: str, dim: int = 768) -> list[float]:
     vector: list[float] = []
     counter = 0
     while len(vector) < dim:
-        chunk = hashlib.sha256(f"{text}:{counter}".encode("utf-8")).digest()
+        chunk = hashlib.sha256(f"{text}:{counter}".encode()).digest()
         for i in range(0, len(chunk), 4):
             if len(vector) >= dim:
                 break
@@ -71,14 +71,13 @@ def _hash_embedding(text: str, dim: int = 768) -> list[float]:
     norm = math.sqrt(sum(x * x for x in vector)) or 1.0
     return [x / norm for x in vector]
 
-def _gemini_embedding(text: str, model: str = "text-embedding-004", dim: int = 768) -> Optional[list[float]]:
+def _gemini_embedding(text: str, model: str = "text-embedding-004", dim: int = 768) -> list[float] | None:
     """Try Gemini embeddings; return None on failure (fallback to hash)."""
     api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or ""
     if not api_key:
         return None
     try:
         from google import genai
-        from google.genai import types
         client = genai.Client(api_key=api_key)
         # gemini embedding: models/text-embedding-004
         m = model if "/" in model else f"models/{model}"
@@ -138,7 +137,7 @@ class _InMemoryStore:
         self._data: dict[str, list[_Record]] = {name: [] for name in COLLECTIONS}
         self._lock = threading.RLock()
 
-    def upsert(self, collection: str, text: str, vector: list[float], payload: dict[str, Any], id: Optional[str] = None) -> str:
+    def upsert(self, collection: str, text: str, vector: list[float], payload: dict[str, Any], id: str | None = None) -> str:
         with self._lock:
             if collection not in self._data:
                 self._data[collection] = []
@@ -172,7 +171,7 @@ class _InMemoryStore:
         with self._lock:
             return len(self._data.get(collection, []))
 
-    def clear(self, collection: Optional[str] = None) -> None:
+    def clear(self, collection: str | None = None) -> None:
         with self._lock:
             if collection:
                 self._data[collection] = []
@@ -191,8 +190,8 @@ class VectorMemory:
 
     def __init__(
         self,
-        qdrant_url: Optional[str] = None,
-        qdrant_api_key: Optional[str] = None,
+        qdrant_url: str | None = None,
+        qdrant_api_key: str | None = None,
         embedding_model: str = "text-embedding-004",
         embedding_dim: int = 768,
         embedding_provider: str = "auto",
@@ -204,7 +203,7 @@ class VectorMemory:
         self.embedding_provider = (embedding_provider or os.getenv("EMBEDDING_PROVIDER", "auto") or "auto").lower()
         self._fallback = _InMemoryStore()
         self._qdrant = None
-        self._qdrant_error: Optional[str] = None
+        self._qdrant_error: str | None = None
         self._init_qdrant()
 
     def _init_qdrant(self) -> None:
@@ -251,9 +250,9 @@ class VectorMemory:
         self,
         collection: str,
         text: str,
-        metadata: Optional[dict[str, Any]] = None,
-        tags: Optional[list[str]] = None,
-        id: Optional[str] = None,
+        metadata: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
+        id: str | None = None,
     ) -> str:
         if collection not in COLLECTIONS:
             raise ValueError(f"unknown collection '{collection}'; valid: {list(COLLECTIONS)}")
@@ -294,10 +293,10 @@ class VectorMemory:
     def search(
         self,
         query: str,
-        collections: Optional[list[str]] = None,
+        collections: list[str] | None = None,
         limit: int = 5,
         min_score: float = 0.0,
-        filter_tags: Optional[list[str]] = None,
+        filter_tags: list[str] | None = None,
     ) -> list[dict[str, Any]]:
         if not query or not query.strip():
             return []
@@ -347,7 +346,7 @@ class VectorMemory:
             results = [r for r in results if r["score"] >= min_score]
         return results[:limit]
 
-    def count(self, collection: Optional[str] = None) -> dict[str, int] | int:
+    def count(self, collection: str | None = None) -> dict[str, int] | int:
         if collection:
             if self._qdrant is not None:
                 try:
@@ -368,7 +367,7 @@ class VectorMemory:
             return out
         return self._fallback.collections()
 
-    def clear(self, collection: Optional[str] = None) -> None:
+    def clear(self, collection: str | None = None) -> None:
         # clear fallback always
         self._fallback.clear(collection)
         if self._qdrant is not None:
@@ -410,15 +409,15 @@ class VectorMemory:
         return list(COLLECTIONS.keys())
 
 # singleton
-_singleton: Optional[VectorMemory] = None
+_singleton: VectorMemory | None = None
 _lock = threading.Lock()
 
 def get_vector_memory(
-    qdrant_url: Optional[str] = None,
-    qdrant_api_key: Optional[str] = None,
-    embedding_model: Optional[str] = None,
-    embedding_dim: Optional[int] = None,
-    embedding_provider: Optional[str] = None,
+    qdrant_url: str | None = None,
+    qdrant_api_key: str | None = None,
+    embedding_model: str | None = None,
+    embedding_dim: int | None = None,
+    embedding_provider: str | None = None,
 ) -> VectorMemory:
     global _singleton
     with _lock:

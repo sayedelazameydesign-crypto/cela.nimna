@@ -5,7 +5,7 @@ The SDK is imported lazily so the rest of the package works without it.
 """
 import json
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from .base import (
     Message,
@@ -139,8 +139,8 @@ class GeminiProvider(ModelProvider):
         return [t.Tool(function_declarations=declarations)]
 
     # -- main call -------------------------------------------------------
-    def generate(self, messages: list[Message], tools: Optional[list[ToolSpec]] = None, *,
-                 temperature: Optional[float] = None, max_tokens: Optional[int] = None) -> ModelResponse:
+    def generate(self, messages: list[Message], tools: list[ToolSpec] | None = None, *,
+                 temperature: float | None = None, max_tokens: int | None = None) -> ModelResponse:
         t = self._types
         system, contents = self._to_contents(messages)
         config_kwargs: dict[str, Any] = {
@@ -193,8 +193,8 @@ class GeminiProvider(ModelProvider):
     def _parse(self, response: Any) -> ModelResponse:
         text_parts: list[str] = []
         tool_calls: list[ToolCall] = []
-        raw: Optional[dict[str, Any]] = None
-        finish_reason: Optional[str] = None
+        raw: dict[str, Any] | None = None
+        finish_reason: str | None = None
 
         candidates = getattr(response, "candidates", None) or []
         candidate = candidates[0] if candidates else None

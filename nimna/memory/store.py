@@ -8,9 +8,9 @@
 import json
 import sqlite3
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 PENDING_TTL_SECONDS = 300
 MAX_PENDING_PER_SESSION = 5
@@ -71,14 +71,14 @@ CREATE TABLE IF NOT EXISTS approvals (
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def _dumps(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, default=str)
 
 
-def _loads(value: Optional[str], default: Any = None) -> Any:
+def _loads(value: str | None, default: Any = None) -> Any:
     if not value:
         return default
     try:
@@ -120,7 +120,7 @@ class MemoryStore:
             self._conn.close()
 
     # -- sessions & messages ---------------------------------------------
-    def ensure_session(self, session_id: str, title: Optional[str] = None) -> None:
+    def ensure_session(self, session_id: str, title: str | None = None) -> None:
         with self._lock:
             self._conn.execute(
                 "INSERT OR IGNORE INTO sessions(id, created_at, title, meta) VALUES (?,?,?,?)",
@@ -139,7 +139,7 @@ class MemoryStore:
         return [dict(row) for row in rows]
 
     def add_message(self, session_id: str, role: str, content: str,
-                    meta: Optional[dict[str, Any]] = None) -> int:
+                    meta: dict[str, Any] | None = None) -> int:
         self.ensure_session(session_id)
         with self._lock:
             cur = self._conn.execute(
@@ -162,8 +162,8 @@ class MemoryStore:
         return result
 
     # -- long-term memory ------------------------------------------------
-    def save_memory(self, content: str, kind: str = "note", tags: Optional[list[str]] = None,
-                    session_id: Optional[str] = None) -> int:
+    def save_memory(self, content: str, kind: str = "note", tags: list[str] | None = None,
+                    session_id: str | None = None) -> int:
         with self._lock:
             cur = self._conn.execute(
                 "INSERT INTO memories(kind, content, tags, session_id, created_at) VALUES (?,?,?,?,?)",
@@ -172,7 +172,7 @@ class MemoryStore:
             self._conn.commit()
             return int(cur.lastrowid)
 
-    def list_memories(self, kind: Optional[str] = None, limit: int = 20) -> list[dict[str, Any]]:
+    def list_memories(self, kind: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
         with self._lock:
             if kind:
                 rows = self._conn.execute(
@@ -213,8 +213,8 @@ class MemoryStore:
         return item
 
     # -- audit -----------------------------------------------------------
-    def log(self, session_id: Optional[str], run_id: Optional[str], event: str,
-            payload: Optional[dict[str, Any]] = None) -> None:
+    def log(self, session_id: str | None, run_id: str | None, event: str,
+            payload: dict[str, Any] | None = None) -> None:
         # Never persist raw secrets – redact before storage.  Each entry also
         # receives a SHA-256 link to the previous audit entry.  This is an
         # evidence journal: it detects tampering, while not pretending to be a
@@ -231,7 +231,7 @@ class MemoryStore:
         created_at = _now()
         from ..provenance.hashchain import evidence_hash
         with self._lock:
-            previous_hash: Optional[str] = None
+            previous_hash: str | None = None
             row = self._conn.execute("SELECT payload FROM audit_log ORDER BY id DESC LIMIT 1").fetchone()
             if row is not None:
                 previous = _loads(row["payload"], {}) or {}
@@ -258,7 +258,7 @@ class MemoryStore:
             )
             self._conn.commit()
 
-    def get_audit(self, session_id: Optional[str] = None, run_id: Optional[str] = None,
+    def get_audit(self, session_id: str | None = None, run_id: str | None = None,
                   limit: int = 200) -> list[dict[str, Any]]:
         clauses, params = [], []
         if session_id:
@@ -277,7 +277,7 @@ class MemoryStore:
             item["payload"] = _loads(item.get("payload"), None)
         return result
 
-    def verify_audit_chain(self, session_id: Optional[str] = None, run_id: Optional[str] = None,
+    def verify_audit_chain(self, session_id: str | None = None, run_id: str | None = None,
                            limit: int = 1000) -> dict[str, Any]:
         """Verify evidence hashes for a run/session without exposing secrets.
 
@@ -309,7 +309,7 @@ class MemoryStore:
                     all_hashes.add(str(value))
         checked = 0
         invalid: list[int] = []
-        first_previous: Optional[str] = None
+        first_previous: str | None = None
         for row in rows:
             data = _loads(row["payload"], {}) or {}
             evidence = data.pop("_evidence", None) if isinstance(data, dict) else None
@@ -343,9 +343,9 @@ class MemoryStore:
 
     def _pending_expired(self, created_at: str) -> bool:
         try:
-            from datetime import datetime, timezone
+            from datetime import datetime
             ts = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             return (now - ts).total_seconds() > PENDING_TTL_SECONDS
         except Exception:
             return False
@@ -353,8 +353,8 @@ class MemoryStore:
     def _purge_expired_pending(self) -> None:
         # Expire and clean old pending runs (TTL + max per session)
         try:
-            from datetime import datetime, timezone, timedelta
-            cutoff = (datetime.now(timezone.utc) - timedelta(seconds=PENDING_TTL_SECONDS)).isoformat()
+            from datetime import datetime, timedelta
+            cutoff = (datetime.now(UTC) - timedelta(seconds=PENDING_TTL_SECONDS)).isoformat()
             with self._lock:
                 # Mark expired as resolved with decision='expired' and also insert into approvals for audit
                 rows = self._conn.execute(
@@ -419,7 +419,7 @@ class MemoryStore:
                 pass
             self._conn.commit()
 
-    def get_pending(self, run_id: str) -> Optional[dict[str, Any]]:
+    def get_pending(self, run_id: str) -> dict[str, Any] | None:
         self._purge_expired_pending()
         with self._lock:
             row = self._conn.execute(
@@ -439,7 +439,7 @@ class MemoryStore:
             return None
         return _loads(row["state"], None)
 
-    def get_pending_with_session(self, run_id: str, session_id: Optional[str] = None) -> Optional[dict[str, Any]]:
+    def get_pending_with_session(self, run_id: str, session_id: str | None = None) -> dict[str, Any] | None:
         """Session-scoped get — prevents one session approving another's pending."""
         data = self.get_pending(run_id)
         if data is None:
@@ -448,7 +448,7 @@ class MemoryStore:
             return None
         return data
 
-    def resolve_pending(self, run_id: str, decision: str, session_id: Optional[str] = None) -> None:
+    def resolve_pending(self, run_id: str, decision: str, session_id: str | None = None) -> None:
         self._purge_expired_pending()
         with self._lock:
             # Session scoping: verify owner
@@ -480,7 +480,7 @@ class MemoryStore:
                     raise KeyError(f"run '{run_id}' already resolved ({row['resolved_at']})")
                 raise KeyError(f"no pending approval for run '{run_id}'")
 
-    def list_pending(self, session_id: Optional[str] = None) -> list[dict[str, Any]]:
+    def list_pending(self, session_id: str | None = None) -> list[dict[str, Any]]:
         self._purge_expired_pending()
         with self._lock:
             if session_id:

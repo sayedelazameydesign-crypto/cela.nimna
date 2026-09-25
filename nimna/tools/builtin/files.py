@@ -1,8 +1,7 @@
 """Workspace file tools (jailed to the workspace directory)."""
 import fnmatch
 import os
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field
 
@@ -124,7 +123,7 @@ def register(registry: ToolRegistry) -> None:
             "path": ctx.display_path(target),
             "type": "dir" if target.is_dir() else "file",
             "size_bytes": stat.st_size,
-            "modified": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(timespec="seconds"),
+            "modified": datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(timespec="seconds"),
             "extension": target.suffix.lower(),
         }
         if target.is_file() and stat.st_size < ctx.settings.max_file_bytes:

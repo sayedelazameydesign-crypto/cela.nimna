@@ -24,7 +24,8 @@ No disable flag for any safety check here — removing one IS the regression.
 from __future__ import annotations
 
 import re
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from pydantic import BaseModel, Field
 

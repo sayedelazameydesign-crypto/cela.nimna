@@ -4,8 +4,7 @@ import ipaddress
 import re
 import socket
 from html.parser import HTMLParser
-from typing import Optional
-from urllib.parse import parse_qs, urlparse, quote_plus
+from urllib.parse import parse_qs, quote_plus, urlparse
 
 import httpx
 from pydantic import BaseModel, Field
@@ -33,8 +32,8 @@ class _DDGParser(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
         self.results: list[dict[str, str]] = []
-        self._current: Optional[dict[str, str]] = None
-        self._capture: Optional[str] = None
+        self._current: dict[str, str] | None = None
+        self._capture: str | None = None
 
     def handle_starttag(self, tag, attrs):
         attrs = dict(attrs)

@@ -7,12 +7,11 @@ Observe→Verify→Checkpoint→Evidence · refusals stop before the handler.
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
 
-from nimna.execution.gateway import ExecutionGateway, GatewayContextError, InvocationContext
+from nimna.execution.gateway import ExecutionGateway, InvocationContext
 from nimna.execution.policy import (
     AuthorizationGrant,
     Authorizer,
@@ -20,10 +19,9 @@ from nimna.execution.policy import (
     Effect,
     Policy,
     PolicyRule,
-    WorkspaceBoundary,
 )
-from nimna.execution.recovery import CheckpointStore, RecoveryManager, RecoveryState
-from nimna.execution.tool_registry import EvidenceChain, ToolDescriptor, ToolRegistry
+from nimna.execution.recovery import CheckpointStore
+from nimna.execution.tool_registry import ToolDescriptor, ToolRegistry
 
 POLICY_VERSION = "1.0.0"
 SCHEMAS = (

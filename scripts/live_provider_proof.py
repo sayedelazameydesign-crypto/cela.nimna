@@ -81,7 +81,7 @@ def write_evidence(path: str, payload: dict[str, object]) -> None:
     print(f"\n       evidence written to {target}")
 
 
-def fail_out(payload: dict[str, object], evidence_out: "str | None",
+def fail_out(payload: dict[str, object], evidence_out: str | None,
              failure: object = None) -> int:
     """Summarise, publish the failure as an annotation, and return exit code 1."""
     if failure is not None:
@@ -100,7 +100,7 @@ def main() -> int:
     args = parser.parse_args()
 
     from nimna.config import Settings
-    from nimna.providers import create_provider, ProviderError
+    from nimna.providers import ProviderError, create_provider
     from nimna.providers.base import Message
 
     settings = Settings.from_env()

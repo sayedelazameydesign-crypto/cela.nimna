@@ -9,16 +9,16 @@ denied · capability amplification denied · deterministic decisions.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from nimna.execution.observation import ScopeError
 from nimna.execution.policy import (
-    Effect,
     AuthorizationGrant,
     Authorizer,
     CapabilityCatalog,
+    Effect,
     Policy,
     PolicyError,
     PolicyInput,
@@ -28,7 +28,7 @@ from nimna.execution.policy import (
 )
 
 POLICY_VERSION = "1.0.0"
-NOW = datetime(2026, 9, 23, 12, 0, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 9, 23, 12, 0, 0, tzinfo=UTC)
 
 
 def make_policy(**overrides) -> Policy:
@@ -330,10 +330,13 @@ def test_same_inputs_same_decision():
 # --------------------------------------------------------------------------- #
 def test_adapters_wire_t6_into_t5_invoke(tmp_path):
     from nimna.execution.policy import (
-        t5_authorizer_adapter, t5_capability_resolver, t5_policy_adapter,
+        t5_capability_resolver,
+        t5_policy_adapter,
     )
     from nimna.execution.tool_registry import (
         AuthorizationDecision as T5Authorization,
+    )
+    from nimna.execution.tool_registry import (
         EvidenceChain,
         InvocationStatus,
         ToolDescriptor,

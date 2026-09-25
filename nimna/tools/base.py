@@ -14,9 +14,10 @@ import json
 import logging
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Literal, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Literal, Optional
 
 from pydantic import BaseModel, ValidationError
 
@@ -91,7 +92,7 @@ class ToolContext:
     skills: Optional["SkillManager"] = None
     run_id: str = ""
     # callback used by `load_skill` so the agent can widen the allowed tools
-    on_skill_loaded: Optional[Callable[[str], None]] = None
+    on_skill_loaded: Callable[[str], None] | None = None
     extras: dict[str, Any] = field(default_factory=dict)
 
     # -- filesystem jail -------------------------------------------------
@@ -144,7 +145,7 @@ class Tool:
     params_model: type[BaseModel]
     handler: Handler
     risk: Risk = "safe"
-    risk_fn: Optional[RiskFn] = None
+    risk_fn: RiskFn | None = None
     tags: list[str] = field(default_factory=list)
 
     def spec(self) -> ToolSpec:
@@ -207,7 +208,7 @@ class ToolRegistry:
         return tool
 
     def tool(self, name: str, description: str, params: type[BaseModel], *, risk: Risk = "safe",
-             risk_fn: Optional[RiskFn] = None, tags: Optional[list[str]] = None):
+             risk_fn: RiskFn | None = None, tags: list[str] | None = None):
         """Decorator: ``@registry.tool("read_csv", "...", ReadCsvParams)``."""
 
         def decorator(fn: Handler) -> Handler:
@@ -226,7 +227,7 @@ class ToolRegistry:
     def __len__(self) -> int:
         return len(self._tools)
 
-    def get(self, name: str) -> Optional[Tool]:
+    def get(self, name: str) -> Tool | None:
         return self._tools.get(name)
 
     def names(self) -> list[str]:
@@ -235,7 +236,7 @@ class ToolRegistry:
     def all(self) -> list[Tool]:
         return list(self._tools.values())
 
-    def specs(self, names: Optional[list[str]] = None) -> list[ToolSpec]:
+    def specs(self, names: list[str] | None = None) -> list[ToolSpec]:
         if names is None:
             return [tool.spec() for tool in self._tools.values()]
         return [self._tools[n].spec() for n in names if n in self._tools]

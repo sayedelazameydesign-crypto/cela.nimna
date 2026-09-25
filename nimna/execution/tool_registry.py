@@ -26,8 +26,10 @@ import hashlib
 import json
 import re
 import time
-from dataclasses import dataclass, field, replace as _dc_replace
-from typing import Any, Callable, Iterable, Mapping, Optional
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass
+from dataclasses import replace as _dc_replace
+from typing import Any
 
 __all__ = [
     "RiskLevel", "LifecycleState", "LIFECYCLE_TRANSITIONS",
@@ -226,7 +228,7 @@ class ToolDescriptor:
     side_effects: tuple[str, ...] = ("none",)
     risk_level: str = "LOW"
     availability: str = "ENABLED"
-    handler: Optional[Callable[..., Any]] = None
+    handler: Callable[..., Any] | None = None
 
     def validate(self) -> None:
         if not isinstance(self.tool_id, str) or not TOOL_ID_RE.match(self.tool_id or ""):
@@ -392,7 +394,7 @@ class InvocationOutcome:
     gate: str
     tool_id: str
     result: Any = None
-    evidence_event: Optional[dict[str, Any]] = None
+    evidence_event: dict[str, Any] | None = None
     duration_ms: int = 0
 
     def to_dict(self) -> dict[str, Any]:
@@ -468,10 +470,10 @@ def invoke(
     arguments: Any,
     *,
     granted_capabilities: Iterable[str] = frozenset(),
-    capability_resolver: Optional[Callable[[ToolDescriptor], Iterable[str]]] = None,
-    policy: Optional[Callable[[ToolDescriptor, Mapping[str, Any]], PolicyGateDecision]] = None,
-    authorizer: Optional[Callable[[ToolDescriptor, Mapping[str, Any]], AuthorizationDecision]] = None,
-    evidence: Optional[EvidenceChain] = None,
+    capability_resolver: Callable[[ToolDescriptor], Iterable[str]] | None = None,
+    policy: Callable[[ToolDescriptor, Mapping[str, Any]], PolicyGateDecision] | None = None,
+    authorizer: Callable[[ToolDescriptor, Mapping[str, Any]], AuthorizationDecision] | None = None,
+    evidence: EvidenceChain | None = None,
 ) -> InvocationOutcome:
     """Run the full gate pipeline. Refusals close early; the handler only ever
     sees arguments that passed input-schema, capability, policy and authorization."""
@@ -480,7 +482,7 @@ def invoke(
 
     def _event(status: InvocationStatus, reason: str, *, executed: bool = False,
                result: Any = None, deprecated: bool = False,
-               extra: Optional[Mapping[str, Any]] = None) -> InvocationOutcome:
+               extra: Mapping[str, Any] | None = None) -> InvocationOutcome:
         event: dict[str, Any] = {
             "invocation_id": "inv_" + hashlib.sha256(
                 f"{tool_id}:{time.perf_counter_ns()}:{status.value}".encode()).hexdigest()[:12],

@@ -116,7 +116,7 @@ class TaskSpec:
     source: str = ""
 
     @classmethod
-    def from_dict(cls, data: Any, source: str = "<memory>") -> "TaskSpec":
+    def from_dict(cls, data: Any, source: str = "<memory>") -> TaskSpec:
         if not isinstance(data, dict):
             raise SuiteError(f"{source}: task must be a YAML mapping")
         missing = TASK_REQUIRED_KEYS - set(data)
@@ -355,10 +355,10 @@ def capability_map(settings: Any) -> dict[str, bool]:
 def _build_agent(mode: str, spec: TaskSpec, workspace: Path):
     from nimna.config import Settings
     from nimna.core.agent import Agent
-    from nimna.providers.base import ModelResponse, ToolCall
     from nimna.core.approval import DeferToClient
     from nimna.memory import MemoryStore
     from nimna.providers import MockProvider
+    from nimna.providers.base import ModelResponse, ToolCall
     from nimna.skills import SkillManager
     from nimna.tools import default_registry
 
@@ -640,10 +640,14 @@ def run_task(spec: TaskSpec, mode: str) -> dict[str, Any]:
                 # P1-T5: command re-runs go through the gated Tool Registry —
                 # schema → capability → policy → authorization → execute → evidence.
                 from nimna.config import Settings as _S
-                from nimna.tools.builtin.shell import ShellRequest as _Req, execute_shell as _exe
                 from nimna.execution.tool_registry import (
-                    AuthorizationDecision, EvidenceChain, InvocationStatus,
-                    PolicyGateDecision, ToolDescriptor, ToolRegistry, invoke)
+                    EvidenceChain,
+                    InvocationStatus,
+                    ToolDescriptor,
+                    ToolRegistry,
+                )
+                from nimna.tools.builtin.shell import ShellRequest as _Req
+                from nimna.tools.builtin.shell import execute_shell as _exe
 
                 _settings = _S.from_env(env_file=None)
                 _settings.shell_tool_enabled = capabilities.get("shell_tool", False)
@@ -677,9 +681,13 @@ def run_task(spec: TaskSpec, mode: str) -> dict[str, Any]:
                 # P1-T6: deterministic governance — CapabilityCatalog → Policy →
                 # Authorization. Same inputs, same decision; every refusal fail-closed.
                 from nimna.execution.policy import (
-                    AuthorizationGrant, Authorizer, CapabilityCatalog, Effect,
-                    Policy, PolicyRule, WorkspaceBoundary,
-                    t5_authorizer_adapter, t5_capability_resolver, t5_policy_adapter)
+                    AuthorizationGrant,
+                    Authorizer,
+                    CapabilityCatalog,
+                    Effect,
+                    Policy,
+                    PolicyRule,
+                )
                 catalog = CapabilityCatalog(known={"shell"})
                 suite_policy = Policy("arena-suite-policy", "1.0.0", rules=(
                     PolicyRule("deny-outside-workspace", Effect.DENY,
@@ -874,7 +882,7 @@ def run_suite(tasks: list[TaskSpec], mode: str, *, ledger_path: Path | None = DE
     for spec in tasks:
         row = run_task(spec, mode)
         row["run_id"] = uuid.uuid4().hex[:16]
-        row["ts"] = _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")
+        row["ts"] = _dt.datetime.now(_dt.UTC).isoformat(timespec="seconds")
         row["repo_version"] = repo_version()
         if ledger is not None:
             ledger.record(row)
@@ -899,7 +907,7 @@ def run_suite(tasks: list[TaskSpec], mode: str, *, ledger_path: Path | None = DE
         "version": REPORT_VERSION,
         "mode": mode,
         "repo_version": repo_version(),
-        "generated_at": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
+        "generated_at": _dt.datetime.now(_dt.UTC).isoformat(timespec="seconds"),
         "rows": rows,
         "summary": {
             "tasks": len(rows),

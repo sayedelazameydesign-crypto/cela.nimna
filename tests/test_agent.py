@@ -3,7 +3,7 @@ import json
 from nimna.core.approval import AutoApprove, CallbackPolicy, ConsolePrompt
 from nimna.core.planner import SkillSelector, extract_json
 from nimna.core.state import Decision, RunStatus
-from nimna.providers.base import Message, ModelResponse, ToolCall
+from nimna.providers.base import ModelResponse, ToolCall
 
 
 def test_extract_json_tolerates_fences_and_prose():

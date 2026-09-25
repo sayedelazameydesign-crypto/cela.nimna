@@ -6,10 +6,9 @@ file) so that API keys never live inside the code base.
 from __future__ import annotations
 
 import os
-import stat
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable
 
 
 def load_dotenv(path: str | os.PathLike = ".env", *, override: bool = False) -> bool:
@@ -234,7 +233,7 @@ class Settings:
     ws_max_connections_per_key: int | str = 10  # concurrent /ws/* connections per API key
 
     @classmethod
-    def from_env(cls, env_file: str | os.PathLike | None = ".env") -> "Settings":
+    def from_env(cls, env_file: str | os.PathLike | None = ".env") -> Settings:
         if env_file:
             load_dotenv(env_file)
         # Gemini: GEMINI_API_KEY takes precedence over GOOGLE_API_KEY

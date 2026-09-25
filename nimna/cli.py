@@ -14,7 +14,6 @@ import json
 import sys
 import uuid
 from pathlib import Path
-from typing import Optional
 
 from .config import Settings
 from .core.approval import ConsolePrompt
@@ -159,7 +158,6 @@ def cmd_serve(args: argparse.Namespace) -> int:
     import uvicorn
 
     from .api.app import create_app
-
     from .api.security import SecurityConfigError
     from .models import CostPolicyError
 
@@ -248,7 +246,6 @@ def cmd_doctor(args: argparse.Namespace) -> int:
                 check("Gemini live ping", bool(r.text or r.tool_calls), f"response: {r.text[:60]}")
             except Exception as exc:
                 # redact any secret that might appear in traceback
-                from ..tools.base import redact_payload
                 msg = str(exc)
                 # quick string redaction for long tokens
                 import re
@@ -420,7 +417,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     # validate that skills subcommand 'show' got a name

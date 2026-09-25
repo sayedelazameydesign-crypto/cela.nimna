@@ -3,7 +3,14 @@ import json
 import httpx
 import pytest
 
-from nimna.providers.base import Message, ProviderError, RateLimitError, ToolCall, ToolSpec, with_retries
+from nimna.providers.base import (
+    Message,
+    ProviderError,
+    RateLimitError,
+    ToolCall,
+    ToolSpec,
+    with_retries,
+)
 from nimna.providers.openai_compat import OpenAICompatibleProvider
 
 SPEC = ToolSpec(name="read_csv", description="d",

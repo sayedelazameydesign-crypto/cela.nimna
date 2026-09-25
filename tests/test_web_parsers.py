@@ -1,6 +1,7 @@
-from nimna.tools.builtin.web import _DDGParser, _TextExtractor, _assert_public_url, _clean_ddg_url
-from nimna.tools import ToolError
 import pytest
+
+from nimna.tools import ToolError
+from nimna.tools.builtin.web import _assert_public_url, _clean_ddg_url, _DDGParser, _TextExtractor
 
 DDG_HTML = """
 <div class="results">

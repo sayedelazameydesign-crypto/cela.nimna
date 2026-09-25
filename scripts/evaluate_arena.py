@@ -37,9 +37,10 @@ import re
 import sys
 import urllib.error
 import urllib.request
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 REPORT_VERSION = 2
 MAX_CAPTURED_ADDED_LINES = 20_000  # per diff, keeps secret scanning bounded

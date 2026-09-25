@@ -15,9 +15,8 @@ from nimna.core.state import RunStatus
 from nimna.providers.base import ModelResponse, ToolCall
 from nimna.tools.base import ToolContext
 from nimna.tools.builtin import edit as edit_mod
-from nimna.tools.builtin.edit import EDIT_MAX_BYTES, apply_edit, apply_unified_diff
-
-from test_binding_migration import _bound_agent, make_gateway
+from nimna.tools.builtin.edit import EDIT_MAX_BYTES, apply_edit
+from test_binding_migration import make_gateway
 
 
 # ---------------------------------------------------------------- helpers ---

@@ -21,7 +21,7 @@ without ``NIMNA_API_KEY``.
 import logging
 import uuid
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.concurrency import run_in_threadpool
@@ -44,8 +44,8 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=20000)
-    session_id: Optional[str] = Field(None, description="Omit to start a new session.")
-    swarm: Optional[bool] = Field(None, description="Force swarm mode (true/false); default = SWARM_ENABLED env")
+    session_id: str | None = Field(None, description="Omit to start a new session.")
+    swarm: bool | None = Field(None, description="Force swarm mode (true/false); default = SWARM_ENABLED env")
 
 
 class ApprovalRequest(BaseModel):
@@ -53,7 +53,7 @@ class ApprovalRequest(BaseModel):
     always: bool = Field(False, description="Also auto-approve this tool for the rest of the run.")
 
 
-def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = None) -> FastAPI:
+def create_app(settings: Settings | None = None, agent: Agent | None = None) -> FastAPI:
     settings = settings or Settings.from_env()
     # validate BEFORE building anything: an unsafe config must not boot
     # (raises SecurityConfigError, e.g. production without NIMNA_API_KEY)
@@ -213,7 +213,6 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
     @app.get("/api/swarm/status")
     def swarm_status() -> dict[str, Any]:
         try:
-            from nimna.core.planner_swarm import PlannerSwarm
             # lightweight check
             return {
                 "enabled": bool(settings.swarm_enabled),
@@ -267,11 +266,11 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
         return await run_in_threadpool(agent.run, request.message, session_id)
 
     @app.get("/api/approvals")
-    def list_approvals(session_id: Optional[str] = None) -> dict[str, Any]:
+    def list_approvals(session_id: str | None = None) -> dict[str, Any]:
         return {"pending": agent.pending_approvals(session_id)}
 
     @app.post("/api/approvals/{approval_id}", response_model=AgentResult)
-    async def resolve_approval(approval_id: str, request: ApprovalRequest, session_id: Optional[str] = None) -> AgentResult:
+    async def resolve_approval(approval_id: str, request: ApprovalRequest, session_id: str | None = None) -> AgentResult:
         # session scoping: if pending exists, ensure caller is owner
         try:
             pending = agent.memory.get_pending(approval_id)
@@ -297,7 +296,7 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
         return {"session_id": session_id, "events": agent.memory.get_audit(session_id, limit=limit)}
 
     @app.get("/api/memories")
-    def memories(kind: Optional[str] = None, q: Optional[str] = None, limit: int = 20) -> dict[str, Any]:
+    def memories(kind: str | None = None, q: str | None = None, limit: int = 20) -> dict[str, Any]:
         if q:
             return {"memories": agent.memory.search_memories(q, limit=limit)}
         return {"memories": agent.memory.list_memories(kind=kind, limit=limit)}
@@ -310,13 +309,13 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
     class VectorUpsertRequest(BaseModel):
         collection: str = Field(..., description="user_context | execution_history | code_knowledge")
         text: str = Field(..., min_length=1, max_length=8000)
-        tags: Optional[list[str]] = None
-        metadata: Optional[dict[str, Any]] = None
+        tags: list[str] | None = None
+        metadata: dict[str, Any] | None = None
 
     @app.post("/api/memory/vector/upsert")
     def vector_upsert(req: VectorUpsertRequest) -> dict[str, Any]:
         try:
-            from nimna.memory.qdrant import get_vector_memory, COLLECTIONS
+            from nimna.memory.qdrant import COLLECTIONS, get_vector_memory
             if req.collection not in COLLECTIONS:
                 raise HTTPException(400, f"unknown collection '{req.collection}'; valid: {list(COLLECTIONS)}")
             vm = get_vector_memory()
@@ -328,7 +327,7 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
             raise HTTPException(500, str(exc))
 
     @app.get("/api/memory/vector/search")
-    def vector_search(q: str, collections: Optional[str] = None, limit: int = 5) -> dict[str, Any]:
+    def vector_search(q: str, collections: str | None = None, limit: int = 5) -> dict[str, Any]:
         try:
             from nimna.memory.qdrant import get_vector_memory
             vm = get_vector_memory()
@@ -349,7 +348,8 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
     # -- computer control (VNC desktop) ----------------------------------
     @app.get("/api/computer/status")
     def computer_status() -> dict[str, Any]:
-        import os, pathlib
+        import os
+        import pathlib
         enabled = os.getenv("COMPUTER_ENABLED", "").lower() in {"1","true","yes","on"}
         vnc_host = os.getenv("COMPUTER_VNC_HOST") or os.getenv("DESKTOP_VNC_URL") or ""
         # check latest screenshot
@@ -390,7 +390,8 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
 
     @app.get("/api/computer/screenshot")
     def computer_screenshot() -> dict[str, Any]:
-        import pathlib, base64, json
+        import base64
+        import pathlib
         ws = pathlib.Path(settings.workspace_dir)
         candidates = sorted((ws / ".screenshots").glob("screenshot-*.png"), reverse=True) if (ws / ".screenshots").exists() else []
         if not candidates:
@@ -405,7 +406,7 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
 
     @app.get("/api/workspace/files")
     def workspace_files(path: str = ".", pattern: str = "*", limit: int = 100) -> dict[str, Any]:
-        import fnmatch, pathlib
+        import pathlib
         ws = pathlib.Path(settings.workspace_dir)
         root = (ws / path).resolve()
         try:
@@ -428,7 +429,8 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
     @app.websocket("/ws/{session_id}")
     async def ws_dashboard(websocket: WebSocket, session_id: str):
         # Enforce max message size via receive timeout and manual check; session scoping
-        import asyncio, time
+        import asyncio
+        import time
         # Validate session_id from path (must be non-empty, alphanumeric)
         if not session_id or len(session_id) > 64 or not session_id.replace("-", "").replace("_", "").isalnum():
             await websocket.close(code=1008)

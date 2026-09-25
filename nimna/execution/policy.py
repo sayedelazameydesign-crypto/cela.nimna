@@ -31,9 +31,10 @@ from __future__ import annotations
 import enum
 import fnmatch
 import re
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Iterable, Mapping, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 from .observation import ScopeError, resolve_inside_workspace
 
@@ -97,7 +98,7 @@ class PolicyInput:
     resource: str
     context: Mapping[str, Any] = field(default_factory=dict)
     risk: str = "LOW"
-    authorization: Optional["AuthorizationGrant"] = None
+    authorization: AuthorizationGrant | None = None
     state: Mapping[str, Any] = field(default_factory=dict)
 
     def validate_problems(self) -> list[str]:
@@ -206,7 +207,7 @@ class Policy:
                 raise PolicyError(f"{self.policy_id}: duplicate rule_id {rule.rule_id!r}")
             seen.add(rule.rule_id)
 
-    def evaluate(self, input_: PolicyInput, *, boundary: Optional[WorkspaceBoundary] = None) -> PolicyOutcome:
+    def evaluate(self, input_: PolicyInput, *, boundary: WorkspaceBoundary | None = None) -> PolicyOutcome:
         """Deterministic evaluation. Every failure mode is fail-closed."""
         deny = lambda reason, rule: PolicyOutcome(Effect.DENY, reason, self.policy_id, self.version, rule)
         try:
@@ -261,7 +262,7 @@ class AuthorizationGrant:
     actor: str
     tool_id: str
     policy_version: str
-    expires_at: Optional[datetime] = None      # None = does not expire
+    expires_at: datetime | None = None      # None = does not expire
     consent: bool = False                      # REQUIRE_CONFIRMATION needs explicit consent
 
     def validate_problems(self) -> list[str]:
@@ -288,8 +289,8 @@ class Authorizer:
     """Deterministic grant validation. Absent/expired/wrong-actor/wrong-tool/
     version-mismatch are all DENY — there is no lenient mode."""
 
-    def check(self, grant: Optional[AuthorizationGrant], *, actor: str, tool_id: str,
-              policy_version: str, now: Optional[datetime] = None) -> AuthorizationDecision:
+    def check(self, grant: AuthorizationGrant | None, *, actor: str, tool_id: str,
+              policy_version: str, now: datetime | None = None) -> AuthorizationDecision:
         if grant is None:
             return AuthorizationDecision(False, "no authorization grant (default-deny)")
         problems = grant.validate_problems()
@@ -307,8 +308,8 @@ class Authorizer:
                 False, f"grant consented to policy {grant.policy_version}, current is {policy_version}",
                 "authorization-policy-version")
         if grant.expires_at is not None:
-            moment = now or datetime.now(timezone.utc)
-            expires = grant.expires_at if grant.expires_at.tzinfo else grant.expires_at.replace(tzinfo=timezone.utc)
+            moment = now or datetime.now(UTC)
+            expires = grant.expires_at if grant.expires_at.tzinfo else grant.expires_at.replace(tzinfo=UTC)
             if moment > expires:
                 return AuthorizationDecision(False, f"authorization expired at {expires.isoformat()}",
                                              "authorization-expired")
@@ -319,8 +320,8 @@ class Authorizer:
 # full T6 pipeline (standalone; does not reimplement T5)
 # --------------------------------------------------------------------------- #
 def adjudicate(policy: Policy, catalog: CapabilityCatalog, authorizer: Authorizer,
-               input_: PolicyInput, *, boundary: Optional[WorkspaceBoundary] = None,
-               now: Optional[datetime] = None) -> PolicyOutcome:
+               input_: PolicyInput, *, boundary: WorkspaceBoundary | None = None,
+               now: datetime | None = None) -> PolicyOutcome:
     """Resolver → Policy → Authorization for one request. Final word, fail-closed.
 
     ``REQUIRE_CONFIRMATION`` survives ONLY when the attached grant is valid AND
@@ -359,8 +360,8 @@ def t5_capability_resolver(catalog: CapabilityCatalog):
     return _resolver
 
 
-def t5_policy_adapter(policy: Policy, *, boundary: Optional[WorkspaceBoundary] = None,
-                      stats: Optional[dict[str, int]] = None,
+def t5_policy_adapter(policy: Policy, *, boundary: WorkspaceBoundary | None = None,
+                      stats: dict[str, int] | None = None,
                       resource_of=None, operation_of=None):
     """A T5 ``policy`` callable backed by a T6 Policy. DENY blocks; ALLOW and
     REQUIRE_CONFIRMATION pass the policy gate — confirmation still has to clear
