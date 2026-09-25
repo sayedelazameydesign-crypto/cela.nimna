@@ -412,6 +412,19 @@ def execute_shell(request: ShellRequest, *, settings: Any, workspace_root: Path,
     cwd_path.mkdir(parents=True, exist_ok=True)
     env, env_keys = _scrub_env(request.env, workspace_root)
     timeout_s = min(max(request.timeout_ms, MIN_TIMEOUT_MS), MAX_TIMEOUT_MS) / 1000.0
+    # Operator ceiling (SHELL_TIMEOUT_MS, default 10s): the model may ask for
+    # less, never more, than what the operator allows.  Non-positive values
+    # are ignored (fail-open to the request clamp would be a lie; fail-closed
+    # to zero would brick the tool — so an invalid operator value keeps the
+    # request clamp and is visible in the evidence below).
+    operator_cap_ms: int | None = None
+    try:
+        operator_cap_ms = int(getattr(settings, "shell_timeout_ms", 0) or 0)
+    except (TypeError, ValueError):
+        operator_cap_ms = None
+    if operator_cap_ms and operator_cap_ms > 0:
+        timeout_s = min(timeout_s, operator_cap_ms / 1000.0)
+    timeout_ms_effective = int(timeout_s * 1000)
     max_out = int(getattr(settings, "shell_max_output_bytes", MAX_OUTPUT_BYTES) or MAX_OUTPUT_BYTES)
     observer = WorkspaceObserver(workspace_root)   # default scope: the workspace jail only
     before = observer.snapshot()
@@ -463,6 +476,9 @@ def execute_shell(request: ShellRequest, *, settings: Any, workspace_root: Path,
         "env_keys": env_keys,
         "backend": "subprocess",
         "timed_out": timed_out,
+        "timeout_ms_requested": request.timeout_ms,
+        "timeout_ms_effective": timeout_ms_effective,
+        "operator_timeout_cap_ms": operator_cap_ms,
         "status": status.value,
     })
     result = ShellResult(
@@ -474,7 +490,7 @@ def execute_shell(request: ShellRequest, *, settings: Any, workspace_root: Path,
         timed_out=timed_out,
         filesystem_delta=delta_list,
         evidence=evidence,
-        reason="" if status is not ShellStatus.TIMEOUT else f"timed out after {request.timeout_ms} ms",
+        reason="" if status is not ShellStatus.TIMEOUT else f"timed out after {timeout_ms_effective} ms",
     )
     _audit(memory, session_id, run_id, "shell_evidence", evidence)
     return result

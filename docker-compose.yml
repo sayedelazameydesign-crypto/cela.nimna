@@ -45,12 +45,17 @@ services:
       - nimna-data:/app/data
       - /var/run/docker.sock:/var/run/docker.sock
 
-  # ── Redis Vision Gateway Cache (profile: infra) ────────────────────────
+  # ── Valkey Vision Gateway Cache (profile: infra) ─────────────────────
   # docker compose --profile infra up -d redis
   # Requires REDIS_URL=redis://redis:6379/0 inside the nimna service.
+  # NOTE: the service/volume/env names keep the `redis` prefix for
+  # compatibility, but the image is Valkey (BSD-3, Linux Foundation) —
+  # Redis 7.4+ is SSPL/RSAL (not OSI open source). The `redis://` URL
+  # scheme and the `redis` Python client are protocol-level and work
+  # unchanged against Valkey (RESP compatible, Lua included).
   redis:
-    image: redis:7-alpine
-    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    image: valkey/valkey:8
+    command: ["valkey-server", "/usr/local/etc/redis/redis.conf"]
     ports:
       - "6379:6379"
     volumes:
@@ -59,7 +64,7 @@ services:
     profiles: ["infra"]
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "valkey-cli", "ping"]
       interval: 10s
       timeout: 2s
       retries: 3

@@ -67,6 +67,18 @@ CREATE TABLE IF NOT EXISTS approvals (
     decision TEXT CHECK (decision IN ('approved','rejected','expired')),
     result TEXT
 );
+CREATE TABLE IF NOT EXISTS idempotency_keys (
+    identity TEXT NOT NULL,
+    idem_key TEXT NOT NULL,
+    endpoint TEXT NOT NULL,
+    body_hash TEXT NOT NULL,
+    status_code INTEGER NOT NULL,
+    response_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    PRIMARY KEY (identity, idem_key)
+);
+CREATE INDEX IF NOT EXISTS idx_idem_expiry ON idempotency_keys(expires_at);
 """
 
 
@@ -479,6 +491,100 @@ class MemoryStore:
                 if row is not None and row["resolved_at"] is not None:
                     raise KeyError(f"run '{run_id}' already resolved ({row['resolved_at']})")
                 raise KeyError(f"no pending approval for run '{run_id}'")
+
+    # -- idempotency -----------------------------------------------------
+    def idempotency_purge_expired(self) -> int:
+        """Delete expired idempotency records. Returns rows removed."""
+        with self._lock:
+            cursor = self._conn.execute(
+                "DELETE FROM idempotency_keys WHERE expires_at <= ?", (_now(),)
+            )
+            self._conn.commit()
+            return cursor.rowcount or 0
+
+    def idempotency_get(self, identity: str, idem_key: str) -> Optional[dict[str, Any]]:
+        """Return the stored record for a live key, else None (expired keys
+        are purged lazily so a retry after TTL starts a genuinely new call)."""
+        self.idempotency_purge_expired()
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT endpoint, body_hash, status_code, response_json, created_at, expires_at "
+                "FROM idempotency_keys WHERE identity = ? AND idem_key = ?",
+                (identity, idem_key),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def idempotency_put(self, identity: str, idem_key: str, endpoint: str, body_hash: str,
+                        status_code: int, response_json: str, ttl_seconds: int) -> None:
+        """Store a completed response. First write wins (INSERT OR IGNORE):
+        two concurrent retries with the same key cannot store two answers."""
+        from datetime import timedelta
+
+        expires = (datetime.now(timezone.utc) + timedelta(seconds=max(int(ttl_seconds), 1))).isoformat(timespec="seconds")
+        with self._lock:
+            self._conn.execute(
+                "INSERT OR IGNORE INTO idempotency_keys "
+                "(identity, idem_key, endpoint, body_hash, status_code, response_json, created_at, expires_at) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (identity, idem_key, endpoint, body_hash, status_code, response_json, _now(), expires),
+            )
+            self._conn.commit()
+
+    def idempotency_claim(self, identity: str, idem_key: str, endpoint: str,
+                          body_hash: str, ttl_seconds: int) -> Optional[dict[str, Any]]:
+        """Claim a key for a new execution, or return the existing record.
+
+        Returns None when this call won the claim (an in-flight marker with
+        ``status_code = -1`` is stored); otherwise returns the live record so
+        the caller can replay it (completed), report it (in-flight) or refuse
+        it (body mismatch).  First claim wins cluster-wide (single atomic
+        INSERT OR IGNORE); a crashed runner's marker expires via TTL.
+        """
+        from datetime import timedelta
+
+        self.idempotency_purge_expired()
+        expires = (datetime.now(timezone.utc) + timedelta(seconds=max(int(ttl_seconds), 1))).isoformat(timespec="seconds")
+        with self._lock:
+            cursor = self._conn.execute(
+                "INSERT OR IGNORE INTO idempotency_keys "
+                "(identity, idem_key, endpoint, body_hash, status_code, response_json, created_at, expires_at) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (identity, idem_key, endpoint, body_hash, -1, "", _now(), expires),
+            )
+            self._conn.commit()
+            if cursor.rowcount == 1:
+                return None
+            row = self._conn.execute(
+                "SELECT endpoint, body_hash, status_code, response_json, created_at, expires_at "
+                "FROM idempotency_keys WHERE identity = ? AND idem_key = ?",
+                (identity, idem_key),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def idempotency_complete(self, identity: str, idem_key: str,
+                             status_code: int, response_json: str) -> None:
+        """Replace the in-flight marker with the completed response."""
+        with self._lock:
+            self._conn.execute(
+                "UPDATE idempotency_keys SET status_code = ?, response_json = ? "
+                "WHERE identity = ? AND idem_key = ?",
+                (status_code, response_json, identity, idem_key),
+            )
+            self._conn.commit()
+
+    def idempotency_release(self, identity: str, idem_key: str) -> None:
+        """Drop the marker so a failed execution can be retried as new."""
+        with self._lock:
+            self._conn.execute(
+                "DELETE FROM idempotency_keys WHERE identity = ? AND idem_key = ?",
+                (identity, idem_key),
+            )
+            self._conn.commit()
+
+    def idempotency_count(self) -> int:
+        with self._lock:
+            row = self._conn.execute("SELECT COUNT(*) AS n FROM idempotency_keys").fetchone()
+        return int(row["n"]) if row else 0
 
     def list_pending(self, session_id: Optional[str] = None) -> list[dict[str, Any]]:
         self._purge_expired_pending()

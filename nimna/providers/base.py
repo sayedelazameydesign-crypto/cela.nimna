@@ -6,6 +6,7 @@ vendor formats.  Swapping the model therefore never touches skills or tools.
 """
 import copy
 import logging
+import random
 import time
 import uuid
 from abc import ABC, abstractmethod
@@ -107,10 +108,12 @@ T = TypeVar("T")
 
 
 def with_retries(fn: Callable[[], T], *, attempts: int = 3, base_delay: float = 2.0,
-                 max_delay: float = 30.0) -> T:
+                 max_delay: float = 30.0, jitter: bool = True) -> T:
     """Call ``fn`` retrying on retryable :class:`ProviderError` (429/5xx).
 
-    Free tiers rate-limit aggressively, so exponential back-off is essential.
+    Free tiers rate-limit aggressively, so exponential back-off is essential;
+    full jitter (sleep uniform in ``[0, delay]``) keeps N scaled replicas from
+    retrying in lock-step (thundering herd) after the same 429.
     """
     delay = base_delay
     last: Optional[Exception] = None
@@ -121,8 +124,9 @@ def with_retries(fn: Callable[[], T], *, attempts: int = 3, base_delay: float = 
             last = exc
             if not exc.retryable or attempt == attempts:
                 raise
-            log.warning("provider error (%s), retry %d/%d in %.1fs", exc, attempt, attempts, delay)
-            time.sleep(delay)
+            sleep_for = random.uniform(0, delay) if jitter else delay
+            log.warning("provider error (%s), retry %d/%d in %.1fs", exc, attempt, attempts, sleep_for)
+            time.sleep(sleep_for)
             delay = min(delay * 2, max_delay)
     assert last is not None
     raise last

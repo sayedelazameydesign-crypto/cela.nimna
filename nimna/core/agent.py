@@ -45,6 +45,7 @@ from ..memory.store import MemoryStore
 from ..models import BudgetExceededError, CostGuard, GovernedModelProvider, ModelRegistry
 from ..providers.base import Message, ModelProvider, ProviderError, ToolCall
 from ..provenance.manifest import build_manifest
+from ..resilience import Bulkhead, CircuitBreaker
 from ..skills.manager import SkillManager
 from ..tools.base import Tool, ToolContext, ToolRegistry, ToolValidationError, serialize_result
 from .approval import ApprovalPolicy, AutoApprove, DeferToClient
@@ -90,7 +91,18 @@ class Agent:
             self.cost_guard = provider.guard
         else:
             self.cost_guard = CostGuard.from_settings(settings, provider_info)
-            self.provider = GovernedModelProvider(provider, self.cost_guard)
+            breaker = CircuitBreaker(
+                f"model:{provider_info.get('provider', 'unknown')}",
+                failure_threshold=settings.breaker_failure_threshold,
+                cooldown_seconds=settings.breaker_cooldown_seconds,
+            )
+            bulkhead = Bulkhead(
+                f"model:{provider_info.get('provider', 'unknown')}",
+                max_concurrent=settings.bulkhead_max_concurrent,
+            )
+            self.provider = GovernedModelProvider(
+                provider, self.cost_guard, circuit_breaker=breaker, bulkhead=bulkhead
+            )
         self.policy = PolicyEngine()
         self.skills = skills
         self.tools = tools

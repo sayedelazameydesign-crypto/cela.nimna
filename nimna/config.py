@@ -211,6 +211,16 @@ class Settings:
     embedding_dim: int = 768
     embedding_provider: str = "auto"  # auto | gemini | hash
 
+    # resilience — circuit breaker + bulkhead at the provider boundary, and
+    # idempotency for retried HTTP calls.  All fail-safe: the breaker only
+    # short-circuits after consecutive provider failures, the bulkhead only
+    # sheds load past its cap, and idempotency only replays byte-identical
+    # requests (same key + same body hash).
+    breaker_failure_threshold: int = 5
+    breaker_cooldown_seconds: float = 30.0
+    bulkhead_max_concurrent: int = 16
+    idempotency_ttl_seconds: int = 86400  # 24h replay window for retried chat/approval calls
+
     # swarm — Multi-Agent (Sprint 2, المسار 2)
     swarm_enabled: bool = False
     swarm_max_agents: int = 3
@@ -302,6 +312,10 @@ class Settings:
             embedding_model=_env("EMBEDDING_MODEL", "text-embedding-004") or "text-embedding-004",
             embedding_dim=_env_int("EMBEDDING_DIM", 768),
             embedding_provider=(_env("EMBEDDING_PROVIDER", "auto") or "auto").lower(),
+            breaker_failure_threshold=max(_env_int("BREAKER_FAILURE_THRESHOLD", 5), 1),
+            breaker_cooldown_seconds=max(_env_float("BREAKER_COOLDOWN_SECONDS", 30.0), 1.0),
+            bulkhead_max_concurrent=max(_env_int("BULKHEAD_MAX_CONCURRENT", 16), 1),
+            idempotency_ttl_seconds=max(_env_int("IDEMPOTENCY_TTL_SECONDS", 86400), 60),
             swarm_enabled=_env_bool("SWARM_ENABLED", False),
             swarm_max_agents=_env_int("SWARM_MAX_AGENTS", 3),
             swarm_self_healing_retries=_env_int("SWARM_SELF_HEALING_RETRIES", 3),

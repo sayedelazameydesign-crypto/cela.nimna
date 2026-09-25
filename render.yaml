@@ -86,6 +86,8 @@ services:
         value: "false"
       - key: COMPUTER_ENABLED
         value: "false"
+      - key: SHELL_TOOL_ENABLED
+        value: "false"             # opt-in: shell_execution skill (run_command) — needs human approval per execution
 
       # -- المسارات في الحاوية (تطابق Dockerfile) -------------------------
       - key: SKILLS_DIR
@@ -106,5 +108,6 @@ services:
 # - الخدمة تنام بعد 15 دقيقة بلا traffic والإيقاظ يستغرق نحو دقيقة.
 # - 750 ساعة Free شهرياً لكل workspace؛ عند الاستنفاد تُعلَّق الخدمة حتى أول الشهر.
 # - لا shell access ولا one-off jobs على Free — التشخيص عبر /api/* أو `nimna doctor` محلياً.
-# - الصورة تُثبّت اعتماديات pyproject فقط (لا redis/qdrant-client/numpy)؛ المسارات
-#   الاختيارية تنهار بهدوء إلى fallback (يظهر ذلك في /api/health).
+# - الصورة تُثبّت اعتماديات pyproject + extra ‏prod (تشمل redis/qdrant-client)؛
+#   عند ضبط REDIS_URL/QDRANT_URL يتصل التطبيق فعلياً، وإلا ينهار بهدوء إلى
+#   fallback (يظهر ذلك في /api/health).
