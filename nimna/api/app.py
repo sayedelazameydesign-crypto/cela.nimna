@@ -341,17 +341,13 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
             replay = _idempotent_replay(identity, idem_key, "chat", body_hash)
             if replay is not None:
                 return replay
-        # swarm override via request
+        # Swarm override travels as a per-call flag — never mutates the shared
+        # settings object (the old set/run/restore window raced under concurrency;
+        # see tests/test_swarm_race.py). None = server default.
         try:
-            if request.swarm is not None:
-                orig = settings.swarm_enabled
-                settings.swarm_enabled = bool(request.swarm)
-                try:
-                    result = await run_in_threadpool(agent.run, request.message, session_id)
-                finally:
-                    settings.swarm_enabled = orig
-            else:
-                result = await run_in_threadpool(agent.run, request.message, session_id)
+            result = await run_in_threadpool(
+                agent.run, request.message, session_id, swarm=request.swarm
+            )
         except Exception:
             if idem_key is not None:
                 agent.memory.idempotency_release(identity, idem_key)

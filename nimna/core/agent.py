@@ -129,8 +129,10 @@ class Agent:
     # ------------------------------------------------------------------
     # public API
     # ------------------------------------------------------------------
-    def _should_swarm(self, user_message: str) -> bool:
-        if not getattr(self.settings, "swarm_enabled", False):
+    def _should_swarm(self, user_message: str, swarm: Optional[bool] = None) -> bool:
+        # Per-call override wins; None falls back to shared settings (legacy path).
+        enabled = swarm if swarm is not None else getattr(self.settings, "swarm_enabled", False)
+        if not enabled:
             return False
         # explicit marker or env SWARM_FORCE
         if user_message.strip().startswith("[swarm]") or "swarm:" in user_message.lower():
@@ -202,10 +204,13 @@ class Agent:
             log.exception("swarm run crashed")
             return self._fail(state, f"internal error: {type(exc).__name__}: {exc}")
 
-    def run(self, user_message: str, session_id: Optional[str] = None) -> AgentResult:
-        # Swarm fast-path (if enabled and request is composite)
+    def run(self, user_message: str, session_id: Optional[str] = None, *,
+            swarm: Optional[bool] = None) -> AgentResult:
+        # Swarm fast-path (if enabled for this call and request is composite).
+        # `swarm` is an explicit per-call flag so concurrent callers never share
+        # mutable routing state (see tests/test_swarm_race.py); None = settings.
         try:
-            if self._should_swarm(user_message):
+            if self._should_swarm(user_message, swarm):
                 return self.run_swarm(user_message, session_id=session_id)
         except Exception as exc:
             log.warning("swarm check failed (%s), falling back to single-agent", exc)

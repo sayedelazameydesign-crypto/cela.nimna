@@ -92,6 +92,7 @@ def _stable_value(key: str, value: Any) -> Any:
 class RunRequest:
     message: str
     session_id: Optional[str] = None
+    swarm: Optional[bool] = None  # per-call override; None = settings default
 
 
 @dataclass
@@ -194,7 +195,7 @@ class AgentRuntime:
     def run(self, request: RunRequest | str) -> RunResult:
         self._ensure_live()
         req = request if isinstance(request, RunRequest) else RunRequest(message=request)
-        res = self.agent.run(req.message, session_id=req.session_id)
+        res = self.agent.run(req.message, session_id=req.session_id, swarm=req.swarm)
         return self._wrap(res, extra_events=())
 
     def approve(
