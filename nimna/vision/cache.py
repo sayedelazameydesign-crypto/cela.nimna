@@ -1,7 +1,7 @@
 """Vision Gateway Caching Layer — Redis + in-memory fallback.
 
 Caches Gemini Vision analysis results for identical screenshots to cut 80% of calls.
-Key = vision:{hash}:{w}x{h} where hash is 16x16 grayscale md5 (same as agent hash).
+Key = vision:{hash}:{w}x{h} where hash is 16x16 grayscale sha256 (same as agent hash).
 TTL 600s (10m), maxmemory 256mb allkeys-lru on Redis side.
 
 Usage:
@@ -30,9 +30,9 @@ def _hash_image(data: bytes, w: int = 0, h: int = 0) -> str:
 
         from PIL import Image
         img = Image.open(io.BytesIO(data)).convert("L").resize((16, 16))
-        return hashlib.md5(img.tobytes()).hexdigest()[:12]
+        return hashlib.sha256(img.tobytes()).hexdigest()[:12]
     except Exception:
-        return hashlib.md5(data[:4096]).hexdigest()[:12]
+        return hashlib.sha256(data[:4096]).hexdigest()[:12]
 
 def _key(data: bytes, w: int, h: int) -> str:
     h12 = _hash_image(data, w, h)

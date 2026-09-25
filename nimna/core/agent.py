@@ -775,9 +775,9 @@ class Agent:
 
                                     from PIL import Image
                                     img = Image.open(io.BytesIO(raw)).convert("L").resize((16,16))
-                                    h = hashlib.md5(img.tobytes()).hexdigest()[:12]
+                                    h = hashlib.sha256(img.tobytes()).hexdigest()[:12]
                                 except Exception:
-                                    h = hashlib.md5(raw[:4096]).hexdigest()[:12]
+                                    h = hashlib.sha256(raw[:4096]).hexdigest()[:12]
                                 state.screenshot_hashes.append(h)
                                 # keep last 10
                                 if len(state.screenshot_hashes) > 10:

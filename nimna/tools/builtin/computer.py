@@ -147,10 +147,10 @@ def _hash_image(data: bytes) -> str:
 
         from PIL import Image
         img = Image.open(io.BytesIO(data)).convert("L").resize((16,16))
-        return hashlib.md5(img.tobytes()).hexdigest()[:12]
+        return hashlib.sha256(img.tobytes()).hexdigest()[:12]
     except Exception:
         import hashlib
-        return hashlib.md5(data[:4096]).hexdigest()[:12]
+        return hashlib.sha256(data[:4096]).hexdigest()[:12]
 
 def _try_real_screenshot(ctx: ToolContext) -> tuple[bytes, str] | None:
     """Attempt to fetch a real screenshot from the desktop container.
