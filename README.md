@@ -273,6 +273,14 @@ docker compose --profile computer up -d desktop    # سطح مكتب معزول 
   مفاتيح لا يقرؤها الكود، أو سرّ مضمّن = فشل. **بلا `GEMINI_API_KEY` في اللوحة لا إقلاع أصلاً** —
   `ProviderError` عند التكوين، لا سقوط صامت إلى `mock`. النشر المجاني لا يثبت أن النموذج يرد؛
   ذلك شغل `live-provider-proof.yml` وقناة الـannotation فيه.
+- **FastAPI Cloud (ربط ومزامنة GitHub):** العقد `fastapi-cloud.yaml` + الدليل
+  [`docs/DEPLOY-FASTAPI-CLOUD.md`](docs/DEPLOY-FASTAPI-CLOUD.md). اللوحة
+  [Apps — sayedelazameydesign](https://dashboard.fastapicloud.com/sayedelazameydesign-424e4d8c/apps).
+  المزامنة الحية: GitHub App (`fastapi-cloud[bot]`) على كل دفع إلى `main` →
+  [`celanimna-3ffa6b22`](https://celanimna-3ffa6b22.fastapicloud.dev) و`celanimna`.
+  الـworkflow `.github/workflows/fastapi-cloud-deploy.yml` يدوي فقط (ممنوع `on.push`
+  وإلا صار النشر مزدوجاً). البوابة `python scripts/check_fastapi_cloud_link.py`.
+  `[tool.fastapi] entrypoint = "nimna.api.app:app"` و`.python-version` = `3.11`.
 
 ---
 
@@ -404,6 +412,8 @@ Mission Runtime
 - `docs/architecture/agent-os-blueprint.md`: خطة ترقية تدريجية بلا كسر النسخة.
 - `docs/DEPLOY-RENDER-FREE.md`: عقد النشر المجاني (`render.yaml`) وقيود Free Tier الموثقة،
   وعلاقته بالإثبات الحي (`live-provider-proof.yml` + قناة الـannotation).
+- `docs/DEPLOY-FASTAPI-CLOUD.md`: علاقة الربط والمزامنة بين GitHub وFastAPI Cloud
+  (`fastapi-cloud.yaml` + workflow النشر + أسرار اللوحة).
 
 ### Browser Use Cloud V4 (اختياري ومحكوم)
 

@@ -1,0 +1,30 @@
+# What FastAPI Cloud should NOT upload. Same syntax as .gitignore; this file
+# takes precedence. Never ignore skills/ or nimna/ — the agent will not boot.
+#
+# Keep: pyproject.toml, nimna/, skills/, workspace/, README.md, .python-version
+
+.git/
+.github/
+.arena/
+docs/
+evals/
+infra/
+k8s/
+ops/
+security/
+tests/
+scripts/
+workspace/reports/
+workspace/tmp/
+
+render.yaml
+docker-compose.yml
+Dockerfile
+.dockerignore
+CONTRIBUTING.md
+RELEASE_NOTES.md
+ROADMAP.md
+SECURITY.md
+NOTICE
+LICENSE
+fastapi-cloud.yaml

@@ -1,0 +1,70 @@
+name: FastAPI Cloud — manual redeploy
+
+# علاقة الربط الحية ليست هذا الـworkflow.
+# كل دفع إلى `main` يزامنه FastAPI Cloud GitHub App (`fastapi-cloud[bot]`)
+# إلى التطبيقين celanimna-3ffa6b22 و celanimna.
+# إضافة `on.push.branches: [main]` هنا = نشر مزدوج/ثلاثي. ممنوع.
+#
+# هذا الملف مسار يدوي احتياطي عبر Deploy Token:
+#   https://fastapicloud.com/docs/advanced-features/deploy-tokens/
+#
+# Required repository secrets (never committed):
+#   FASTAPI_CLOUD_TOKEN   — deploy token from the FastAPI Cloud app
+#   FASTAPI_CLOUD_APP_ID  — UUID next to the app name in the dashboard
+#
+# CI PASS ≠ Deployment. Missing secrets ≠ a successful sync.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: fastapi-cloud-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    # default branch only — same constraint as the GitHub App integration
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: This workflow carries no masks
+        run: bash scripts/check_ci_falsifiable.sh .github/workflows/fastapi-cloud-deploy.yml
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Verify the GitHub ↔ FastAPI Cloud contract
+        run: |
+          python -m pip install --quiet "pyyaml==6.0.3"
+          python scripts/check_fastapi_cloud_link.py
+
+      - name: Install the latest version of uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Require deploy credentials (never silently skip)
+        env:
+          FASTAPI_CLOUD_TOKEN: ${{ secrets.FASTAPI_CLOUD_TOKEN }}
+          FASTAPI_CLOUD_APP_ID: ${{ secrets.FASTAPI_CLOUD_APP_ID }}
+        run: |
+          set -euo pipefail
+          if [ -z "${FASTAPI_CLOUD_TOKEN:-}" ] || [ -z "${FASTAPI_CLOUD_APP_ID:-}" ]; then
+            echo "::error::Manual FastAPI Cloud redeploy refused: FASTAPI_CLOUD_TOKEN and/or FASTAPI_CLOUD_APP_ID are not set. Live sync is fastapi-cloud[bot] on main, not this workflow. See docs/DEPLOY-FASTAPI-CLOUD.md"
+            exit 1
+          fi
+          echo "credential present (value is never printed)"
+
+      - name: Deploy to FastAPI Cloud
+        run: uv run fastapi deploy
+        env:
+          FASTAPI_CLOUD_TOKEN: ${{ secrets.FASTAPI_CLOUD_TOKEN }}
+          FASTAPI_CLOUD_APP_ID: ${{ secrets.FASTAPI_CLOUD_APP_ID }}

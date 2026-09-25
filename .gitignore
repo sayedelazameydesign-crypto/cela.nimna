@@ -33,3 +33,6 @@ workspace/**/*.png
 
 # offline code snapshots from scripts/snapshot-prod.sh (tarballs: never commit)
 .snapshots/
+
+# FastAPI Cloud local link (app id in CI comes from FASTAPI_CLOUD_APP_ID)
+.fastapicloud/

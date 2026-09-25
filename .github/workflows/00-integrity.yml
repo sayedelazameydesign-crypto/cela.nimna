@@ -29,3 +29,7 @@ jobs:
         run: |
           python -m pip install --quiet "pyyaml==6.0.3"
           python scripts/check_render_blueprint.py
+      - name: Verify FastAPI Cloud link contract
+        run: |
+          python -m pip install --quiet "pyyaml==6.0.3"
+          python scripts/check_fastapi_cloud_link.py
