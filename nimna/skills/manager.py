@@ -125,22 +125,11 @@ class SkillManager:
             text = text[:max_chars] + f"\n\n[... truncated, {len(text) - max_chars} more characters]"
         return text
 
-    def validate_all(self, registry_names: Optional[set[str]] = None,
-                       gated_tools: Optional[dict[str, str]] = None) -> dict[str, list[str]]:
+    def validate_all(self, registry_names: Optional[set[str]] = None) -> dict[str, list[str]]:
         """Return {skill_name: [warnings]} for every discovered skill.
 
         When ``registry_names`` is supplied, unknown ``allowed_tools`` are flagged.
-        ``gated_tools`` maps capability-gated tool names to their enabling
-        environment flag; a gated tool that is simply not registered (flag off)
-        is reported as gated — not as "unknown" — because the skill is correct
-        and the operator only needs to opt in.
         """
-        if gated_tools is None:
-            # Single source of truth lives in nimna/tools/builtin/shell.py
-            # (TOOL_NAME / ENV_FLAG); tests/test_skills_gated.py pins this copy
-            # against those constants.  Kept literal here to avoid importing
-            # the execution layer from the skills layer (import cycle).
-            gated_tools = {"run_command": "SHELL_TOOL_ENABLED"}
         report: dict[str, list[str]] = {}
         for skill in self._skills.values():
             warnings: list[str] = []
@@ -152,12 +141,8 @@ class SkillManager:
                 warnings.append("instructions exceed 15k characters; move detail into references/")
             if registry_names is not None:
                 unknown = skill.meta.unknown_tools(registry_names)
-                gated = [t for t in unknown if t in gated_tools]
-                truly_unknown = [t for t in unknown if t not in gated_tools]
-                if truly_unknown:
-                    warnings.append(f"references unknown tools: {', '.join(truly_unknown)} (will be ignored at runtime)")
-                for tool in gated:
-                    warnings.append(f"tool '{tool}' is capability-gated: set {gated_tools[tool]}=true to register it (skill is otherwise valid)")
+                if unknown:
+                    warnings.append(f"references unknown tools: {', '.join(unknown)} (will be ignored at runtime)")
             if skill.meta.risk_level == "restricted":
                 warnings.append("skill marked restricted – requires manual review before use")
             report[skill.name] = warnings

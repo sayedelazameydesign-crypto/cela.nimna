@@ -118,8 +118,8 @@ curl -s "$BASE/api/chat" -H "X-Nimna-Key: $NIMNA_API_KEY" -H 'Content-Type: appl
 
 الحقول الفعلية أوسع (`verify_detail`, `limits`, `governance.cost`, `memory`, `infra`,
 `provenance`, `browser_use`) — هذه لقطة مختصرة. **الأرقام مقيسة لا منقولة**: 10 مهارات
-و28 أداة على `main` (تطابق `README.md` منذ 2026-09-25) — وحين يختلف أي قياس مستقبلاً
-مع README فالقياس هو المرجع (وثّق ذلك في الـPR إن لمسته).
+و28 أداة على `main`؛ لاحظ أن `README.md` ما يزال يذكر «26 أداة» كرقم أقدم — حين يختلف
+القياس مع README فالقياس هو المرجع (وثق ذلك في الـPR إن لمّمه).
 
 > `POST /api/chat` قد يرجع `status: "awaiting_approval"` بدل الرد: أدوات مثل `run_python`
 > تطلب موافقة، وتُحلّ عبر `POST /api/approvals/{id}`. كرار الطلب نفسه على جلسة معلقة

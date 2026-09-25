@@ -12,7 +12,7 @@ RUN useradd --create-home --uid 1000 nimna
 
 COPY pyproject.toml README.md ./
 COPY nimna ./nimna
-RUN pip install --upgrade "pip>=26.2" "setuptools>=83" && pip install ".[prod]"
+RUN pip install --upgrade "pip>=26.2" "setuptools>=83" && pip install .
 
 COPY skills ./skills
 COPY workspace ./workspace

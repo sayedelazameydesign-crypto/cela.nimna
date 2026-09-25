@@ -104,7 +104,6 @@ sub-protocol on the WebSocket. The 🔑 button changes or clears it.
 - Denied calls feed `{"error":"denied"}` back to the model; the agent is
   instructed never to retry a denied tool.
 - Resume is immutable: the stored `tool_call` is executed; client cannot mutate it. Duplicate resume is rejected via atomic `WHERE resolved_at IS NULL`.
-- No resume by implicit approval: `AgentRuntime.resume(run_id, approved)` requires an explicit decision argument (no default). A suspended confirm-risk tool must never continue because a caller forgot to pass a flag.
 
 ## Limits that stop runaway loops
 `nimna/config.py` (all env-overridable):

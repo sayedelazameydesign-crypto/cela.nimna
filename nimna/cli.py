@@ -65,35 +65,10 @@ def _print_result(result: AgentResult, *, verbose: bool = False) -> None:
         print(json.dumps(result.model_dump(mode="json"), ensure_ascii=False, indent=2))
 
 
-def _build_agent_or_die(args: argparse.Namespace, command: str, *, approval_policy=None):
-    """build_agent() with user-facing errors (no traceback for config mistakes).
-
-    A missing API key or a cost-guard refusal is an operator error, not a bug —
-    print one helpful line on stderr and signal failure with exit code 2, the
-    same contract as `nimna serve`.
-    """
-    from .bootstrap import build_agent
-    from .models import CostPolicyError
-    from .providers import ProviderError
-
-    try:
-        if approval_policy is None:
-            return build_agent(_settings(args))
-        return build_agent(_settings(args), approval_policy=approval_policy)
-    except (ProviderError, CostPolicyError) as exc:
-        print(f"nimna {command}: cannot start — {exc}", file=sys.stderr)
-        raise _CliBootError from exc
-
-
-class _CliBootError(Exception):
-    """Internal: agent construction already reported its own friendly error."""
-
-
 def cmd_ask(args: argparse.Namespace) -> int:
-    try:
-        agent = _build_agent_or_die(args, "ask", approval_policy=ConsolePrompt())
-    except _CliBootError:
-        return 2
+    from .bootstrap import build_agent
+
+    agent = build_agent(_settings(args), approval_policy=ConsolePrompt())
     # preview before execution (as requested in review §7)
     print(f"المهارة المتوقعة: سيختار الوكيل من بين {len(agent.skills)} مهارة")
     print(f"الأدوات المتاحة: {', '.join(sorted(agent.tools.names()))[:200]}")
@@ -107,10 +82,10 @@ def cmd_ask(args: argparse.Namespace) -> int:
 
 
 def cmd_chat(args: argparse.Namespace) -> int:
-    try:
-        agent = _build_agent_or_die(args, "chat", approval_policy=ConsolePrompt())
-    except _CliBootError:
-        return 2
+    from .bootstrap import build_agent
+
+    settings = _settings(args)
+    agent = build_agent(settings, approval_policy=ConsolePrompt())
     session_id = args.session or uuid.uuid4().hex[:12]
     print(f"Nimna agent – provider={agent.provider.name} model={agent.provider.model} "
           f"skills={len(agent.skills)} session={session_id}")
@@ -200,10 +175,9 @@ def cmd_serve(args: argparse.Namespace) -> int:
 
 
 def cmd_approvals(args: argparse.Namespace) -> int:
-    try:
-        agent = _build_agent_or_die(args, "approvals")
-    except _CliBootError:
-        return 2
+    from .bootstrap import build_agent
+
+    agent = build_agent(_settings(args))
     cmd = getattr(args, "approvals_cmd", None) or "list"
     if cmd == "list":
         pending = agent.pending_approvals()

@@ -1,6 +1,6 @@
 # Nimna — وكيل ذكي قابل لإعادة استخدام المهارات (Reusable-Skills Agent)
 
-> **الحالة: Release Candidate Sprint 2 — Vector Memory (Qdrant + fallback, 768-dim) + 28 أداة — 621 اختبارًا**
+> **الحالة: Release Candidate Sprint 2 — Vector Memory (Qdrant + fallback, 768-dim) + 26 أداة — 83 اختبارًا**
 > الاختبارات لا تثبت الأمان المطلق. الحاويات تشترك في **نواة المضيف**؛ أبقِ المضيف وDocker محدثين واستخدم **seccomp/AppArmor/SELinux**. لا تستخدم `subprocess` كعزل أمني، ولا تعتبر `mock` دليل اتصال حقيقي.
 
 وكيل عام يعمل فوق **مفتاح Gemini المجاني** (أو NVIDIA NIM أو أي نموذج OpenAI-compatible) بمكتبة مهارات `SKILL.md` قابلة للتبديل:
@@ -22,7 +22,7 @@
 ## المحتويات
 1. [التشغيل السريع](#التشغيل-السريع)
 2. [البنية](#البنية)
-3. [المهارات (10)](#المهارات-skills)
+3. [المهارات (9)](#المهارات-skills)
 4. [الأدوات (26) والصلاحيات](#الأدوات-والصلاحيات)
 5. [الذاكرة والتدقيق](#الذاكرة-وسجل-التدقيق)
 6. [تبديل المزود](#تبديل-المزود-gemini--nvidia--openai)
@@ -56,7 +56,7 @@ nimna ask "حلّل ملف المبيعات وأنشئ تقريراً"
 nimna chat                               # تفاعلي — الموافقات في الطرفية
 PORT=8001 nimna serve                    # واجهة + REST  http://localhost:8001
 nimna doctor --offline
-pytest -q                                # 621 اختبار بلا مفتاح (mock)
+pytest -q                                # 83 اختبار بلا مفتاح (mock)
 ```
 
 بدون مفتاح مزوّد: `NIMNA_ENV=development MODEL_PROVIDER=mock nimna serve` — ترى اختيار المهارات والأدوات حياً والردود فقط وهمية.
@@ -93,9 +93,9 @@ nimna/
 │   ├── app.py           # FastAPI + WebSocket hardened (1MB, ping, rate 10/s)
 │   └── static/index.html# لوحة تحكم 3 أعمدة + Computer Use متقدم
 └── cli.py               # nimna ask|chat|skills|tools|serve|approvals|resume|doctor
-skills/                  # 10 مهارات — أضف مجلد = مهارة جديدة
+skills/                  # 9 مهارات — أضف مجلد = مهارة جديدة
 workspace/               # مساحة عمل مقيدة (كل أدوات الملفات مسجونة داخلها)
-tests/                   # 621 اختبار — بلا شبكة
+tests/                   # 83 اختبار — بلا شبكة
 ```
 
 **دورة طلب واحد** ـ «حلّل المبيعات»:
@@ -135,10 +135,10 @@ risk_level: safe
 1. افحص الأعمدة بـ read_csv ...
 ```
 
-- `nimna skills validate` ينبه لأداة غير مسجلة، أو أداة gated تحتاج opt-in (مثل `run_command`)، أو مهارة `restricted` تحتاج مراجعة.
+- `nimna skills validate` ينبه لأداة غير مسجلة أو مهارة `restricted` تحتاج مراجعة.
 - إضافة مهارة = إضافة مجلد + `POST /api/skills/reload`.
 
-### المهارات المضمّنة (10)
+### المهارات المضمّنة (9)
 
 | المهارة | الغرض | الأدوات | المستوى |
 |---------|-------|---------|---------|
@@ -148,7 +148,6 @@ risk_level: safe
 | `python_executor` | تشغيل Python معزول | `run_python` | safe/confirm |
 | `file_analysis` | استعراض وتلخيص نصوص | `list_files, read_file, file_info` | safe |
 | `skill_author` | تأليف `SKILL.md` جديدة | `write_file, list_skills` | safe |
-| `shell_execution` | **طرفية داخل الحوزة** — opt-in عبر `SHELL_TOOL_ENABLED` | `run_command` | confirm |
 | `computer_control` | **تحكم بصري معزول VNC** — تصفح/نقر/كتابة | `take_screenshot, get_element_coordinates, mouse_click, type_text, list_files, read_file` | **restricted** |
 | `code_execution` | **تنفيذ أوامر/كود** — فصل أمني عن التحكم البصري | `shell_execute, run_python, write_file` | **restricted** |
 | `browser_use` | **Browser Use Cloud API V4** — متصفح سحابي opt-in وبميزانية/موافقة | `browser_use_run` | **restricted** |
@@ -159,7 +158,7 @@ risk_level: safe
 
 ## الأدوات والصلاحيات
 
-`nimna tools` → 28 أداة (22 + edit/apply_patch + 3 vector memory + Browser Use V4) + `run_command` (طرفية داخل الحوزة، opt-in عبر `SHELL_TOOL_ENABLED` — evidence موقّع وdefault-deny):
+`nimna tools` → 26 أداة (22 + 3 vector memory + Browser Use V4) + `run_command` (طرفية داخل الحوزة، opt-in عبر `SHELL_TOOL_ENABLED` — evidence موقّع وdefault-deny):
 
 - **safe**: قراءة/حساب — تنفذ مباشرة.
 - **confirm/restricted**: تحتاج موافقة (تعليق). `delete_file` دائماً؛ `write_file/report` عند الكتابة فوق موجود؛ `run_python` مع `subprocess`؛ كل أدوات `computer_control`/`code_execution`.
@@ -232,8 +231,7 @@ Gemini يعيد المحاولة تلقائياً عند 429 بتراجع أسي
 
 | الطريقة | المسار | الوصف |
 |---------|--------|-------|
-| GET | `/api/health` | **عام** — مزود/نموذج/مهارات/أدوات + `verify_detail` + `resilience` + `port` |
-| GET | `/api/metrics` | مقاييس Prometheus (بمفتاح API) — طلبات/مدد/قاطع/limiter |
+| GET | `/api/health` | **عام** — مزود/نموذج/مهارات/أدوات + `verify_detail` + `port` |
 | GET | `/api/skills`, `/api/skills/{name}` | كتالوج / مهارة كاملة |
 | POST | `/api/skills/reload` | إعادة اكتشاف |
 | GET | `/api/tools` | الأدوات + مخططاتها + `risk` |
@@ -253,11 +251,6 @@ curl -s localhost:8001/api/chat -H "X-Nimna-Key: $NIMNA_API_KEY" -H 'Content-Typ
 curl -s localhost:8001/api/approvals/<id>?session_id=<sid> -H "X-Nimna-Key: $NIMNA_API_KEY" -H 'Content-Type: application/json' -d '{"approved":true}'
 # → {"status":"done","reply":"تم الحذف"}
 ```
-
-**المرونة والمراقبة:** كل رد يحمل `X-Request-ID`؛ أعد المحاولة بأمان عبر ترويسة
-`Idempotency-Key` (نفس المفتاح+الجسم = نفس الرد المخزّن)؛ القاطع يفشل سريعًا
-عند موت المزوّد؛ التفاصيل والـSLO والـrunbooks في [`docs/RESILIENCE.md`](docs/RESILIENCE.md).
-البدائل المجانية/المفتوحة (Valkey بدل Redis + سجل تحقق لكل أداة) في [`docs/FREE-STACK.md`](docs/FREE-STACK.md).
 
 ---
 
@@ -377,9 +370,9 @@ docker compose --profile computer up -d desktop    # سطح مكتب معزول 
 
 ```bash
 nimna doctor --offline   # .env, مفاتيح, Docker, صلاحيات, SQLite, مخططات الأدوات
-pytest -q                # 621 اختبار (mock) — بلا شبكة
+pytest -q                # 83 اختبار (mock) — بلا شبكة
 nimna skills validate    # صياغة SKILL.md + restricted
-nimna tools              # 28 أداة مع risk (edit/apply_patch +3 vector memory + Browser Use V4 + run_command gated)
+nimna tools              # 26 أداة مع risk ( +3 vector memory + Browser Use V4 + run_command gated)
 curl -s localhost:8001/api/health | jq                          # عام
 websocat -H "X-Nimna-Key: $NIMNA_API_KEY" ws://localhost:8001/ws/test
 ```
@@ -467,6 +460,6 @@ nimna ask "analyse sales.csv and write a report"
 PORT=8001 nimna serve         # http://localhost:8001 — the UI asks for the key once per tab
 # local-only, no key: NIMNA_ENV=development PORT=8001 nimna serve  (loopback clients only)
 nimna doctor --offline
-pytest -q                     # 621 offline tests (mock)
+pytest -q                     # 83 offline tests (mock)
 ```
 Add a skill: `skills/<name>/SKILL.md` (`name, description, triggers, allowed_tools`) → `POST /api/skills/reload`. Add a tool: register Pydantic handler on `ToolRegistry`. Swap model: change `MODEL_PROVIDER` — skills/tools/memory stay identical.

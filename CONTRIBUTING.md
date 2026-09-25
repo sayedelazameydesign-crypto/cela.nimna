@@ -115,10 +115,6 @@ python -B -m pytest tests/test_x.py     # -B: write no .pyc during the mutation 
 file — hence the cache wipe. An isolated `git worktree add` avoids the issue
 entirely at a higher cost.
 
-### Scripted edits: print → assert → modify
-
-Any script that pipes a computed value into an in-place edit (`sed -i`, codemods, count updates in `README.md`) must print the value and assert it (present, numeric, in range) *before* modifying. Never trust an empty variable: a missing `bc` once wiped every test count from `README.md` because `sed` ran with an empty `$TOTAL`. Prefer Python with `assert` over bare shell pipelines for documented files.
-
 ## Pull requests
 
 - Keep commits focused; `git push origin arena/<id>` on your arena branch.

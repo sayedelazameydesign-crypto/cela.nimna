@@ -97,8 +97,6 @@ env:
     value: "false"
   - key: COMPUTER_ENABLED
     value: "false"
-  - key: SHELL_TOOL_ENABLED
-    value: "false"               # opt-in: shell_execution skill (run_command) — needs human approval per execution
 
   # -- المسارات (ليست Docker /app/… — FastAPI Cloud يشغّل المشروع كما هو)
   - key: SKILLS_DIR

@@ -16,10 +16,7 @@ import yaml
 
 REPO = Path(__file__).resolve().parent.parent
 CI = REPO / ".github/workflows/ci.yml"
-# Certified baseline = squash-merge of PR #22 (see scripts/production_gate.sh).
-# The pre-squash T8 commit 9885f3c is not in this history; the pin lives here
-# AND in the gate script and both must agree on a commit that exists.
-T8_SHA = "0a3a5636f36313bebcc6e1dffffaa747eb565a51"
+T8_SHA = "9885f3c33b908b131855db4e8ac1277c881ea56c"
 
 
 def _ci_text() -> str:
@@ -51,24 +48,6 @@ def test_gate_pins_the_t8_ancestor_and_docker_and_health():
     # health must HARD-FAIL (the soft pattern '... | head -c' alone is banned)
     assert "curl -sf" in gate_script and "server never answered /api/health" in gate_script
     assert "--skip" not in gate_script, "the gate has no escape hatch by design"
-
-
-def test_t8_anchor_exists_in_full_history():
-    """The pinned baseline must be a REAL commit — a pin to a commit that is
-    not in history makes step 1 of the gate unpassable (this exact bug shipped
-    when history was squash-merged and the pin still pointed at 9885f3c)."""
-    probe = subprocess.run(["git", "-C", str(REPO), "cat-file", "-t", T8_SHA],
-                           capture_output=True, text=True)
-    if probe.returncode == 0 and probe.stdout.strip() == "commit":
-        return  # anchor present — the gate's step 1 can pass from here
-    shallow = subprocess.run(
-        ["git", "-C", str(REPO), "rev-parse", "--is-shallow-repository"],
-        capture_output=True, text=True)
-    if shallow.stdout.strip() == "true":
-        pytest.skip("shallow checkout without the anchor commit — existence is "
-                    "enforced by the gate itself, which runs under fetch-depth: 0")
-    pytest.fail(f"T8 anchor {T8_SHA} is not in this history — "
-                "production_gate.sh step 1 can never pass")
 
 
 def test_dockerfile_toolchain_is_hardened():

@@ -21,11 +21,6 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest==9.1.1"]
 charts = ["matplotlib==3.8.4"]
-# Runtime optionals with real import sites (vision Redis cache, Qdrant vector
-# memory). The Dockerfile installs .[prod] so that a REDIS_URL/QDRANT_URL set
-# by compose/k8s/Render actually connects instead of silently falling back.
-# Specifiers mirror requirements.txt; numpy arrives via qdrant-client too.
-prod = ["redis>=5.0.0", "qdrant-client>=1.11.0", "numpy>=1.24", "prometheus-client>=0.19"]
 
 [project.scripts]
 nimna = "nimna.cli:main"

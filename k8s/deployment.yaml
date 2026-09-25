@@ -10,24 +10,8 @@ spec:
   template:
     metadata:
       labels: {app: nimna-api}
-      # /api/metrics is behind API-key auth (X-Nimna-Key) — the scrape recipe
-      # (header-injecting proxy or authenticated cron) is in docs/RESILIENCE.md.
-      annotations: {prometheus.io/scrape: "true", prometheus.io/port: "8000", prometheus.io/path: "/api/metrics"}
+      annotations: {prometheus.io/scrape: "true", prometheus.io/port: "8000"}
     spec:
-      # Spread replicas across nodes, preferring separate zones: a single
-      # node (or zone) failure must not take the whole API down.  Preferred
-      # (not required) so small clusters still schedule.
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              labelSelector: {matchLabels: {app: nimna-api}}
-              topologyKey: kubernetes.io/hostname
-          - weight: 50
-            podAffinityTerm:
-              labelSelector: {matchLabels: {app: nimna-api}}
-              topologyKey: topology.kubernetes.io/zone
       containers:
       - name: api
         image: nimna-agent:latest
@@ -51,16 +35,6 @@ spec:
         livenessProbe: {httpGet: {path: /api/health, port: http}, initialDelaySeconds: 15, periodSeconds: 20}
         resources: {requests: {memory: "256Mi", cpu: "200m"}, limits: {memory: "800Mi", cpu: "1000m"}}
       terminationGracePeriodSeconds: 30
----
-# Voluntary disruptions (node drains, cluster upgrades) must never take all
-# replicas at once: with replicas=2 this keeps at least one pod serving.
-apiVersion: policy/v1
-kind: PodDisruptionBudget
-metadata:
-  name: nimna-api-pdb
-spec:
-  minAvailable: 1
-  selector: {matchLabels: {app: nimna-api}}
 ---
 apiVersion: v1
 kind: Service

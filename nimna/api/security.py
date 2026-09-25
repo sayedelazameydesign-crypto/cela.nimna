@@ -258,10 +258,6 @@ class SlidingWindowRateLimiter:
         self._hits: dict[str, deque[float]] = {}
         self._lock = threading.Lock()
 
-    @property
-    def backend(self) -> str:
-        return "memory"
-
     def hit(self, identity: str) -> tuple[bool, float]:
         """Record a hit. Returns ``(allowed, retry_after_seconds)``."""
         now = self.clock()
@@ -274,91 +270,6 @@ class SlidingWindowRateLimiter:
                 return False, max(bucket[0] + self.window - now, 0.0)
             bucket.append(now)
             return True, 0.0
-
-
-class RedisSlidingWindowRateLimiter:
-    """``limit`` hits per ``window`` seconds per identity, shared via Redis.
-
-    Same :meth:`hit` contract as :class:`SlidingWindowRateLimiter`, but the
-    buckets live in Redis sorted sets so N replicas behind a load balancer
-    enforce ONE limit instead of N independent ones.  The check-and-add runs
-    as a single Lua script (atomic — no check-then-set race).
-
-    On ANY Redis error the limiter fails OPEN (allows the request): a cache
-    blip must degrade throttling, not take down ``/api/chat``.  Every such
-    event is counted (``rate_limiter_errors_total``) and logged — degradation
-    is visible, never silent.
-    """
-
-    _LUA = """
-    local now = tonumber(ARGV[1])
-    local window = tonumber(ARGV[2])
-    local limit = tonumber(ARGV[3])
-    redis.call('ZREMRANGEBYSCORE', KEYS[1], 0, now - window)
-    local count = redis.call('ZCARD', KEYS[1])
-    if count >= limit then
-        local oldest = redis.call('ZRANGE', KEYS[1], 0, 0, 'WITHSCORES')
-        return {0, oldest[2]}
-    end
-    redis.call('ZADD', KEYS[1], now, ARGV[4])
-    redis.call('PEXPIRE', KEYS[1], math.floor(window * 1000) + 5000)
-    return {1, 0}
-    """
-
-    def __init__(self, redis_client: Any, limit: int, window: float = 60.0,
-                 clock: Callable[[], float] = time.time,
-                 key_prefix: str = "nimna:ratelimit:chat:"):
-        self._redis = redis_client
-        self.limit = int(limit)
-        self.window = float(window)
-        self.clock = clock
-        self.key_prefix = key_prefix
-        self._script_hash: Optional[str] = None
-
-    @classmethod
-    def from_url(cls, redis_url: str, limit: int, window: float = 60.0) -> "RedisSlidingWindowRateLimiter":
-        import redis  # type: ignore  # optional dependency (.[prod])
-
-        client = redis.from_url(redis_url, decode_responses=False,
-                                socket_connect_timeout=2, socket_timeout=2)
-        return cls(client, limit, window)
-
-    @property
-    def backend(self) -> str:
-        return "redis"
-
-    def _run_script(self, key: str, now: float, member: str) -> Any:
-        if self._script_hash is None:
-            self._script_hash = self._redis.script_load(self._LUA)
-        try:
-            return self._redis.evalsha(self._script_hash, 1, key, now, self.window, self.limit, member)
-        except Exception as exc:
-            # NOSCRIPT (failover/restart flushed the cache) → reload once.
-            if "NOSCRIPT" not in str(exc):
-                raise
-            self._script_hash = self._redis.script_load(self._LUA)
-            return self._redis.evalsha(self._script_hash, 1, key, now, self.window, self.limit, member)
-
-    def hit(self, identity: str) -> tuple[bool, float]:
-        """Record a hit. Returns ``(allowed, retry_after_seconds)``."""
-        import uuid as _uuid
-
-        now = self.clock()
-        key = f"{self.key_prefix}{identity}"
-        member = f"{now:.6f}:{_uuid.uuid4().hex[:8]}"
-        try:
-            allowed, oldest = self._run_script(key, now, member)
-        except Exception as exc:
-            log.warning("rate limiter Redis error (%s) — failing open", exc.__class__.__name__)
-            try:
-                from .telemetry import get_registry
-                get_registry().inc("rate_limiter_errors_total", {"backend": "redis"})
-            except Exception:
-                pass
-            return True, 0.0
-        if int(allowed) == 1:
-            return True, 0.0
-        return False, max(float(oldest) + self.window - now, 0.0)
 
 
 class ConnectionLimiter:
@@ -480,13 +391,11 @@ class SecurityHeadersMiddleware:
 
 class APIGuardMiddleware:
     def __init__(self, app: ASGIApp, config: SecurityConfig,
-                 chat_limiter: Any, ws_limiter: ConnectionLimiter,
-                 metrics: Any = None) -> None:
+                 chat_limiter: SlidingWindowRateLimiter, ws_limiter: ConnectionLimiter) -> None:
         self.app = app
         self.config = config
         self.chat_limiter = chat_limiter
         self.ws_limiter = ws_limiter
-        self.metrics = metrics
 
     def authenticate(self, scope: Scope) -> Optional[str]:
         if self.config.api_keys:
@@ -514,9 +423,6 @@ class APIGuardMiddleware:
                 await _send_json(send, 401, {"detail": "missing or invalid API key",
                                              "header": API_KEY_HEADER})
             return
-        # Downstream endpoints (idempotency scoping) read this; the raw key is
-        # never stored — identity is a truncated sha256 label (see _key_identity).
-        scope["nimna.identity"] = identity
 
         if kind == "websocket":
             if not self.ws_limiter.acquire(identity):
@@ -532,13 +438,6 @@ class APIGuardMiddleware:
             allowed, retry_after = self.chat_limiter.hit(identity)
             if not allowed:
                 limit = self.chat_limiter.limit
-                if self.metrics is not None:
-                    try:
-                        self.metrics.inc("rate_limit_hits_total",
-                                         {"path": "/api/chat",
-                                          "backend": getattr(self.chat_limiter, "backend", "memory")})
-                    except Exception:
-                        pass
                 await _send_json(send, 429,
                                  {"detail": f"rate limit exceeded: {limit} requests/minute on /api/chat"},
                                  [(b"retry-after", str(max(1, math.ceil(retry_after))).encode("latin-1"))])
@@ -550,33 +449,18 @@ class APIGuardMiddleware:
 # wiring
 # ---------------------------------------------------------------------------
 
-def install_security(app: Any, config: SecurityConfig, *,
-                     redis_url: Optional[str] = None, metrics: Any = None) -> None:
-    """Register the middlewares. Starlette runs the *last added* outermost.
-
-    When ``redis_url`` is set (and the optional ``redis`` package is
-    installed), the ``/api/chat`` rate limit is enforced from Redis so every
-    replica shares one bucket; otherwise it stays in-process.  A Redis outage
-    degrades to fail-open (counted, logged) — the limiter is never a SPOF.
-    """
+def install_security(app: Any, config: SecurityConfig) -> None:
+    """Register the middlewares. Starlette runs the *last added* outermost."""
     from starlette.middleware.cors import CORSMiddleware
 
-    chat_limiter: Any = SlidingWindowRateLimiter(config.chat_rate_limit_per_minute, 60.0)
-    if redis_url:
-        try:
-            chat_limiter = RedisSlidingWindowRateLimiter.from_url(
-                redis_url, config.chat_rate_limit_per_minute, 60.0)
-        except Exception as exc:
-            log.warning("rate limiter: Redis unavailable at boot (%s) — using in-process buckets",
-                        exc.__class__.__name__)
+    chat_limiter = SlidingWindowRateLimiter(config.chat_rate_limit_per_minute, 60.0)
     ws_limiter = ConnectionLimiter(config.ws_max_connections_per_key)
     app.state.security = config
     app.state.chat_limiter = chat_limiter
     app.state.ws_limiter = ws_limiter
 
     app.add_middleware(APIGuardMiddleware, config=config,
-                       chat_limiter=chat_limiter, ws_limiter=ws_limiter,
-                       metrics=metrics)
+                       chat_limiter=chat_limiter, ws_limiter=ws_limiter)
     app.add_middleware(CORSMiddleware,
                        allow_origins=list(config.allowed_origins),
                        allow_origin_regex=config.allow_origin_regex,
@@ -585,5 +469,4 @@ def install_security(app: Any, config: SecurityConfig, *,
                        allow_credentials=False,
                        max_age=600)
     app.add_middleware(SecurityHeadersMiddleware)
-    log.info("API security: %s, rate-limit=%s",
-             config.describe(), getattr(chat_limiter, "backend", "memory"))
+    log.info("API security: %s", config.describe())
