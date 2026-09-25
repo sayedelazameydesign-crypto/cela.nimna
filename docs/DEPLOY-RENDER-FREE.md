@@ -164,6 +164,10 @@ governance.cost.blocked_count: 1
 
 - لا يوجد `status: "BLOCKED"` في الـAPI — الحالات هي `running / awaiting_approval / done /
   error` (`nimna/core/state.py::RunStatus`)؛ الرفض يظهر كـ`error` + `blocked_count`.
+- منذ إضافة `CostPolicyError`: الحالة أعلاه (تسعير مجهول + `MAX_SPEND_USD=0` + `hard`)
+  لم تعد تصل إلى وقت الطلب أصلاً — الإقلاع يُرفض. وفي Gemini «المجاني» إعلان لا اكتشاف:
+  فقط النماذج في `GEMINI_FREE_TIER_MODELS` (افتراضياً `gemini-2.5-flash`) تُعامَل كصفر
+  تكلفة؛ تغيير `GEMINI_MODEL` بلا توسيع القائمة يرفض الإقلاع أيضاً.
 - Gemini يبقى يعمل لأن له ملف تسعير مجاني معلن (`zero_cost_profile: true`)، بينما
   أي مزوّد مدفوع بلا تسعير صريح يُرفض. للاستخدام المدفوع اضبط `MODEL_COST_INPUT_USD_PER_1K`,
   `MODEL_COST_OUTPUT_USD_PER_1K` وارفع `MAX_SPEND_USD` — ولا تفعل ذلك على Free-tier

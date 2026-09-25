@@ -111,6 +111,16 @@ def _key_source(primary: str, fallback: str) -> tuple[str | None, str | None]:
     return None, None
 
 
+# Gemini models this repository *declares* as zero-cost (AI Studio free tier).
+# The cost guard treats ONLY these Gemini models as free when no explicit
+# MODEL_COST_*_USD_PER_1K prices are given.  Any other Gemini model is "unknown
+# pricing" and, under the default MAX_SPEND_USD=0 + COST_GUARD_HARD=true, the
+# process refuses to boot (CostPolicyError) instead of silently blocking every
+# request.  Extend with GEMINI_FREE_TIER_MODELS (comma-separated) — doing so is
+# an explicit statement that the model is free on *your* provider account.
+DEFAULT_GEMINI_FREE_TIER_MODELS: tuple[str, ...] = ("gemini-2.5-flash",)
+
+
 @dataclass
 class Settings:
     """All tunables of the agent. Build with :meth:`Settings.from_env`."""
@@ -137,6 +147,10 @@ class Settings:
     model_cost_input_usd_per_1k: float | None = None
     model_cost_output_usd_per_1k: float | None = None
     model_context_window: int = 0
+    # which Gemini model ids count as zero-cost without explicit prices
+    gemini_free_tier_models: list[str] = field(
+        default_factory=lambda: list(DEFAULT_GEMINI_FREE_TIER_MODELS)
+    )
     mock_tool_calling: bool = False
 
     # agent behaviour – hard limits that kill runaway loops
@@ -247,6 +261,7 @@ class Settings:
             model_cost_input_usd_per_1k=_env_optional_float("MODEL_COST_INPUT_USD_PER_1K"),
             model_cost_output_usd_per_1k=_env_optional_float("MODEL_COST_OUTPUT_USD_PER_1K"),
             model_context_window=_env_int("MODEL_CONTEXT_WINDOW", 0),
+            gemini_free_tier_models=_env_list("GEMINI_FREE_TIER_MODELS", DEFAULT_GEMINI_FREE_TIER_MODELS),
             mock_tool_calling=_env_bool("MOCK_TOOL_CALLING", False),
             max_steps=_env_int("AGENT_MAX_STEPS", 12),
             max_tool_calls=_env_int("AGENT_MAX_TOOL_CALLS", 30),

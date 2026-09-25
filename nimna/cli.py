@@ -161,11 +161,12 @@ def cmd_serve(args: argparse.Namespace) -> int:
     from .api.app import create_app
 
     from .api.security import SecurityConfigError
+    from .models import CostPolicyError
 
     settings = _settings(args)
     try:
         app = create_app(settings)
-    except SecurityConfigError as exc:
+    except (SecurityConfigError, CostPolicyError) as exc:
         print(f"nimna serve: refusing to start — {exc}", file=sys.stderr)
         return 2
     uvicorn.run(app, host=args.host or settings.host, port=args.port or settings.port,

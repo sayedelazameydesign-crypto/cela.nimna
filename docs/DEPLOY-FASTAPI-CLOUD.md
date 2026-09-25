@@ -135,10 +135,15 @@ fastapi cloud setup-ci --secrets-only
 2. SecurityConfig.from_settings()  → SecurityConfigError إن نقص NIMNA_API_KEY
 3. build_agent() → create_provider() → GeminiProvider.__init__
                                    → ProviderError إن نقص GEMINI_API_KEY
+                → Agent() → CostGuard.from_settings()
+                                   → CostPolicyError إن كان النموذج مدفوعاً/غير مُعلَن
+                                     و MAX_SPEND_USD=0 (كل طلب كان سيُحظر)
 4. FastAPI(...)  + مسارات /api/health  ← لا تُبنى إن فشل 2 أو 3
 ```
 
-لا سقوط إلى `mock`. `/api/health` لا يُخدم أصلاً إذا فشل الإقلاع.
+لا سقوط إلى `mock`. `/api/health` لا يُخدم أصلاً إذا فشل الإقلاع — بما في ذلك
+حالة «الأسرار سليمة لكن بوابة التكلفة كانت ستحظر 100% من الطلبات»: هذه تُرفض
+عند الإقلاع بدل أن تختبئ خلف `status: ok`.
 
 ### أولوية مصادر المفاتيح
 
@@ -160,6 +165,7 @@ fastapi cloud setup-ci --secrets-only
 ```text
 nimna.api.security.SecurityConfigError: NIMNA_API_KEY is required when NIMNA_ENV=production
 nimna.providers.base.ProviderError: Gemini API key is not set
+nimna.models.registry.CostPolicyError: cost guard would block every model request: model 'gemini-2.5-pro' (provider 'gemini') has unknown pricing and MAX_SPEND_USD=0 in hard mode. Refusing to start …
 ```
 
 | المتغير | القيمة | سرّ؟ |
@@ -167,7 +173,8 @@ nimna.providers.base.ProviderError: Gemini API key is not set
 | `NIMNA_ENV` | `production` | لا |
 | `NIMNA_API_KEY` | `secrets.token_urlsafe(32)` | نعم — إلزامي |
 | `MODEL_PROVIDER` | `gemini` | لا |
-| `GEMINI_MODEL` | `gemini-2.5-flash` | لا |
+| `GEMINI_MODEL` | `gemini-2.5-flash` | لا — غيّره مع السطر التالي (انظر «قبل تغيير النموذج») |
+| `GEMINI_FREE_TIER_MODELS` | `gemini-2.5-flash` | لا — النماذج المُعلَنة مجانية؛ الوحيدة التي تقلع مع `MAX_SPEND_USD=0` |
 | `GEMINI_API_KEY` | مفتاح AI Studio | نعم — إلزامي للإقلاع |
 | `MAX_SPEND_USD` | `0` | لا |
 | `COST_GUARD_ENABLED` / `COST_GUARD_HARD` | `true` | لا |
@@ -180,6 +187,34 @@ nimna.providers.base.ProviderError: Gemini API key is not set
 
 `HOST`/`PORT` لا تُثبَّت: المنصة تدير الاستماع. مسارات Docker (`/app/...`)
 مرفوضة في بوابة العقد.
+
+### قبل تغيير النموذج (`GEMINI_MODEL`)
+
+«مجاني» في هذا المستودع **إعلان لا اكتشاف**: بوابة التكلفة تعتبر صفرَ التكلفة
+فقط نماذج Gemini المذكورة في `GEMINI_FREE_TIER_MODELS` (الافتراضي في الكود:
+`gemini-2.5-flash` — `nimna/config.py::DEFAULT_GEMINI_FREE_TIER_MODELS`). أي
+`GEMINI_MODEL` آخر = تسعير مجهول، ومع `MAX_SPEND_USD=0` يُرفض الإقلاع
+(`CostPolicyError`) بدل أن يبدو `/api/health` سليماً بينما كل طلب محظور.
+
+1. **النموذج الجديد مجاني على حسابك في AI Studio؟** أضِفه إلى
+   `GEMINI_FREE_TIER_MODELS` (قائمة بفواصل) في **اللوحة** وفي
+   `fastapi-cloud.yaml` معاً — البوابة (`check_fastapi_cloud_link.py`) تفشل
+   إذا كان `GEMINI_MODEL` في العقد خارج القائمة مع `MAX_SPEND_USD=0`.
+   الإضافة تصريح منك بأن الفوترة على حسابك صفر؛ الكود لا يتحقق من أسعار Google.
+2. **النموذج مدفوع؟** اضبط `MODEL_COST_INPUT_USD_PER_1K` و
+   `MODEL_COST_OUTPUT_USD_PER_1K` و`MAX_SPEND_USD` موجبة. البوابة تثبّت
+   `MAX_SPEND_USD=0` في العقد عمداً: الانتقال إلى نموذج مدفوع تغيير عقد
+   مراجَع، لا تعديل متغير في اللوحة.
+3. **حد الإنفاق ليس حداً على الحساب.** `spent_usd` دفتر في الذاكرة
+   لكل عملية: يُصفَّر عند كل إعادة تشغيل/نشر، ولا يُشارَك بين نسخ التطبيق.
+   `MAX_SPEND_USD` سقف لعمر العملية الواحدة — الحد الحقيقي للفوترة يُضبط
+   عند المزوّد.
+4. **بعد النشر:** `GET /api/health` → `governance.cost.zero_cost_profile`
+   يجب أن تكون `true` لنموذج مجاني، أو `pricing_known: true` مع
+   `remaining_usd > 0` لنموذج مدفوع. `blocked_count` يجب أن يبقى `0` بعد أول
+   محادثة.
+5. **الإقلاع سقط بعد التغيير؟** ابحث في السجل عن `CostPolicyError` — الرسالة
+   تسمّي العلاج بالضبط (`GEMINI_FREE_TIER_MODELS=<model>` أو أسعار + ميزانية).
 
 من CLI:
 
@@ -210,8 +245,10 @@ python scripts/check_fastapi_cloud_link.py
 ```
 
 تفشل إذا: المدخل تغيّر، مسار الصحة وهمي، سرّ كُتب في العقد، متغير لا يقرؤه الكود،
-`NIMNA_ENV` ليس `production`، `MAX_SPEND_USD` ليس `0`، الـworkflow صار `on.push`،
-أو `.fastapicloudignore` يحجب `skills/`. تشغّلها `00-integrity.yml`.
+`NIMNA_ENV` ليس `production`، `MAX_SPEND_USD` ليس `0`، `GEMINI_MODEL` خارج
+`GEMINI_FREE_TIER_MODELS` مع `MAX_SPEND_USD=0` (مرآة `CostPolicyError` قبل النشر)،
+الـworkflow صار `on.push`، أو `.fastapicloudignore` يحجب `skills/`. تشغّلها
+`00-integrity.yml`.
 
 النشر السحابي **لا** يثبت أن النموذج يرد. ذلك شغل `live-provider-proof.yml`.
 
@@ -224,6 +261,7 @@ python scripts/check_fastapi_cloud_link.py
 | التطبيق لا يظهر في منتقي GitHub | GitHub App غير مثبّت على `sayedelazameydesign-crypto` أو المستودع غير مشمول |
 | دفع لم يُنشر | ليس على `main`، أو التطبيق فُصل، أو Application Directory خاطئ |
 | البناء ينجح والإقلاع يسقط | `NIMNA_API_KEY` أو `GEMINI_API_KEY` غير مضبوطين كـ Secret في اللوحة |
+| الإقلاع يسقط بعد تغيير `GEMINI_MODEL` (`CostPolicyError`) | النموذج غير مُعلَن في `GEMINI_FREE_TIER_MODELS` مع `MAX_SPEND_USD=0` — انظر «قبل تغيير النموذج» |
 | نشران/ثلاثة لكل دفع | GitHub App **و** workflow `on.push` — أزل الـpush من Actions |
 | حالة GitHub قديمة | النشر موجود في اللوحة لكن GitHub App فقد الوصول |
 | تطبيقان يتحدّثان معاً | `celanimna` = legacy-duplicate على نفس `main`، ليست بيئة staging — افصل Source Repository إن لم تُرَد النسخة |
@@ -236,5 +274,10 @@ python scripts/check_fastapi_cloud_link.py
 2. Dashboard: https://dashboard.fastapicloud.com/sayedelazameydesign-424e4d8c/apps
 3. Primary URL: https://celanimna-3ffa6b22.fastapicloud.dev — prove it with `GET /api/health`.
 4. Set `NIMNA_API_KEY` and `GEMINI_API_KEY` as secrets on **each** app. Boot is fail-closed.
+   The same applies to the cost policy: with `MAX_SPEND_USD=0` only Gemini models listed in
+   `GEMINI_FREE_TIER_MODELS` (default `gemini-2.5-flash`) boot; any other model raises
+   `CostPolicyError` at start-up instead of silently blocking every request. Changing
+   `GEMINI_MODEL` means extending that list (free on your account) **or** setting explicit
+   `MODEL_COST_*_USD_PER_1K` prices plus a positive `MAX_SPEND_USD` — see the checklist above.
 5. Do **not** add `on.push: main` to `.github/workflows/fastapi-cloud-deploy.yml`. That workflow is a manual token redeploy only.
 6. Repo contract: `fastapi-cloud.yaml`. Gate: `python scripts/check_fastapi_cloud_link.py`.

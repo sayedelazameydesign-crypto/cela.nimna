@@ -325,6 +325,7 @@ docker compose --profile computer up -d desktop    # سطح مكتب معزول 
 | `AGENT_MAX_RESPONSE_TOKENS` | 4096 | سقف توكن |
 | `COST_GUARD_ENABLED` / `COST_GUARD_HARD` | true / true | بوابة تكلفة قبل طلب النموذج |
 | `MAX_SPEND_USD` | 0 | الحد الصلب الافتراضي؛ unknown/paid يُحظر |
+| `GEMINI_FREE_TIER_MODELS` | `gemini-2.5-flash` | نماذج Gemini المُعلَنة مجانية؛ أي `GEMINI_MODEL` آخر مع `MAX_SPEND_USD=0` يرفض الإقلاع (`CostPolicyError`) |
 | `MODEL_COST_*_USD_PER_1K` | — | أسعار المزود المدفوع المعلنة صراحة |
 | `AGENT_MAX_CONSECUTIVE_FAILURES` | 5 | توقف بعد أخطاء متتالية |
 | `AGENT_MAX_SKILLS` | 3 | مهارات/طلب |

@@ -26,6 +26,9 @@ services:
         value: "gemini"            # native google-genai path — مسار مفاتيح AI Studio (AQ.*)
       - key: GEMINI_MODEL
         value: "gemini-2.5-flash"
+      # مع MAX_SPEND_USD=0 لا يقلع إلا نموذج مُعلَن هنا — غيّر الاثنين معاً (CostPolicyError وإلا).
+      - key: GEMINI_FREE_TIER_MODELS
+        value: "gemini-2.5-flash"
       # بدون مفتاح الصعود يفشل عمداً (ProviderError) — لا boot صامت بمزوّد وهمي.
       - key: GEMINI_API_KEY
         sync: false

@@ -46,6 +46,11 @@ env:
     value: "gemini"
   - key: GEMINI_MODEL
     value: "gemini-2.5-flash"
+  # النماذج المُعلَنة مجانية (AI Studio free tier). مع MAX_SPEND_USD=0 أي
+  # GEMINI_MODEL خارج هذه القائمة = تسعير مجهول → الإقلاع يُرفض (CostPolicyError)
+  # والبوابة تفشل قبل النشر. غيّر الاثنين معاً — انظر «قبل تغيير النموذج» في الوثيقة.
+  - key: GEMINI_FREE_TIER_MODELS
+    value: "gemini-2.5-flash"
   - key: GEMINI_API_KEY
     secret: true
   - key: GOOGLE_API_KEY
