@@ -309,10 +309,21 @@ def _run_with_limits(cmd: list[str], timeout: int, cwd: str | None = None, env: 
     clean_env = env if env is not None else _clean_env()
     def _preexec():
         try:
-            # new process group so we can kill children
+            # new process group so we can kill children.
+            # S110 hotspot (ترياج 2026-09-25): الفشل هنا كارثي صامت — إن بقينا
+            # في مجموعة الأب فإن killpg عند الـtimeout سيسقط على مجموعتنا نحن
+            # (وسينجح!) قبل أن يعمل الـfallback. رفض صريح: لا spawn بلا عزل مجموعة.
+            # RuntimeError مقصودة: OSError سيلتقطها except (ValueError, OSError)
+            # الخارجي فيسقط في sp.run بلا حدود ولا preexec — المسار الأخطر.
             os.setsid()
-        except Exception:
-            pass
+        except BaseException as exc:
+            raise RuntimeError(
+                "sandbox preexec: os.setsid() failed — refusing to spawn: "
+                "killpg on timeout would target the parent process group"
+            ) from exc
+        # الحدود الجوهرية: أي فشل = طفل بلا سياج موارد بصمت (نفس عائلة B0-B2.5)
+        # → رفض صريح fail-closed. (التسجيل داخل preexec عبر fork غير آمن مع
+        # أقفال logging — لذلك الإبلاغ يصل كاستثناء في الوالد لا كlog من الطفل.)
         try:
             resource.setrlimit(resource.RLIMIT_CPU, (30, 30))
             resource.setrlimit(resource.RLIMIT_AS, (512*1024*1024, 512*1024*1024))
@@ -324,10 +335,13 @@ def _run_with_limits(cmd: list[str], timeout: int, cwd: str | None = None, env: 
                 # damps fork bombs (they spawn thousands).
                 resource.setrlimit(resource.RLIMIT_NPROC, (512, 512))
             except Exception:
-                pass
+                pass  # متسامح متعمد وموثق أعلاه — مقياس تخميد فقط لا سياج أساسي
             resource.setrlimit(resource.RLIMIT_FSIZE, (10*1024*1024, 10*1024*1024))
-        except Exception:
-            pass
+        except OSError as exc:
+            raise RuntimeError(
+                f"sandbox preexec: setrlimit failed ({exc}) — refusing to spawn "
+                "an unbounded child"
+            ) from exc
     # Use Popen to allow killpg on timeout (subprocess.run timeout only kills parent)
     import subprocess as sp
     try:

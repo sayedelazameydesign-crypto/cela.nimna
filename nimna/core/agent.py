@@ -694,8 +694,13 @@ class Agent:
                     state.final_text = f"تم إيقاف الجلسة تلقائيا بواسطة نظام الحماية (Heuristics Kill Switch): {_reason}. يرجى مراجعة السجل وتقسيم المهمة إلى خطوات آمنة."
                     state.status = RunStatus.DONE
                     return
-            except Exception:
-                pass
+            except Exception as exc:
+                # S110 hotspot (ترياج 2026-09-25): عطل الكاشف لا يمرّ بصمت —
+                # fail-open مرئي: تناقض صريح مع invariant fail-closed أعلاه كان
+                # بلا أثر مسجل. القرار الحالي: إبقاء التوفر؛ تحويله لـfail-closed
+                # (قتل عند عطل الكاشف) قرار سياسة مؤجل — مرجح في تقرير التدقيق.
+                log.warning("anomaly kill-switch check failed (tool=%s): %s", tool.name, exc)
+                self._audit(state, "anomaly_check_failed", {"tool": tool.name, "error": str(exc)[:200]})
         # Vision gateway: after a successful screenshot, inject the image so the
         # next model turn sees the desktop (observe → plan → act loop).
         if tool.name == "take_screenshot" and ok:

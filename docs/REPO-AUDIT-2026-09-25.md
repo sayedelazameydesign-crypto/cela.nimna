@@ -345,3 +345,20 @@ code-01-fizzbuzz-module: policy → allow=0 deny=0   (verify بلا عبور)
 5. اختبارات 3: عمومية المسار وصيغة exposition · دورة حياة WS كاملة عبر subprotocol المفتاح (ارتفاع+1 ثم عودة دقيقة) · صرامة الصيغة (HELP/TYPE/قيمة).
 
 **التحقق:** ruff أخضر · bandit medium+high ما زال 6 (لا جديد) · **pytest 520/520** (517+3) · suite 7/0 · دخان حي: `GET /metrics` بلا مفتاح = 200 بصيغة exposition والمقياسان صفرًا.
+
+### الدفعة 6 — 2026-09-25: S110/S112 hotspots ×2 (اكتشاف المراجعة المستقلة)
+
+**منهجية هذه الدفعة استثنائية:** المراجع استنسخ الفرع المستقل وتحقق من البصمات (sha256 مطابقة)، ثم أجرى ترياج S110/S112 حيًا (العد الحقيقي **53** = 49 S110 + 4 S112 — تصحيح لعدّنا السابق 52) والتقط موضعين فاتا ترياجنا السريع بالقراءة المباشرة، كلاهما مؤكد حيًا ثم أُصلح:
+
+| الموضع | الخلل الأصلي | الإصلاح |
+|---|---|---|
+| `core/agent.py` (Kill-Switch) | `except: pass` يلف الكاشف كاملًا — عطل الكاشف = **تخطي فحص الشذوذ بصمت** بلا audit؛ تناقض صريح مع invariant fail-closed قبلها بـ10 أسطر | fail-open **مرئي**: `log.warning` + `audit anomaly_check_failed` — السلوك نفسه (تحويله لـfail-closed قرار سياسة مؤجل، معلَّم في التعليق) |
+| `computer.py::_preexec` | `setsid` والحدود الجوهرية (CPU/AS/NOFILE/FSIZE) كلها try/pass — فشل setrlimit = **طفل بلا سياج موارد بصمت**؛ وفشل setsid يجعل `killpg` عند timeout يستهدف مجموعة الأب نفسها وينجح | **رفض spawn صريح** (`RuntimeError` من preexec → `SubprocessError` بالوالد). NPROC بقي متسامحًا متعمدًا (موثق: تخميد fork-bomb على CI مشترك) |
+
+**انحراف موثق عن مواصفة «بلا تغيير سلوك» في `_preexec` فقط:** التسجيل من داخل preexec غير آمن (logging عبر fork = خطر deadlock على الأقفال الموروثة)، والأخطر: رفع `OSError` كان سيلتقطه `except (ValueError, OSError)` الخارجي فيسقط التنفيذ في `sp.run` **بلا حدود وبلا preexec** — المسار الأخضر للفشل الكامل. لذلك `RuntimeError` + fail-closed، مع اختبار يحرس التوجيه نفسه.
+
+**اختبارات 3** (`tests/test_s110_hotspots.py`): عطل الكاشف → `anomaly_check_failed` في الأدلة + الجلسة تُكمل بلا kill زائف · فشل setrlimit → `SubprocessError` (ولا يُمَس مسار الـfallback — لو سقط فيه لفشل الاختبار فورًا) · ضابط إيجابي للمسار السليم.
+
+**التحقق:** ruff أخضر · bandit 6 (بلا جديد) · **pytest 523/523** · suite 7/0.
+
+**متبقي S110/S112 بعد الدفعة:** ~50 موضع hygiene (init/chmod/cache/config fallbacks) — دفعة منهجية واحدة بقاعدة «تعديل واحد لكل ملف + قراءة تحقق».
