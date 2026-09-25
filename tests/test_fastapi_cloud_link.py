@@ -86,6 +86,47 @@ def test_production_guards_cannot_be_relaxed(tmp_path: Path) -> None:
     assert "AGENT_AUTO_APPROVE" in log
 
 
+def test_model_swap_without_free_tier_declaration_is_rejected(tmp_path: Path) -> None:
+    """CI mirror of CostGuard.assert_boot_policy: MAX_SPEND_USD=0 only serves declared models."""
+    shipped = (ROOT / "fastapi-cloud.yaml").read_text(encoding="utf-8")
+    swapped = shipped.replace(
+        '- key: GEMINI_MODEL\n    value: "gemini-2.5-flash"',
+        '- key: GEMINI_MODEL\n    value: "gemini-2.5-pro"',
+        1,
+    )
+    assert swapped != shipped
+    code, log = _run_contract(tmp_path, swapped)
+    assert code == 1
+    assert "GEMINI_MODEL" in log and "GEMINI_FREE_TIER_MODELS" in log and "CostPolicyError" in log
+
+
+def test_model_swap_with_extended_declaration_passes(tmp_path: Path) -> None:
+    shipped = (ROOT / "fastapi-cloud.yaml").read_text(encoding="utf-8")
+    swapped = shipped.replace(
+        '- key: GEMINI_MODEL\n    value: "gemini-2.5-flash"',
+        '- key: GEMINI_MODEL\n    value: "gemini-2.5-pro"',
+        1,
+    ).replace(
+        '- key: GEMINI_FREE_TIER_MODELS\n    value: "gemini-2.5-flash"',
+        '- key: GEMINI_FREE_TIER_MODELS\n    value: "gemini-2.5-flash, models/Gemini-2.5-Pro"',
+        1,
+    )
+    code, log = _run_contract(tmp_path, swapped)
+    assert code == 0, log
+
+
+def test_model_swap_falls_back_to_code_default_when_declaration_absent(tmp_path: Path) -> None:
+    """Without GEMINI_FREE_TIER_MODELS in the contract the gate uses nimna/config.py's default."""
+    shipped = (ROOT / "fastapi-cloud.yaml").read_text(encoding="utf-8")
+    without = shipped.replace('  - key: GEMINI_FREE_TIER_MODELS\n    value: "gemini-2.5-flash"\n', "", 1)
+    assert without != shipped
+    code, log = _run_contract(tmp_path, without)
+    assert code == 0, log  # default model is declared by default
+    swapped = without.replace('value: "gemini-2.5-flash"', 'value: "gemini-2.5-pro"', 1)
+    code, log = _run_contract(tmp_path, swapped)
+    assert code == 1 and "GEMINI_FREE_TIER_MODELS" in log
+
+
 def test_docker_paths_are_rejected(tmp_path: Path) -> None:
     shipped = (ROOT / "fastapi-cloud.yaml").read_text(encoding="utf-8")
     code, log = _run_contract(tmp_path, shipped.replace('value: "skills"', 'value: "/app/skills"', 1))

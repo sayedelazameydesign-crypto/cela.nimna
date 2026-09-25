@@ -5,18 +5,22 @@ from .registry import (
     BudgetExceededError,
     BudgetReservation,
     CostGuard,
+    CostPolicyError,
     CostProfile,
     LatencyProfile,
     ModelProfile,
     ModelRegistry,
     ModelRequirements,
     ModelSelection,
+    declared_free_tier_models,
+    normalise_model_id,
 )
 
 __all__ = [
     "BudgetExceededError",
     "BudgetReservation",
     "CostGuard",
+    "CostPolicyError",
     "CostProfile",
     "GovernedModelProvider",
     "LatencyProfile",
@@ -24,4 +28,6 @@ __all__ = [
     "ModelRegistry",
     "ModelRequirements",
     "ModelSelection",
+    "declared_free_tier_models",
+    "normalise_model_id",
 ]

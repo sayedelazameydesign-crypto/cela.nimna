@@ -8,6 +8,21 @@ A cost profile with ``None`` prices is *unknown*.  In hard mode an unknown
 profile is rejected when the configured budget is zero; this is intentional so
 that a newly added provider cannot silently turn a free deployment into a paid
 one.
+
+Two layers enforce that:
+
+* request time — :meth:`CostGuard.authorize` raises :class:`BudgetExceededError`;
+* boot time — :meth:`CostGuard.from_settings` raises :class:`CostPolicyError`
+  when the configured guard could never authorize *any* request (paid or
+  undeclared model with ``MAX_SPEND_USD=0``).  Refusing to start is the same
+  fail-closed contract already applied to a missing ``NIMNA_API_KEY`` or
+  ``GEMINI_API_KEY``: a healthy-looking ``/api/health`` must not hide a runtime
+  that blocks 100% of model calls.
+
+"Free" is a *declaration*, not a discovery: only Gemini models listed in
+``GEMINI_FREE_TIER_MODELS`` (default: ``gemini-2.5-flash``) are zero-cost
+without explicit prices.  Swapping ``GEMINI_MODEL`` to anything else therefore
+requires either extending that list or budgeting the model explicitly.
 """
 from __future__ import annotations
 
@@ -15,9 +30,35 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Mapping, Optional
 
+from ..config import DEFAULT_GEMINI_FREE_TIER_MODELS
+
 
 class BudgetExceededError(RuntimeError):
     """Raised before a model request that cannot fit the configured budget."""
+
+
+class CostPolicyError(RuntimeError):
+    """Raised at boot when the configured cost policy could never authorize a request.
+
+    A configuration error, not a runtime budget event: the process refuses to
+    start instead of serving an endpoint whose every model call is blocked.
+    """
+
+
+def normalise_model_id(model_id: Any) -> str:
+    """Canonical form for comparing model ids (``models/Gemini-2.5-Flash `` -> ``gemini-2.5-flash``)."""
+    text = str(model_id or "").strip().lower()
+    if text.startswith("models/"):
+        text = text[len("models/"):]
+    return text
+
+
+def declared_free_tier_models(settings: Any) -> frozenset[str]:
+    """Gemini model ids this deployment declares zero-cost (see ``GEMINI_FREE_TIER_MODELS``)."""
+    declared = getattr(settings, "gemini_free_tier_models", None)
+    if declared is None:
+        declared = DEFAULT_GEMINI_FREE_TIER_MODELS
+    return frozenset(item for item in (normalise_model_id(raw) for raw in declared) if item)
 
 
 @dataclass(frozen=True)
@@ -194,9 +235,12 @@ class ModelRegistry:
         """Build the active entry from settings.
 
         Additional providers can register profiles without changing the Agent
-        loop. Gemini's configured free-tier profile is deliberately explicit.  It is
-        not a claim that every Google account is free forever; quotas and billing
-        still belong to the provider account.
+        loop. Gemini's configured free-tier profile is deliberately explicit and
+        *model-scoped*: only ids declared in ``GEMINI_FREE_TIER_MODELS`` are
+        zero-cost without explicit prices; any other Gemini model is unknown
+        pricing and fails closed under a zero budget.  It is not a claim that
+        every Google account is free forever; quotas and billing still belong
+        to the provider account.
         """
 
         provider_info = dict(provider or {})
@@ -205,8 +249,15 @@ class ModelRegistry:
         input_price = getattr(settings, "model_cost_input_usd_per_1k", None)
         output_price = getattr(settings, "model_cost_output_usd_per_1k", None)
 
-        if kind in {"mock", "gemini"} and input_price is None and output_price is None:
-            cost = CostProfile(0.0, 0.0, known=True, free_tier=(kind == "gemini"))
+        if kind == "mock" and input_price is None and output_price is None:
+            cost = CostProfile(0.0, 0.0, known=True)
+        elif kind == "gemini" and input_price is None and output_price is None:
+            if normalise_model_id(model_id) in declared_free_tier_models(settings):
+                cost = CostProfile(0.0, 0.0, known=True, free_tier=True)
+            else:
+                # A Gemini model this deployment has not declared free-tier is
+                # unknown pricing: CostGuard refuses it under MAX_SPEND_USD=0.
+                cost = CostProfile(known=False)
         elif input_price is not None and output_price is not None:
             cost = CostProfile(float(input_price), float(output_price), known=True)
         else:
@@ -259,13 +310,67 @@ class CostGuard:
 
     @classmethod
     def from_settings(cls, settings: Any, provider: Optional[Mapping[str, Any]] = None) -> "CostGuard":
+        """Build the guard from runtime settings and refuse a guard that blocks everything.
+
+        Raises :class:`CostPolicyError` (boot refusal) — see :meth:`assert_boot_policy`.
+        Direct construction (``CostGuard(profile, ...)``) is *not* gated so tests
+        and tooling can still build deliberately blocking guards.
+        """
         registry = ModelRegistry.for_settings(settings, provider)
         profile = registry.list()[0]
-        return cls(
+        guard = cls(
             profile,
             max_spend_usd=float(getattr(settings, "max_spend_usd", 0.0)),
             enabled=bool(getattr(settings, "cost_guard_enabled", True)),
             hard=bool(getattr(settings, "cost_guard_hard", True)),
+        )
+        guard.assert_boot_policy()
+        return guard
+
+    def boot_policy_violation(self) -> Optional[str]:
+        """Why this guard could never authorize a request — or ``None`` if it can.
+
+        Pure (no counters touched).  Mirrors :meth:`authorize` for the smallest
+        possible request: with a zero budget only a declared zero-cost profile
+        passes; unknown pricing passes only in soft mode (metered as $0).
+        """
+        if not self.enabled:
+            return None
+        cost = self.profile.cost
+        if cost.zero_cost or self.max_spend_usd > 0:
+            return None
+        who = f"model '{self.profile.id}' (provider '{self.profile.provider}')"
+        if not cost.known:
+            if not self.hard:
+                return None
+            return f"{who} has unknown pricing and MAX_SPEND_USD={self.max_spend_usd:g} in hard mode"
+        return (
+            f"{who} is priced ${cost.input_usd_per_1k:g} in / ${cost.output_usd_per_1k:g} out "
+            f"per 1K tokens and MAX_SPEND_USD={self.max_spend_usd:g}"
+        )
+
+    def assert_boot_policy(self) -> None:
+        """Raise :class:`CostPolicyError` when every model request would be blocked."""
+        reason = self.boot_policy_violation()
+        if reason is None:
+            return
+        if self.profile.provider == "gemini" and not self.profile.cost.known:
+            remedy = (
+                f"Either declare it free-tier on your account with "
+                f"GEMINI_FREE_TIER_MODELS={self.profile.id} (comma-separated list; default "
+                f"{','.join(DEFAULT_GEMINI_FREE_TIER_MODELS)}), or set MODEL_COST_INPUT_USD_PER_1K / "
+                "MODEL_COST_OUTPUT_USD_PER_1K together with a positive MAX_SPEND_USD."
+            )
+        elif not self.profile.cost.known:
+            remedy = (
+                "Set MODEL_COST_INPUT_USD_PER_1K / MODEL_COST_OUTPUT_USD_PER_1K together with a "
+                "positive MAX_SPEND_USD, or switch to a declared zero-cost model."
+            )
+        else:
+            remedy = "Set a positive MAX_SPEND_USD, or switch to a declared zero-cost model."
+        raise CostPolicyError(
+            f"cost guard would block every model request: {reason}. "
+            f"Refusing to start a runtime that cannot serve a single model call. {remedy}"
         )
 
     @staticmethod
@@ -342,10 +447,13 @@ __all__ = [
     "BudgetExceededError",
     "BudgetReservation",
     "CostGuard",
+    "CostPolicyError",
     "CostProfile",
     "LatencyProfile",
     "ModelProfile",
     "ModelRegistry",
     "ModelRequirements",
     "ModelSelection",
+    "declared_free_tier_models",
+    "normalise_model_id",
 ]

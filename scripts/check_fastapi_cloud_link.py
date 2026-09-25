@@ -11,6 +11,7 @@ Exit 1 = فشل واحد على الأقل، مع سطر لكل سبب.
 """
 from __future__ import annotations
 
+import importlib.util
 import re
 import sys
 import tomllib
@@ -20,6 +21,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = ROOT / "fastapi-cloud.yaml"
+CONFIG_PY = ROOT / "nimna" / "config.py"
 WORKFLOW = ROOT / ".github" / "workflows" / "fastapi-cloud-deploy.yml"
 WORKFLOWS_DIR = ROOT / ".github" / "workflows"
 IGNORE = ROOT / ".fastapicloudignore"
@@ -56,6 +58,31 @@ DEPLOY_MARKERS = (
     "fastapi-cloud-cli",
 )
 AUTO_TRIGGERS = {"push", "pull_request"}
+
+
+def _norm_model(model_id: object) -> str:
+    """Same canonical form as nimna.models.registry.normalise_model_id."""
+    text = str(model_id or "").strip().lower()
+    return text[len("models/"):] if text.startswith("models/") else text
+
+
+def _default_free_tier_models() -> set[str]:
+    """Code default of GEMINI_FREE_TIER_MODELS.
+
+    `nimna/config.py` is stdlib-only, so it is loaded standalone (not via the
+    `nimna` package) — the gate must keep working with just PyYAML installed.
+    """
+    try:
+        spec = importlib.util.spec_from_file_location("_nimna_config_for_gate", CONFIG_PY)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        # dataclasses resolve string annotations through sys.modules[__name__]
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+        declared = getattr(module, "DEFAULT_GEMINI_FREE_TIER_MODELS", ())
+    except Exception:
+        declared = ()
+    return {_norm_model(item) for item in declared} - {""}
 
 
 def _code_env_names() -> set[str]:
@@ -425,6 +452,23 @@ def _check_env(entries: list, errors: list[str]) -> None:
     for key, expected in REQUIRED_HARD_ENV.items():
         if values.get(key) != expected:
             errors.append(f"env {key}: يجب {expected!r} (وجد {values.get(key)!r})")
+    # ميزانية صفر لا تخدم إلا نموذجاً مُعلَناً مجانياً. مرآة CI لـ
+    # CostGuard.assert_boot_policy: تبديل GEMINI_MODEL بلا توسيع
+    # GEMINI_FREE_TIER_MODELS ينشر بناءً يرفض الإقلاع (CostPolicyError).
+    if values.get("MODEL_PROVIDER") == "gemini" and values.get("MAX_SPEND_USD") == "0":
+        model = _norm_model(values.get("GEMINI_MODEL", ""))
+        raw_declared = values.get("GEMINI_FREE_TIER_MODELS")
+        if raw_declared is None:
+            declared = _default_free_tier_models()
+        else:
+            declared = {_norm_model(item) for item in raw_declared.split(",")} - {""}
+        if model and model not in declared:
+            errors.append(
+                f"env GEMINI_MODEL={model!r}: ليس ضمن GEMINI_FREE_TIER_MODELS "
+                f"({', '.join(sorted(declared)) or 'فارغة'}) مع MAX_SPEND_USD=0 — الإقلاع سيُرفض "
+                "(CostPolicyError). أضِفه إلى GEMINI_FREE_TIER_MODELS أو اضبط "
+                "MODEL_COST_*_USD_PER_1K مع MAX_SPEND_USD موجبة"
+            )
     docker_paths = {key: values[key] for key in ("SKILLS_DIR", "WORKSPACE_DIR", "DB_PATH") if key in values}
     for key, value in docker_paths.items():
         if value.startswith("/app/"):

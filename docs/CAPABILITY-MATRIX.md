@@ -15,6 +15,7 @@
 | Model provider boundary | implemented | `nimna/providers/` | provider wire/parsing tests | `providers` |
 | Capability-aware Model Registry | implemented | `nimna/models/registry.py` | registry/cost tests | `models` |
 | Hard zero-spend model gate | implemented | `CostGuard`, `GovernedModelProvider` | unknown-price rejection test | `governance/models` |
+| Boot-time cost policy (fail-closed on paid/undeclared model) | implemented | `CostGuard.from_settings` → `CostPolicyError`, `GEMINI_FREE_TIER_MODELS` | `tests/test_cost_policy.py` | `governance/models` |
 | Audit events | implemented | `MemoryStore.audit_log` | audit assertions | `observability` |
 | SHA-256 evidence chain | implemented | `nimna/provenance/hashchain.py` | evidence verification test | `evidence` |
 | Runtime/repository fingerprint | implemented | `nimna/provenance/manifest.py` | `/api/provenance` | `provenance` |

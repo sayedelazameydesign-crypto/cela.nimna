@@ -12,6 +12,7 @@
 | G4 Security path/SSRF | `pytest -q tests/test_hardening.py tests/test_security_review2.py` | offline + isolated | PASS | test report |
 | G5 Provider contract | `pytest -q tests/test_providers.py` | mocked HTTP | PASS / MOCKED | test report |
 | G6 Cost gate | `pytest -q tests/test_agent_os_additions.py -k zero_budget` | offline | PASS | `CostGuard` test |
+| G6b Cost policy at boot | `pytest -q tests/test_cost_policy.py` | offline (fake Gemini key, no network) | PASS — paid/undeclared model + `MAX_SPEND_USD=0` raises `CostPolicyError` before `FastAPI()`; `nimna serve` exits 2; shipped `gemini-2.5-flash` still boots; `GEMINI_MODEL` swap in `fastapi-cloud.yaml` fails `check_fastapi_cloud_link.py` unless `GEMINI_FREE_TIER_MODELS` is extended | `tests/test_cost_policy.py`, `tests/test_fastapi_cloud_link.py::test_model_swap_*` |
 | G7 Evidence integrity | `pytest -q tests/test_agent_os_additions.py -k evidence` | SQLite `:memory:` | PASS | `/api/runs/{run_id}/evidence` |
 | G8 API contract | `tests/test_api.py` | FastAPI TestClient | PASS | `/api/health`, `/api/models` |
 | G9 Browser V4 auth | `pytest -q tests/test_agent_os_additions.py -k browser_v4_auth` | `httpx.MockTransport` | PASS / MOCKED | header + endpoint assertions |

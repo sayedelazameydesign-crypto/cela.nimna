@@ -58,6 +58,9 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
     # validate BEFORE building anything: an unsafe config must not boot
     # (raises SecurityConfigError, e.g. production without NIMNA_API_KEY)
     security = SecurityConfig.from_settings(settings)
+    # build_agent() is the next fail-closed layer: ProviderError (no GEMINI_API_KEY)
+    # then CostPolicyError (paid/undeclared model with MAX_SPEND_USD=0) — both
+    # fire before FastAPI() exists, so /api/health never hides a dead runtime.
     agent = agent or build_agent(settings, approval_policy=DeferToClient())
 
     app = FastAPI(title="Nimna – reusable-skills agent", version="0.1.0")
