@@ -15,9 +15,11 @@ Usage:
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import time
 from typing import Any, Optional
+from urllib.parse import urlsplit, urlunsplit
 
 # in-memory fallback (LRU-ish)
 _FALLBACK: dict[str, tuple[Any, float]] = {}
@@ -36,6 +38,28 @@ def _hash_image(data: bytes, w: int = 0, h: int = 0) -> str:
 def _key(data: bytes, w: int, h: int) -> str:
     h12 = _hash_image(data, w, h)
     return f"vision:{h12}:{w}x{h}"
+
+
+def redact_url(url: str) -> str:
+    """Strip userinfo (username/password) from a URL for safe display.
+
+    ``stats()`` is served on the *unauthenticated* ``/api/health`` endpoint,
+    so a ``redis://:password@host`` URL must never be echoed back verbatim.
+    Unparseable input degrades to a boolean-ish marker instead of leaking.
+    """
+    if not url:
+        return ""
+    try:
+        parts = urlsplit(url)
+        if not parts.scheme and not parts.netloc:
+            return "redis:configured" if url else ""
+        netloc = parts.hostname or ""
+        if parts.port:
+            netloc += f":{parts.port}"
+        redacted = urlunsplit((parts.scheme or "redis", netloc, parts.path or "", "", ""))
+        return redacted if redacted != "redis:" else "redis:configured"
+    except Exception:
+        return "redis:configured"
 
 class VisionCache:
     def __init__(self, redis_url: Optional[str] = None, ttl: int = 600):
@@ -58,14 +82,21 @@ class VisionCache:
 
     def get(self, data: bytes, w: int = 0, h: int = 0) -> Optional[Any]:
         k = _key(data, w, h)
-        # try Redis
+        # try Redis — JSON only.  Never unpickle: cache bytes come from a
+        # network service, and deserialising them with pickle would be remote
+        # code execution if Redis is ever shared or compromised.
+        # Unparseable entries (including values written by older pickle-based
+        # releases) are a safe MISS, not an error — the caller simply
+        # recomputes and overwrites them.
         if self.enabled:
             try:
                 raw = self._redis.get(k)  # type: ignore
                 if raw is not None:
+                    if isinstance(raw, (bytes, bytearray)):
+                        raw = bytes(raw).decode("utf-8")
+                    value = json.loads(raw)
                     _STATS["hits"] += 1
-                    import pickle
-                    return pickle.loads(raw)
+                    return value
             except Exception:
                 pass
         # fallback memory
@@ -85,8 +116,11 @@ class VisionCache:
         _STATS["sets"] += 1
         if self.enabled:
             try:
-                import pickle
-                self._redis.setex(k, self.ttl, pickle.dumps(value))  # type: ignore
+                # The only producer (agent vision injection) stores a plain
+                # dict {"b64","mime","caption","hash"} — JSON-safe by
+                # construction.  A non-serialisable value skips Redis and is
+                # kept in the in-memory fallback only (never pickled).
+                self._redis.setex(k, self.ttl, json.dumps(value))  # type: ignore
                 return
             except Exception:
                 pass
@@ -102,7 +136,7 @@ class VisionCache:
         hit_rate = (_STATS["hits"] / total) if total else 0.0
         return {
             "enabled": self.enabled,
-            "redis_url": self.redis_url if self.enabled else "fallback:memory",
+            "redis_url": redact_url(self.redis_url) if self.enabled else "fallback:memory",
             "ttl": self.ttl,
             "hits": _STATS["hits"],
             "misses": _STATS["misses"],

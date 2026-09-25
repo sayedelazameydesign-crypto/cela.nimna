@@ -2,6 +2,7 @@
 
     GET  /                      – minimal chat UI
     GET  /api/health            – provider / model / counts
+    GET  /api/metrics           – Prometheus exposition (authed)
     GET  /api/skills            – catalog (front matter only)
     GET  /api/skills/{name}     – full skill (instructions + references)
     GET  /api/tools             – tool registry with schemas & risk
@@ -18,14 +19,17 @@ Security (nimna/api/security.py): every path except ``/``, ``/api/health`` and
 ``nimna.key.<key>`` sub-protocol). The app refuses to build in production
 without ``NIMNA_API_KEY``.
 """
+import hashlib
 import logging
+import re
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse
 from pydantic import BaseModel, Field
 
 from ..bootstrap import build_agent
@@ -37,9 +41,13 @@ from ..evidence import EvidenceJournal
 from ..models import ModelRegistry
 from ..observability import summarize_events
 from .security import SecurityConfig, install_security, select_ws_subprotocol
+from .telemetry import get_registry, install_telemetry
 
 log = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).parent / "static"
+
+IDEMPOTENCY_KEY_HEADER = "Idempotency-Key"
+_IDEM_KEY_RE = re.compile(r"[\w\-.]{1,128}\Z")
 
 
 class ChatRequest(BaseModel):
@@ -64,11 +72,59 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
     agent = agent or build_agent(settings, approval_policy=DeferToClient())
 
     app = FastAPI(title="Nimna – reusable-skills agent", version="0.1.0")
-    install_security(app, security)
+    registry = get_registry()
+    install_security(app, security, redis_url=settings.redis_url, metrics=registry)
     app.state.agent = agent
     app.state.settings = settings
     app.state.evidence = EvidenceJournal(agent.memory)
     app.state.models = getattr(agent, "model_registry", ModelRegistry.for_settings(settings, agent.provider.describe()))
+    # Telemetry LAST so it is outermost: even 401/429 rejections get a
+    # request ID and are counted.
+    install_telemetry(app, registry=registry)
+
+    # -- idempotency helper (chat + approval resolve) ----------------------
+    def _idempotency_material(request: Request, endpoint: str, body: BaseModel,
+                              extra: str = "") -> tuple[Optional[str], str]:
+        """Validate the Idempotency-Key header and hash the request body.
+
+        Returns ``(key, body_hash)``; ``key`` is None when the client sent no
+        header (idempotency is opt-in per call).  Invalid keys are 422 —
+        silently ignoring them would fake a guarantee we do not keep.
+        """
+        raw_key = request.headers.get(IDEMPOTENCY_KEY_HEADER)
+        if raw_key is None:
+            return None, ""
+        key = raw_key.strip()
+        if not _IDEM_KEY_RE.fullmatch(key):
+            raise HTTPException(422, "invalid Idempotency-Key: 1-128 chars of [A-Za-z0-9_.-]")
+        fingerprint = body.model_dump_json() + "|" + extra
+        return key, hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()
+
+    def _idempotent_replay(identity: str, key: str, endpoint: str, body_hash: str) -> Optional[JSONResponse]:
+        """Claim the key or answer from the store.
+
+        * no record → claim it (in-flight marker) and return None (caller runs);
+        * completed + same body → replay the stored response (``Idempotent-Replayed``);
+        * in-flight + same body → 409 (retry shortly, do not duplicate the run);
+        * same key + different body → 422 (a key fingerprints exactly one request).
+        """
+        record = agent.memory.idempotency_claim(
+            identity, key, endpoint, body_hash, settings.idempotency_ttl_seconds)
+        if record is None:
+            return None
+        if record["body_hash"] != body_hash or record["endpoint"] != endpoint:
+            registry.inc("idempotency_conflicts_total", {"endpoint": endpoint, "reason": "mismatch"})
+            raise HTTPException(422, "Idempotency-Key was already used with a different request body")
+        if int(record["status_code"]) < 0:
+            registry.inc("idempotency_conflicts_total", {"endpoint": endpoint, "reason": "in_flight"})
+            raise HTTPException(409, "request with this Idempotency-Key is still in flight; retry shortly",
+                                headers={"Retry-After": "5"})
+        import json as _json
+
+        registry.inc("idempotent_replays_total", {"endpoint": endpoint})
+        return JSONResponse(content=_json.loads(record["response_json"]),
+                            status_code=int(record["status_code"]),
+                            headers={"Idempotent-Replayed": "true"})
 
     # -- UI --------------------------------------------------------------
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)
@@ -118,6 +174,20 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
             "self_healing_retries": int(settings.swarm_self_healing_retries),
             "agents": ["search", "code", "vision"],
         }
+        resilience_info: dict[str, Any] = {
+            "rate_limiter": {"backend": getattr(app.state.chat_limiter, "backend", "memory")},
+            "idempotency": {
+                "entries": agent.memory.idempotency_count(),
+                "ttl_seconds": settings.idempotency_ttl_seconds,
+            },
+            "uptime_seconds": int(time.time() - registry.started_at),
+        }
+        provider_status = getattr(agent.provider, "resilience_status", None)
+        if callable(provider_status):
+            try:
+                resilience_info.update(provider_status())
+            except Exception:
+                resilience_info["breaker"] = {"state": "unknown"}
         return {
             "status": "ok",
             **agent.provider.describe(),
@@ -135,6 +205,7 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
             "anomaly": anomaly_info,
             "memory": memory_info,
             "swarm": swarm_info,
+            "resilience": resilience_info,
             "limits": {
                 "max_steps": settings.max_steps,
                 "max_tool_calls": settings.max_tool_calls,
@@ -155,6 +226,14 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
             "port": int(__import__("os").getenv("PORT", "8000")),
             "infra": {"redis_url": bool(settings.redis_url), "vision_cache_ttl": settings.vision_cache_ttl, "qdrant_url": bool(settings.qdrant_url)},
         }
+
+    @app.get("/api/metrics", include_in_schema=False)
+    def metrics() -> PlainTextResponse:
+        """Prometheus exposition (per-process; scrape every replica and
+        aggregate with ``sum by``).  Behind API-key auth like all
+        non-public paths — see docs/RESILIENCE.md for the scrape recipe."""
+        return PlainTextResponse(registry.render_prometheus(),
+                                 media_type="text/plain; version=0.0.4; charset=utf-8")
 
     @app.get("/api/models")
     def models() -> dict[str, Any]:
@@ -250,38 +329,78 @@ def create_app(settings: Optional[Settings] = None, agent: Optional[Agent] = Non
 
     # -- chat ------------------------------------------------------------
     @app.post("/api/chat", response_model=AgentResult)
-    async def chat(request: ChatRequest) -> AgentResult:
+    async def chat(request: ChatRequest, raw: Request) -> Any:
         session_id = request.session_id or uuid.uuid4().hex  # 128-bit non-guessable
         if agent.pending_approvals(session_id):
             raise HTTPException(409, "this session has a pending approval; resolve it first")
         if len(request.message) > settings.max_user_message_chars:
             raise HTTPException(413, f"message too long ({len(request.message)} chars); max {settings.max_user_message_chars}")
+        identity = raw.scope.get("nimna.identity", "anon")
+        idem_key, body_hash = _idempotency_material(raw, "chat", request)
+        if idem_key is not None:
+            replay = _idempotent_replay(identity, idem_key, "chat", body_hash)
+            if replay is not None:
+                return replay
         # swarm override via request
-        if request.swarm is not None:
-            orig = settings.swarm_enabled
-            settings.swarm_enabled = bool(request.swarm)
-            try:
-                return await run_in_threadpool(agent.run, request.message, session_id)
-            finally:
-                settings.swarm_enabled = orig
-        return await run_in_threadpool(agent.run, request.message, session_id)
+        try:
+            if request.swarm is not None:
+                orig = settings.swarm_enabled
+                settings.swarm_enabled = bool(request.swarm)
+                try:
+                    result = await run_in_threadpool(agent.run, request.message, session_id)
+                finally:
+                    settings.swarm_enabled = orig
+            else:
+                result = await run_in_threadpool(agent.run, request.message, session_id)
+        except Exception:
+            if idem_key is not None:
+                agent.memory.idempotency_release(identity, idem_key)
+            raise
+        registry.inc("chat_runs_total", {"status": result.status.value})
+        if idem_key is not None:
+            agent.memory.idempotency_complete(identity, idem_key, 200, result.model_dump_json())
+        return result
 
     @app.get("/api/approvals")
     def list_approvals(session_id: Optional[str] = None) -> dict[str, Any]:
         return {"pending": agent.pending_approvals(session_id)}
 
     @app.post("/api/approvals/{approval_id}", response_model=AgentResult)
-    async def resolve_approval(approval_id: str, request: ApprovalRequest, session_id: Optional[str] = None) -> AgentResult:
+    async def resolve_approval(approval_id: str, request: ApprovalRequest, raw: Request,
+                               session_id: Optional[str] = None) -> Any:
         # session scoping: if pending exists, ensure caller is owner
         try:
             pending = agent.memory.get_pending(approval_id)
             if pending is not None and session_id is not None and pending.get("session_id") != session_id:
                 raise HTTPException(403, "pending belongs to different session")
-            return await run_in_threadpool(agent.resume, approval_id, request.approved, always=request.always)
         except KeyError as exc:
             raise HTTPException(404, str(exc))
         except PermissionError as exc:
             raise HTTPException(403, str(exc))
+        identity = raw.scope.get("nimna.identity", "anon")
+        idem_key, body_hash = _idempotency_material(raw, "approvals.resolve", request, extra=approval_id)
+        if idem_key is not None:
+            replay = _idempotent_replay(identity, idem_key, "approvals.resolve", body_hash)
+            if replay is not None:
+                return replay
+        try:
+            result = await run_in_threadpool(agent.resume, approval_id, request.approved, always=request.always)
+        except KeyError as exc:
+            if idem_key is not None:
+                agent.memory.idempotency_release(identity, idem_key)
+            raise HTTPException(404, str(exc))
+        except PermissionError as exc:
+            if idem_key is not None:
+                agent.memory.idempotency_release(identity, idem_key)
+            raise HTTPException(403, str(exc))
+        except Exception:
+            if idem_key is not None:
+                agent.memory.idempotency_release(identity, idem_key)
+            raise
+        registry.inc("approvals_resolved_total", {"approved": str(bool(request.approved))})
+        if idem_key is not None:
+            agent.memory.idempotency_complete(identity, idem_key, 200, result.model_dump_json())
+        return result
 
     # -- sessions & memory ----------------------------------------------
     @app.get("/api/sessions")

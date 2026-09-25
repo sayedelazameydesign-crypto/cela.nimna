@@ -63,6 +63,7 @@ Mission Runtime (nimna/core/agent.py)
 ### المرحلة A — حدود قابلة للإثبات (موجودة في هذه النسخة)
 
 - Model Registry + CostGuard؛
+- CostGuard: per-process أم per-session أم per-tenant؟ القرار مؤجل (اليوم: واحد لكل Agent/عملية)، لكن القيد موثق — أي Runtime ثانٍ في نفس العملية يعني ميزانية منفصلة.
 - Policy vocabulary مع approval الحالي؛
 - Evidence hash chain وruntime manifest؛
 - Browser V4 REST adapter لا يحتاج SDK؛
