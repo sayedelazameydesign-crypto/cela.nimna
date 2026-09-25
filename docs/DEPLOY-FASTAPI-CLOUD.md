@@ -140,6 +140,23 @@ fastapi cloud setup-ci --secrets-only
 
 لا سقوط إلى `mock`. `/api/health` لا يُخدم أصلاً إذا فشل الإقلاع.
 
+### أولوية مصادر المفاتيح
+
+لا يوجد secret manager في الكود. وقت التشغيل المصدر الوحيد هو `os.environ`
+(أسرار لوحة FastAPI Cloud تُحقَن كمتغيرات بيئة قبل الإقلاع). محلياً،
+`Settings.from_env()` يملأ من `.env` **فقط للمفاتيح غير المعيَّنة أصلاً**
+(`load_dotenv(..., override=False)`): بيئة العملية تفوز على الملف.
+
+بعد ذلك `_key_source`: القيمة الفارغة / المسافات تُتخطى كـ missing، ثم:
+
+| الفائز | الاحتياطي |
+|---|---|
+| `GEMINI_API_KEY` | `GOOGLE_API_KEY` |
+| `OPENAI_API_KEY` | `NVIDIA_API_KEY` |
+
+لو المفتاح موجود في مكانين بقيم مختلفة: البيئة تفوز على `.env`، والاسم الأساسي
+يفوز على الاحتياطي. لا دمج ولا fallback صامت إلى `mock`.
+
 ```text
 nimna.api.security.SecurityConfigError: NIMNA_API_KEY is required when NIMNA_ENV=production
 nimna.providers.base.ProviderError: Gemini API key is not set
