@@ -21,12 +21,13 @@
 | الفريق | `sayedelazameydesign-424e4d8c` |
 | المزامنة الحية | FastAPI Cloud GitHub App — `fastapi-cloud[bot]` |
 | التطبيق الأساسي | `celanimna-3ffa6b22` → https://celanimna-3ffa6b22.fastapicloud.dev |
-| التطبيق الثاني (نفس المستودع) | `celanimna` — كل دفع إلى `main` ينشره أيضاً |
+| التطبيق الثاني | `celanimna` — `spare_role: legacy-duplicate`، **ليست بيئة staging** |
 | المدخل | `nimna.api.app:app` (`[tool.fastapi]` في `pyproject.toml`) |
 | الصحة | `GET /api/health` |
 | Python | `3.11` (`.python-version`) |
 
 العقد الآلي في المستودع: `fastapi-cloud.yaml` (`sync_mode: github_app`).
+`fastapi-cloud.yaml` **ليس** فورماتاً تقرأه منصة FastAPI Cloud؛ هو عقد CI فقط.
 
 ---
 
@@ -38,9 +39,23 @@
 - `Production – celanimna-3ffa6b22`
 - `Production – celanimna`
 
-هذا هو مسار المزامنة الحي. **لا تضف `on.push: main` إلى GitHub Actions** — النشر
-سيتضاعف. الـworkflow `.github/workflows/fastapi-cloud-deploy.yml` يدوي فقط
+هذا هو مسار المزامنة الحي. **لا تضف `on.push` / `on.pull_request` إلى أي workflow
+ينفّذ `fastapi deploy`** — النشر سيتضاعف. البوابة تمسح **كل** ملفات
+`.github/workflows/*.{yml,yaml}` وتفشل الـCI (`exit 1`) عند التعارض، لا تحذيراً.
+الـworkflow `.github/workflows/fastapi-cloud-deploy.yml` يدوي فقط
 (`workflow_dispatch` من `main`) عبر Deploy Token، احتياط إذا فُصل الـApp.
+`ci.yml` و`00-integrity.yml` يبقيان على `on.push` لأنهما اختبارات وليسا نشراً.
+
+### لماذا تطبيقان على نفس المستودع؟
+
+`celanimna-3ffa6b22` هو الإنتاج الأساسي. `celanimna` **ليست بيئة staging**:
+تكامل GitHub في FastAPI Cloud ينشر **الفرع الافتراضي فقط** (`main`)، فلا فرع
+معاينة ولا هدف نشر مختلف. التطبيق الثاني مربوط بنفس المستودع ونفس الفرع
+(`spare_role: legacy-duplicate`)؛ كل دفع يولّد Deploymentين من `fastapi-cloud[bot]`.
+
+إن لم يكن له غرض مستقل: التطبيق → **Settings** → **Source Repository** →
+**Disconnect**. النشرة الحالية تبقى حتى تُحذف يدوياً. لا يمكن فصل الربط من
+داخل المستودع.
 
 المراجع الرسمية:
 
@@ -98,7 +113,19 @@ fastapi cloud setup-ci --secrets-only
 اضبطها في **كل** تطبيق مربوط (`celanimna-3ffa6b22` و`celanimna` إن بقي):
 **Environment Variables**، وللأسرار فعّل **Secret**.
 
-بدون هذه الأسرار **لا إقلاع** — سلوك مقصود، لا سقوط إلى `mock`:
+بدون هذه الأسرار **لا إقلاع** — قبل أي طلب HTTP وقبل أي اتصال بـ Gemini.
+الترتيب في `nimna.api.app:create_app` (و`__getattr__("app")` عند استيراد
+`uvicorn nimna.api.app:app`):
+
+```text
+1. Settings.from_env()
+2. SecurityConfig.from_settings()  → SecurityConfigError إن نقص NIMNA_API_KEY
+3. build_agent() → create_provider() → GeminiProvider.__init__
+                                   → ProviderError إن نقص GEMINI_API_KEY
+4. FastAPI(...)  + مسارات /api/health  ← لا تُبنى إن فشل 2 أو 3
+```
+
+لا سقوط إلى `mock`. `/api/health` لا يُخدم أصلاً إذا فشل الإقلاع.
 
 ```text
 nimna.api.security.SecurityConfigError: NIMNA_API_KEY is required when NIMNA_ENV=production
@@ -169,7 +196,7 @@ python scripts/check_fastapi_cloud_link.py
 | البناء ينجح والإقلاع يسقط | `NIMNA_API_KEY` أو `GEMINI_API_KEY` غير مضبوطين كـ Secret في اللوحة |
 | نشران/ثلاثة لكل دفع | GitHub App **و** workflow `on.push` — أزل الـpush من Actions |
 | حالة GitHub قديمة | النشر موجود في اللوحة لكن GitHub App فقد الوصول |
-| تطبيقان يتحدّثان معاً | نفس المستودع مربوط بـ`celanimna-3ffa6b22` و`celanimna` — متوقع |
+| تطبيقان يتحدّثان معاً | `celanimna` = legacy-duplicate على نفس `main`، ليست بيئة staging — افصل Source Repository إن لم تُرَد النسخة |
 
 ---
 

@@ -21,6 +21,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT = ROOT / "fastapi-cloud.yaml"
 WORKFLOW = ROOT / ".github" / "workflows" / "fastapi-cloud-deploy.yml"
+WORKFLOWS_DIR = ROOT / ".github" / "workflows"
 IGNORE = ROOT / ".fastapicloudignore"
 PYTHON_VERSION = ROOT / ".python-version"
 PYPROJECT = ROOT / "pyproject.toml"
@@ -48,6 +49,13 @@ REQUIRED_HARD_ENV = {
 }
 REQUIRED_SECRETS = {"NIMNA_API_KEY", "GEMINI_API_KEY"}
 ALLOWED_SYNC = {"github_actions", "github_app"}
+DEPLOY_MARKERS = (
+    "fastapi deploy",
+    "FASTAPI_CLOUD_TOKEN",
+    "FASTAPI_CLOUD_APP_ID",
+    "fastapi-cloud-cli",
+)
+AUTO_TRIGGERS = {"push", "pull_request"}
 
 
 def _code_env_names() -> set[str]:
@@ -123,6 +131,70 @@ def _check_pyproject(expected_entrypoint: str, expected_python: str, errors: lis
             errors.append(
                 f".python-version={pinned!r} — العقد يثبت {expected_python!r} "
                 "(يطابق Dockerfile وCI)"
+            )
+
+
+def _wf_label(path: Path) -> str:
+    try:
+        return str(path.relative_to(ROOT))
+    except ValueError:
+        return path.name
+
+
+def _workflow_on_triggers(data: dict) -> set[str]:
+    """GitHub `on:` becomes YAML 1.1 boolean True under PyYAML — read both keys."""
+    on = data.get("on")
+    if on is None:
+        on = data.get(True)
+    if isinstance(on, str):
+        return {on}
+    if isinstance(on, list):
+        return {str(item) for item in on}
+    if isinstance(on, dict):
+        return {str(key) for key in on}
+    return set()
+
+
+def _is_fastapi_cloud_deploy(text: str) -> bool:
+    return any(marker in text for marker in DEPLOY_MARKERS)
+
+
+def _check_all_workflows(sync_mode: str, errors: list[str]) -> None:
+    """Fail CI (exit 1) if *any* workflow would auto-deploy to FastAPI Cloud.
+
+    CI jobs may use on.push / on.pull_request. That is allowed. Combining those
+    triggers with `fastapi deploy` / FASTAPI_CLOUD_* is not — the GitHub App
+    already syncs `main`. Scanning the directory, not a single filename.
+    """
+    if not WORKFLOWS_DIR.is_dir():
+        errors.append(".github/workflows مفقود")
+        return
+    files = sorted(list(WORKFLOWS_DIR.glob("*.yml")) + list(WORKFLOWS_DIR.glob("*.yaml")))
+    if not files:
+        errors.append(".github/workflows فارغ")
+        return
+    for path in files:
+        text = path.read_text(encoding="utf-8")
+        label = _wf_label(path)
+        try:
+            data = yaml.safe_load(text)
+        except yaml.YAMLError as exc:
+            errors.append(f"{label}: YAML غير صالح: {exc}")
+            continue
+        if not isinstance(data, dict):
+            errors.append(f"{label}: الجذر ليس خريطة")
+            continue
+        if "continue-on-error" in text or "|| true" in text:
+            if _is_fastapi_cloud_deploy(text):
+                errors.append(f"{label}: قناع فشل (continue-on-error / || true) ممنوع على مسار النشر")
+        if SECRET_LITERAL.search(text):
+            errors.append(f"{label}: شكل مفتاح سرّي في النص — ممنوع")
+        triggers = _workflow_on_triggers(data)
+        conflict = triggers & AUTO_TRIGGERS
+        if sync_mode == "github_app" and _is_fastapi_cloud_deploy(text) and conflict:
+            errors.append(
+                f"{label}: نشر FastAPI Cloud مع triggers {sorted(conflict)} "
+                "— المزامنة التلقائية مسؤولية fastapi-cloud[bot] فقط"
             )
 
 
@@ -219,6 +291,8 @@ def _check_link(link: dict, errors: list[str]) -> None:
         "sync_mode": "github_app",
         "primary_app": "celanimna-3ffa6b22",
         "primary_url": "https://celanimna-3ffa6b22.fastapicloud.dev",
+        "spare_app": "celanimna",
+        "spare_role": "legacy-duplicate",
     }
     if not isinstance(link, dict):
         errors.append("link: يجب أن يكون خريطة")
@@ -250,6 +324,9 @@ def _check_link(link: dict, errors: list[str]) -> None:
             "FASTAPI_CLOUD_APP_ID",
             "Source Repository",
             "fastapi-cloud[bot]",
+            "ليست بيئة staging",
+            "legacy-duplicate",
+            "celanimna",
         ):
             if needle not in text:
                 errors.append(f"{docs_rel}: ناقص {needle!r}")
@@ -290,6 +367,7 @@ def main(argv: list[str] | None = None) -> int:
     sync_mode = str((link or {}).get("sync_mode") or "")
     _check_pyproject(entrypoint, python, errors)
     _check_workflow(workflow, branch, sync_mode, errors)
+    _check_all_workflows(sync_mode, errors)
     _check_ignore(errors)
     if errors:
         print("fastapi-cloud link FAIL:", file=sys.stderr)

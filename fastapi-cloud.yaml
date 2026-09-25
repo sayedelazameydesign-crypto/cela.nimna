@@ -29,6 +29,11 @@ link:
   sync_mode: "github_app"
   primary_app: "celanimna-3ffa6b22"
   primary_url: "https://celanimna-3ffa6b22.fastapicloud.dev"
+  # تطبيق ثانٍ مربوط بنفس المستودع ونفس الفرع — ليس staging (GitHub App
+  # لا ينشر إلا default branch). نسخة قديمة/مكررة: افصل Source Repository
+  # من اللوحة إن لم يكن له غرض مستقل.
+  spare_app: "celanimna"
+  spare_role: "legacy-duplicate"
   workflow: ".github/workflows/fastapi-cloud-deploy.yml"
   docs: "docs/DEPLOY-FASTAPI-CLOUD.md"
 

@@ -129,6 +129,51 @@ def test_broken_yaml_is_rejected(tmp_path: Path) -> None:
     assert "YAML" in log or "غير صالح" in log
 
 
+def test_ci_push_without_deploy_is_allowed(tmp_path: Path) -> None:
+    module = _load()
+    wfdir = tmp_path / "workflows"
+    wfdir.mkdir()
+    (wfdir / "ci.yml").write_text(
+        "name: ci\non:\n  push:\n    branches: [main]\n  pull_request:\njobs:\n  t:\n    runs-on: ubuntu-latest\n",
+        encoding="utf-8",
+    )
+    module.WORKFLOWS_DIR = wfdir
+    errors: list[str] = []
+    module._check_all_workflows("github_app", errors)
+    assert errors == []
+
+
+def test_any_named_workflow_deploying_on_push_fails(tmp_path: Path) -> None:
+    """Filename must not matter — sneaky.yml with fastapi deploy + on.push → exit 1."""
+    module = _load()
+    wfdir = tmp_path / "workflows"
+    wfdir.mkdir()
+    (wfdir / "sneaky.yml").write_text(
+        "name: sneak\non:\n  push:\n    branches: [main]\njobs:\n  d:\n    steps:\n      - run: uv run fastapi deploy\n",
+        encoding="utf-8",
+    )
+    module.WORKFLOWS_DIR = wfdir
+    errors: list[str] = []
+    module._check_all_workflows("github_app", errors)
+    assert errors, "a push-triggered fastapi deploy must fail the gate"
+    assert any("sneaky.yml" in item and "push" in item for item in errors)
+
+
+def test_yaml_on_key_is_boolean_true_still_detected(tmp_path: Path) -> None:
+    """PyYAML 1.1 loads `on:` as the key True — the gate must still see push."""
+    module = _load()
+    raw = "on:\n  push:\n    branches: [main]\njobs:\n  d:\n    steps:\n      - run: uv run fastapi deploy\n        env:\n          FASTAPI_CLOUD_TOKEN: ${{ secrets.FASTAPI_CLOUD_TOKEN }}\n"
+    parsed = __import__("yaml").safe_load(raw)
+    assert "on" not in parsed and True in parsed
+    wfdir = tmp_path / "workflows"
+    wfdir.mkdir()
+    (wfdir / "deploy.yml").write_text(raw, encoding="utf-8")
+    module.WORKFLOWS_DIR = wfdir
+    errors: list[str] = []
+    module._check_all_workflows("github_app", errors)
+    assert any("push" in item for item in errors)
+
+
 def test_workflow_must_name_official_secrets() -> None:
     workflow = ROOT / ".github" / "workflows" / "fastapi-cloud-deploy.yml"
     text = workflow.read_text(encoding="utf-8")

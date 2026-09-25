@@ -36,6 +36,7 @@ from nimna.api.security import (
     is_public_path,
 )
 from nimna.config import Settings
+from nimna.providers.base import ProviderError
 
 REPO = Path(__file__).resolve().parent.parent
 KEY = secrets.token_urlsafe(32)
@@ -100,6 +101,33 @@ def test_production_is_the_default_mode(monkeypatch):
 def test_production_without_key_refuses_to_build(agent):
     with pytest.raises(SecurityConfigError, match="NIMNA_API_KEY is required"):
         _app(agent, api_keys=[])
+
+
+def test_boot_refuses_missing_api_key_before_provider(monkeypatch):
+    """create_app() without a prebuilt agent: NIMNA_API_KEY is checked first.
+
+    If the order flipped, this would raise ProviderError (no Gemini key) instead.
+    """
+    monkeypatch.setenv("NIMNA_ENV", "production")
+    monkeypatch.delenv("NIMNA_API_KEY", raising=False)
+    monkeypatch.setenv("MODEL_PROVIDER", "gemini")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    settings = Settings.from_env(env_file=None)
+    with pytest.raises(SecurityConfigError, match="NIMNA_API_KEY is required"):
+        create_app(settings)
+
+
+def test_boot_refuses_missing_gemini_key_before_serving(monkeypatch):
+    """With a valid API key, missing GEMINI_API_KEY still aborts before FastAPI routes exist."""
+    monkeypatch.setenv("NIMNA_ENV", "production")
+    monkeypatch.setenv("NIMNA_API_KEY", secrets.token_urlsafe(32))
+    monkeypatch.setenv("MODEL_PROVIDER", "gemini")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    settings = Settings.from_env(env_file=None)
+    with pytest.raises(ProviderError, match="GEMINI_API_KEY"):
+        create_app(settings)
 
 
 @pytest.mark.parametrize("bad_key, expected", [
