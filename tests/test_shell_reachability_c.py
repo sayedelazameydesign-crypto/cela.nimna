@@ -73,7 +73,7 @@ def test_registration_gate_reads_env_while_handler_gate_reads_settings(settings,
     monkeypatch.delenv("SHELL_TOOL_ENABLED", raising=False)
     empty = tmp_path / "ns2"; empty.mkdir(exist_ok=True)
     settings.shell_tool_enabled = False
-    agent = Agent(MockProvider(), SkillManager(empty), reg, MemoryStore(":memory:"),
+    Agent(MockProvider(), SkillManager(empty), reg, MemoryStore(":memory:"),
                   settings, approval_policy=DeferToClient(), workspace=settings.workspace_dir)
     # والمعالج برضه يرفض ما دامت Settings معطلة (البوابة الثانية): النتيجة DENIED لا تنفيذ
     from nimna.tools.builtin.shell import ShellRequest

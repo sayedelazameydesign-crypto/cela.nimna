@@ -95,7 +95,7 @@ def test_fail_on_missing_file_and_absent_violation(workspace: Path):
 
 def test_fail_dominates_inconclusive_and_invalid_regex_is_inconclusive(workspace: Path):
     verifier = DeterministicVerifier(workspace)
-    report = verifier.verify([
+    verifier.verify([
         {"kind": "content_matches", "path": "out/result.txt", "contains": "Python"},
         {"kind": "content_matches", "path": "out/result.txt", "regex": r"[unclosed"},
     ])

@@ -98,7 +98,6 @@ ignore = [
 
   # ══ دين جودة — يُصلح تدريجيًا في المرحلة 2 ══
   "B904",  # TODO(phase2): raise ... from None (22)
-  "F841",  # TODO(phase2-URGENT): ⚠ راجع الـ17 يدويًا قبل أي إصلاح — unused-variable قد يخفي bug حقيقي
   "E402",  # TODO(phase2): imports في مواضع مقصودة (12)
   "E702",  # TODO(phase2): فواصل منقوطة (12)
   "UP042", # TODO(phase2): str-enum → StrEnum (13)

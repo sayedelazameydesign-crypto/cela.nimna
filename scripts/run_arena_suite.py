@@ -700,7 +700,7 @@ def run_task(spec: TaskSpec, mode: str) -> dict[str, Any]:
                                note="sandboxed verification re-run inside the workspace"),
                 ))
                 suite_authorizer = Authorizer()
-                policy_stats: dict = {}
+                policy_stats: dict = {}  # noqa: F841  # TODO(decision-D): تجربة السلك جارية — قرار معلّق (سجل الدفعة 4 في تقرير التدقيق)
 
                 def _operator_consent(descriptor, arguments):
                     return AuthorizationGrant(actor="arena-suite-operator",

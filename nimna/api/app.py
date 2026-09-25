@@ -91,7 +91,7 @@ def create_app(settings: Settings | None = None, agent: Agent | None = None) -> 
         anomaly_info: dict[str, Any] = {}
         try:
             from security.anomaly import get_detector
-            det = get_detector()
+            get_detector()  # تهيئة singleton — النداء هو الفرق بين enabled صادق وافتراضي
             anomaly_info = {"enabled": True, "detector": "heuristics-v1"}
         except Exception:
             anomaly_info = {"enabled": False}

@@ -137,7 +137,7 @@ def test_resume_cannot_mutate_approved_call(agent, provider, workspace):
     assert r.status == RunStatus.AWAITING_APPROVAL
     assert r.pending.tool_call.arguments["path"] == "victim.txt"
     # API only accepts approved/always, not new args – ensure resume still deletes victim, not other
-    resumed = agent.resume(r.run_id, approved=True)
+    agent.resume(r.run_id, approved=True)  # resume ينفّذ الحذف المُختبر
     assert not (workspace / "victim.txt").exists()
     assert (workspace / "other.txt").exists()
     # Verify that tampering with stored pending state file does not affect tool – the agent uses stored call

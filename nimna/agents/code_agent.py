@@ -85,7 +85,7 @@ class CodeAgent(BaseSwarmAgent):
             # if we executed code successfully after retries, store pattern
             try:
                 has_code = any(c.get("name") in ("run_python", "shell_execute") for c in result.tool_calls)
-                has_retry = any("Self-Healing" in (str(c)) for c in result.tool_calls)
+                # NOTE: حُذف فحص has_retry — كان شبه ميت (تطابق "Self-Healing" بأسماء أدوات) والوسم يُطبَّق بمنطق صحيح مستقل أدناه
                 if has_code and len(result.tool_calls) > 1:
                     from nimna.memory.qdrant import get_vector_memory
 

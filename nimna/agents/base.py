@@ -112,7 +112,6 @@ class BaseSwarmAgent:
         ]
         tool_calls_log: list[dict] = []
         usage: dict[str, int] = {}
-        last_text = ""
         step = 0
         max_steps = min(self.settings.max_steps, 8)  # swarm agents are short-lived
 
@@ -153,7 +152,7 @@ class BaseSwarmAgent:
                     continue
                 # validate
                 try:
-                    params = tool.validate(call.arguments)
+                    tool.validate(call.arguments)  # validate يرفع عند الوسائط غير الصالحة — النداء هو التحقق
                 except Exception as exc:
                     msg = str(exc)
                     messages.append(Message.tool_result(call, f'{{"error": {msg!r}}}'))
