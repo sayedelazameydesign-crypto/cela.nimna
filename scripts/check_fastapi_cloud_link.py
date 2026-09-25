@@ -141,11 +141,18 @@ def _wf_label(path: Path) -> str:
         return path.name
 
 
-def _workflow_on_triggers(data: dict) -> set[str]:
+def _on_block(data: dict):
     """GitHub `on:` becomes YAML 1.1 boolean True under PyYAML — read both keys."""
+    if not isinstance(data, dict):
+        return None
     on = data.get("on")
     if on is None:
         on = data.get(True)
+    return on
+
+
+def _workflow_on_triggers(data: dict) -> set[str]:
+    on = _on_block(data)
     if isinstance(on, str):
         return {on}
     if isinstance(on, list):
@@ -155,16 +162,167 @@ def _workflow_on_triggers(data: dict) -> set[str]:
     return set()
 
 
-def _is_fastapi_cloud_deploy(text: str) -> bool:
+def _glob_hits_branch(pattern: str, branch: str) -> bool:
+    import fnmatch
+
+    pattern = str(pattern).strip().lstrip("refs/heads/")
+    if pattern in {branch, "*", "**"}:
+        return True
+    return fnmatch.fnmatch(branch, pattern)
+
+
+def _event_hits_branch(event, branch: str) -> bool:
+    """True when this GitHub event can fire for `branch` (the GitHub App default).
+
+    Bare `on: push` (no filter) hits every branch, including main.
+    `branches: [staging]` or `branches-ignore: [main]` do not conflict.
+    """
+    if event is None or event is True:
+        return True
+    if isinstance(event, str):
+        return _glob_hits_branch(event, branch)
+    if isinstance(event, list):
+        return any(_event_hits_branch(item, branch) for item in event)
+    if not isinstance(event, dict):
+        return True
+    if "branches" in event:
+        names = event.get("branches") or []
+        if isinstance(names, str):
+            names = [names]
+        return any(_glob_hits_branch(str(name), branch) for name in names)
+    if "branches-ignore" in event:
+        ignored = event.get("branches-ignore") or []
+        if isinstance(ignored, str):
+            ignored = [ignored]
+        return not any(_glob_hits_branch(str(name), branch) for name in ignored)
+    return True
+
+
+def _auto_triggers_hitting_branch(data: dict, branch: str) -> set[str]:
+    on = _on_block(data)
+    hits: set[str] = set()
+    if isinstance(on, str):
+        if on in AUTO_TRIGGERS:
+            hits.add(on)
+        return hits
+    if isinstance(on, list):
+        return {str(item) for item in on if str(item) in AUTO_TRIGGERS}
+    if not isinstance(on, dict):
+        return hits
+    for event_name in AUTO_TRIGGERS:
+        if event_name in on and _event_hits_branch(on.get(event_name), branch):
+            hits.add(event_name)
+    return hits
+
+
+def _text_deploys(text: str) -> bool:
     return any(marker in text for marker in DEPLOY_MARKERS)
 
 
-def _check_all_workflows(sync_mode: str, errors: list[str]) -> None:
-    """Fail CI (exit 1) if *any* workflow would auto-deploy to FastAPI Cloud.
+def _local_workflow_path(uses: str) -> Path | None:
+    raw = uses.split("@", 1)[0].strip()
+    for prefix in ("./.github/workflows/", ".github/workflows/"):
+        if raw.startswith(prefix):
+            return WORKFLOWS_DIR / Path(raw).name
+    return None
+
+
+def _local_action_dir(uses: str) -> Path | None:
+    raw = uses.split("@", 1)[0].strip()
+    for prefix in ("./.github/actions/", ".github/actions/"):
+        if raw.startswith(prefix):
+            return WORKFLOWS_DIR.parent / "actions" / Path(raw).name
+    return None
+
+
+def _iter_job_uses_and_runs(data: dict):
+    jobs = data.get("jobs")
+    if not isinstance(jobs, dict):
+        return
+    for job in jobs.values():
+        if not isinstance(job, dict):
+            continue
+        uses = job.get("uses")
+        if isinstance(uses, str):
+            yield ("uses", uses)
+        steps = job.get("steps") or []
+        if not isinstance(steps, list):
+            continue
+        for step in steps:
+            if not isinstance(step, dict):
+                continue
+            if isinstance(step.get("uses"), str):
+                yield ("uses", step["uses"])
+            if isinstance(step.get("run"), str):
+                yield ("run", step["run"])
+            env = step.get("env")
+            if isinstance(env, dict):
+                for value in env.values():
+                    yield ("env", str(value))
+
+
+def _path_deploys_fastapi_cloud(path: Path, seen: set[Path]) -> bool:
+    """True if this workflow/action (or a local `uses:` it calls) deploys.
+
+    Follows reusable workflows and composite actions inside the repo. External
+    `owner/repo/.github/workflows/...@ref` cannot be inspected offline — a
+    marker in the `uses:` string still counts.
+    """
+    resolved = path.resolve() if path.exists() else path
+    if resolved in seen:
+        return False
+    if not path.is_file():
+        # composite action directory
+        for name in ("action.yml", "action.yaml"):
+            candidate = path / name
+            if candidate.is_file():
+                return _path_deploys_fastapi_cloud(candidate, seen)
+        return False
+    seen.add(resolved)
+    text = path.read_text(encoding="utf-8")
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError:
+        return _text_deploys(text)
+    if not isinstance(data, dict):
+        return _text_deploys(text)
+    for kind, value in _iter_job_uses_and_runs(data):
+        if kind in {"run", "env"} and _text_deploys(value):
+            return True
+        if kind == "uses":
+            if _text_deploys(value):
+                return True
+            local_wf = _local_workflow_path(value)
+            if local_wf is not None and _path_deploys_fastapi_cloud(local_wf, seen):
+                return True
+            local_action = _local_action_dir(value)
+            if local_action is not None and _path_deploys_fastapi_cloud(local_action, seen):
+                return True
+    # composite action body
+    runs = data.get("runs")
+    if isinstance(runs, dict):
+        for step in runs.get("steps") or []:
+            if not isinstance(step, dict):
+                continue
+            if isinstance(step.get("run"), str) and _text_deploys(step["run"]):
+                return True
+            env = step.get("env")
+            if isinstance(env, dict) and any(_text_deploys(str(v)) for v in env.values()):
+                return True
+            if isinstance(step.get("uses"), str):
+                nested = _local_action_dir(step["uses"]) or _local_workflow_path(step["uses"])
+                if nested is not None and _path_deploys_fastapi_cloud(nested, seen):
+                    return True
+    return False
+
+
+def _check_all_workflows(sync_mode: str, default_branch: str, errors: list[str]) -> None:
+    """Fail CI (exit 1) if *any* workflow would auto-deploy to FastAPI Cloud on `main`.
 
     CI jobs may use on.push / on.pull_request. That is allowed. Combining those
-    triggers with `fastapi deploy` / FASTAPI_CLOUD_* is not — the GitHub App
-    already syncs `main`. Scanning the directory, not a single filename.
+    triggers *when they can fire for the default branch* with a FastAPI Cloud
+    deploy step (this file, a reusable workflow, or a composite action) is not.
+    `branches: [staging]` / `branches-ignore: [main]` are not a conflict.
     """
     if not WORKFLOWS_DIR.is_dir():
         errors.append(".github/workflows مفقود")
@@ -184,16 +342,17 @@ def _check_all_workflows(sync_mode: str, errors: list[str]) -> None:
         if not isinstance(data, dict):
             errors.append(f"{label}: الجذر ليس خريطة")
             continue
-        if "continue-on-error" in text or "|| true" in text:
-            if _is_fastapi_cloud_deploy(text):
-                errors.append(f"{label}: قناع فشل (continue-on-error / || true) ممنوع على مسار النشر")
+        deploys = _path_deploys_fastapi_cloud(path, set())
+        if ("continue-on-error" in text or "|| true" in text) and deploys:
+            errors.append(f"{label}: قناع فشل (continue-on-error / || true) ممنوع على مسار النشر")
         if SECRET_LITERAL.search(text):
             errors.append(f"{label}: شكل مفتاح سرّي في النص — ممنوع")
-        triggers = _workflow_on_triggers(data)
-        conflict = triggers & AUTO_TRIGGERS
-        if sync_mode == "github_app" and _is_fastapi_cloud_deploy(text) and conflict:
+        if sync_mode != "github_app" or not deploys:
+            continue
+        conflict = _auto_triggers_hitting_branch(data, default_branch)
+        if conflict:
             errors.append(
-                f"{label}: نشر FastAPI Cloud مع triggers {sorted(conflict)} "
+                f"{label}: نشر FastAPI Cloud مع {sorted(conflict)} على فرع {default_branch!r} "
                 "— المزامنة التلقائية مسؤولية fastapi-cloud[bot] فقط"
             )
 
@@ -293,6 +452,9 @@ def _check_link(link: dict, errors: list[str]) -> None:
         "primary_url": "https://celanimna-3ffa6b22.fastapicloud.dev",
         "spare_app": "celanimna",
         "spare_role": "legacy-duplicate",
+        "spare_disconnect_todo": "open",
+        "spare_disconnect_owner": "sayedelazameydesign-crypto",
+        "spare_disconnect_since": "2026-09-25",
     }
     if not isinstance(link, dict):
         errors.append("link: يجب أن يكون خريطة")
@@ -327,9 +489,16 @@ def _check_link(link: dict, errors: list[str]) -> None:
             "ليست بيئة staging",
             "legacy-duplicate",
             "celanimna",
+            "إجراء معلّق",
+            "sayedelazameydesign-crypto",
         ):
             if needle not in text:
                 errors.append(f"{docs_rel}: ناقص {needle!r}")
+        todo = link.get("spare_disconnect_todo")
+        if todo == "open" and "- [ ]" not in text:
+            errors.append(f"{docs_rel}: todo=open يتطلب صندوق `- [ ]` (لا تُزل التتبع)")
+        if todo == "done" and "- [x]" not in text and "- [X]" not in text:
+            errors.append(f"{docs_rel}: todo=done يتطلب `- [x]`")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -367,7 +536,7 @@ def main(argv: list[str] | None = None) -> int:
     sync_mode = str((link or {}).get("sync_mode") or "")
     _check_pyproject(entrypoint, python, errors)
     _check_workflow(workflow, branch, sync_mode, errors)
-    _check_all_workflows(sync_mode, errors)
+    _check_all_workflows(sync_mode, branch, errors)
     _check_ignore(errors)
     if errors:
         print("fastapi-cloud link FAIL:", file=sys.stderr)

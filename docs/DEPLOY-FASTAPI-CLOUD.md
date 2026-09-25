@@ -39,12 +39,11 @@
 - `Production – celanimna-3ffa6b22`
 - `Production – celanimna`
 
-هذا هو مسار المزامنة الحي. **لا تضف `on.push` / `on.pull_request` إلى أي workflow
-ينفّذ `fastapi deploy`** — النشر سيتضاعف. البوابة تمسح **كل** ملفات
-`.github/workflows/*.{yml,yaml}` وتفشل الـCI (`exit 1`) عند التعارض، لا تحذيراً.
-الـworkflow `.github/workflows/fastapi-cloud-deploy.yml` يدوي فقط
-(`workflow_dispatch` من `main`) عبر Deploy Token، احتياط إذا فُصل الـApp.
-`ci.yml` و`00-integrity.yml` يبقيان على `on.push` لأنهما اختبارات وليسا نشراً.
+هذا هو مسار المزامنة الحي. البوابة تمسح **كل** `.github/workflows/*.{yml,yaml}`،
+تتبع `jobs.*.uses` و`steps[].uses` إلى reusable workflows وcomposite actions
+داخل المستودع، وتفشل (`exit 1`) فقط إذا مسار نشر FastAPI Cloud يمكن أن ينطلق
+على فرع `main` عبر `push` أو `pull_request`. `branches: [staging]` أو
+`branches-ignore: [main]` ليسا تعارضاً. `ci.yml` يبقى على `on.push` لأنه لا ينشر.
 
 ### لماذا تطبيقان على نفس المستودع؟
 
@@ -56,6 +55,20 @@
 إن لم يكن له غرض مستقل: التطبيق → **Settings** → **Source Repository** →
 **Disconnect**. النشرة الحالية تبقى حتى تُحذف يدوياً. لا يمكن فصل الربط من
 داخل المستودع.
+
+## ⚠️ إجراء معلّق (يدوي — لا يُغلق من CI)
+
+الفصل إجراء لوحة فقط. بلا مالك وتاريخ تُنسى الملاحظة كما نُسي الربط المزدوج
+قبل تثبيته في العقد.
+
+- [ ] فصل `celanimna` من Source Repository عبر اللوحة (Settings → Source Repository → Disconnect)
+- المسؤول: `sayedelazameydesign-crypto`
+- منذ: `2026-09-25`
+- السبب: تطبيق مكرر ينشر تلقائياً من `main` بلا فائدة مستقلة (ليست staging) — دورة نشر مضاعفة
+- عند الإتمام: غيّر `spare_disconnect_todo` في `fastapi-cloud.yaml` من `open` إلى `done` وعلّم الصندوق `[x]`
+
+البوابة تفحص أن الصندوق `- [ ]` موجود طالما `spare_disconnect_todo: open`. لا تفشل
+لأن الفصل لم يتم — تفشل إذا اختفى التتبع.
 
 المراجع الرسمية:
 

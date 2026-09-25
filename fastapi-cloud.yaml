@@ -34,6 +34,9 @@ link:
   # من اللوحة إن لم يكن له غرض مستقل.
   spare_app: "celanimna"
   spare_role: "legacy-duplicate"
+  spare_disconnect_todo: "open"
+  spare_disconnect_owner: "sayedelazameydesign-crypto"
+  spare_disconnect_since: "2026-09-25"
   workflow: ".github/workflows/fastapi-cloud-deploy.yml"
   docs: "docs/DEPLOY-FASTAPI-CLOUD.md"
 

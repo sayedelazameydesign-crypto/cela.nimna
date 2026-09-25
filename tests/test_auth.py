@@ -130,6 +130,77 @@ def test_boot_refuses_missing_gemini_key_before_serving(monkeypatch):
         create_app(settings)
 
 
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_boot_treats_blank_api_key_as_missing(monkeypatch, blank):
+    """Empty / whitespace NIMNA_API_KEY must not pass `if not key` by being a str."""
+    monkeypatch.setenv("NIMNA_ENV", "production")
+    monkeypatch.setenv("NIMNA_API_KEY", blank)
+    monkeypatch.setenv("MODEL_PROVIDER", "gemini")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    settings = Settings.from_env(env_file=None)
+    assert settings.api_keys == []
+    with pytest.raises(SecurityConfigError, match="NIMNA_API_KEY is required"):
+        create_app(settings)
+
+
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_boot_treats_blank_gemini_key_as_missing(monkeypatch, blank):
+    monkeypatch.setenv("NIMNA_ENV", "production")
+    monkeypatch.setenv("NIMNA_API_KEY", secrets.token_urlsafe(32))
+    monkeypatch.setenv("MODEL_PROVIDER", "gemini")
+    monkeypatch.setenv("GEMINI_API_KEY", blank)
+    monkeypatch.setenv("GOOGLE_API_KEY", blank)
+    settings = Settings.from_env(env_file=None)
+    assert not settings.gemini_api_key
+    with pytest.raises(ProviderError, match="GEMINI_API_KEY"):
+        create_app(settings)
+
+
+def test_boot_does_not_construct_fastapi_when_api_key_missing(monkeypatch):
+    """SecurityConfigError must fire before FastAPI() — no app instance, no first-request fail."""
+    built = {"n": 0}
+    import nimna.api.app as appmod
+
+    real = appmod.FastAPI
+
+    def wrapped(*args, **kwargs):
+        built["n"] += 1
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(appmod, "FastAPI", wrapped)
+    monkeypatch.setenv("NIMNA_ENV", "production")
+    monkeypatch.delenv("NIMNA_API_KEY", raising=False)
+    monkeypatch.setenv("MODEL_PROVIDER", "gemini")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    settings = Settings.from_env(env_file=None)
+    with pytest.raises(SecurityConfigError, match="NIMNA_API_KEY is required"):
+        create_app(settings)
+    assert built["n"] == 0
+
+
+def test_boot_does_not_construct_fastapi_when_gemini_key_missing(monkeypatch):
+    built = {"n": 0}
+    import nimna.api.app as appmod
+
+    real = appmod.FastAPI
+
+    def wrapped(*args, **kwargs):
+        built["n"] += 1
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(appmod, "FastAPI", wrapped)
+    monkeypatch.setenv("NIMNA_ENV", "production")
+    monkeypatch.setenv("NIMNA_API_KEY", secrets.token_urlsafe(32))
+    monkeypatch.setenv("MODEL_PROVIDER", "gemini")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    settings = Settings.from_env(env_file=None)
+    with pytest.raises(ProviderError, match="GEMINI_API_KEY"):
+        create_app(settings)
+    assert built["n"] == 0
+
+
 @pytest.mark.parametrize("bad_key, expected", [
     ("short-key-123", "too short"),
     ("a" * 40, "placeholder / low-entropy"),

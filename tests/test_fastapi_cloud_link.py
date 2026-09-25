@@ -139,7 +139,7 @@ def test_ci_push_without_deploy_is_allowed(tmp_path: Path) -> None:
     )
     module.WORKFLOWS_DIR = wfdir
     errors: list[str] = []
-    module._check_all_workflows("github_app", errors)
+    module._check_all_workflows("github_app", "main", errors)
     assert errors == []
 
 
@@ -154,7 +154,7 @@ def test_any_named_workflow_deploying_on_push_fails(tmp_path: Path) -> None:
     )
     module.WORKFLOWS_DIR = wfdir
     errors: list[str] = []
-    module._check_all_workflows("github_app", errors)
+    module._check_all_workflows("github_app", "main", errors)
     assert errors, "a push-triggered fastapi deploy must fail the gate"
     assert any("sneaky.yml" in item and "push" in item for item in errors)
 
@@ -170,8 +170,54 @@ def test_yaml_on_key_is_boolean_true_still_detected(tmp_path: Path) -> None:
     (wfdir / "deploy.yml").write_text(raw, encoding="utf-8")
     module.WORKFLOWS_DIR = wfdir
     errors: list[str] = []
-    module._check_all_workflows("github_app", errors)
+    module._check_all_workflows("github_app", "main", errors)
     assert any("push" in item for item in errors)
+
+
+def test_push_to_other_branch_is_not_a_conflict(tmp_path: Path) -> None:
+    module = _load()
+    wfdir = tmp_path / "workflows"
+    wfdir.mkdir()
+    (wfdir / "other.yml").write_text(
+        "on:\n  push:\n    branches: [staging]\njobs:\n  d:\n    steps:\n      - run: uv run fastapi deploy\n",
+        encoding="utf-8",
+    )
+    module.WORKFLOWS_DIR = wfdir
+    errors: list[str] = []
+    module._check_all_workflows("github_app", "main", errors)
+    assert errors == []
+
+
+def test_branches_ignore_main_is_not_a_conflict(tmp_path: Path) -> None:
+    module = _load()
+    wfdir = tmp_path / "workflows"
+    wfdir.mkdir()
+    (wfdir / "other.yml").write_text(
+        "on:\n  push:\n    branches-ignore: [main]\njobs:\n  d:\n    steps:\n      - run: uv run fastapi deploy\n",
+        encoding="utf-8",
+    )
+    module.WORKFLOWS_DIR = wfdir
+    errors: list[str] = []
+    module._check_all_workflows("github_app", "main", errors)
+    assert errors == []
+
+
+def test_reusable_workflow_on_push_is_followed(tmp_path: Path) -> None:
+    module = _load()
+    wfdir = tmp_path / "workflows"
+    wfdir.mkdir()
+    (wfdir / "deploy.yml").write_text(
+        "on:\n  workflow_call:\njobs:\n  d:\n    steps:\n      - run: uv run fastapi deploy\n",
+        encoding="utf-8",
+    )
+    (wfdir / "caller.yml").write_text(
+        "on:\n  push:\n    branches: [main]\njobs:\n  d:\n    uses: ./.github/workflows/deploy.yml\n",
+        encoding="utf-8",
+    )
+    module.WORKFLOWS_DIR = wfdir
+    errors: list[str] = []
+    module._check_all_workflows("github_app", "main", errors)
+    assert any("caller.yml" in item for item in errors)
 
 
 def test_workflow_must_name_official_secrets() -> None:
