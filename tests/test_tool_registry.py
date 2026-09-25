@@ -20,7 +20,7 @@ from nimna.execution.tool_registry import (
     InvalidDescriptor,
     InvocationStatus,
     LifecycleState,
-    PolicyDecision,
+    PolicyGateDecision,
     ToolDescriptor,
     ToolNotFound,
     ToolRegistry,
@@ -69,7 +69,7 @@ def call(reg: ToolRegistry, **kwargs):
     defaults = dict(
         arguments={"text": "hi"},
         granted_capabilities=frozenset({"text"}),
-        policy=lambda tool, args: PolicyDecision(True, "test policy"),
+        policy=lambda tool, args: PolicyGateDecision(True, "test policy"),
         authorizer=lambda tool, args: AuthorizationDecision(True, "test authorizer"),
     )
     defaults.update(kwargs)
@@ -224,7 +224,7 @@ def test_capability_mismatch_is_refused(registry: ToolRegistry):
 
 
 def test_policy_denied_is_refused(registry: ToolRegistry):
-    outcome = call(registry, policy=lambda tool, args: PolicyDecision(False, "quiet hours"))
+    outcome = call(registry, policy=lambda tool, args: PolicyGateDecision(False, "quiet hours"))
     assert outcome.status is InvocationStatus.POLICY_DENIED
     assert "quiet hours" in outcome.reason and outcome.executed is False
     # no policy wired ⇒ default-deny (the registry is not its own policy engine)
@@ -302,7 +302,7 @@ def test_every_invocation_is_traceable_in_the_chain(registry: ToolRegistry):
     chain = EvidenceChain()
     call(registry, evidence=chain)                                          # EXECUTED
     call(registry, evidence=chain, granted_capabilities=frozenset())        # CAPABILITY_DENIED
-    call(registry, evidence=chain, policy=lambda t, a: PolicyDecision(False, "x"))  # POLICY_DENIED
+    call(registry, evidence=chain, policy=lambda t, a: PolicyGateDecision(False, "x"))  # POLICY_DENIED
     call(registry, evidence=chain, arguments={"text": 7})                   # INPUT_INVALID
     assert len(chain) == 4
     assert chain.verify() is True
@@ -319,7 +319,7 @@ def test_every_invocation_is_traceable_in_the_chain(registry: ToolRegistry):
         assert "arguments_digest" in entry and "text" not in str(entry.get("arguments_keys") or []) or True
         blob = str(entry)
         assert "should-not-leak" not in blob
-    call(registry, evidence=chain, arguments={"text": "should-not-leak"}, policy=lambda t, a: PolicyDecision(False))
+    call(registry, evidence=chain, arguments={"text": "should-not-leak"}, policy=lambda t, a: PolicyGateDecision(False))
     assert "should-not-leak" not in str(chain.entries)            # raw args never recorded
 
 

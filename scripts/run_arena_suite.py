@@ -643,7 +643,7 @@ def run_task(spec: TaskSpec, mode: str) -> dict[str, Any]:
                 from nimna.tools.builtin.shell import ShellRequest as _Req, execute_shell as _exe
                 from nimna.execution.tool_registry import (
                     AuthorizationDecision, EvidenceChain, InvocationStatus,
-                    PolicyDecision, ToolDescriptor, ToolRegistry, invoke)
+                    PolicyGateDecision, ToolDescriptor, ToolRegistry, invoke)
 
                 _settings = _S.from_env(env_file=None)
                 _settings.shell_tool_enabled = capabilities.get("shell_tool", False)

@@ -32,7 +32,7 @@ from typing import Any, Callable, Iterable, Mapping, Optional
 __all__ = [
     "RiskLevel", "LifecycleState", "LIFECYCLE_TRANSITIONS",
     "ToolDescriptor", "ToolRegistry",
-    "PolicyDecision", "AuthorizationDecision",
+    "PolicyGateDecision", "AuthorizationDecision",
     "InvocationStatus", "InvocationOutcome", "EvidenceChain",
     "invoke", "validate_instance",
     "InvalidDescriptor", "DuplicateToolError", "ToolNotFound",
@@ -345,7 +345,7 @@ class ToolRegistry:
 # gated invocation + evidence
 # --------------------------------------------------------------------------- #
 @dataclass(frozen=True)
-class PolicyDecision:
+class PolicyGateDecision:
     allowed: bool
     reason: str = ""
 
@@ -469,7 +469,7 @@ def invoke(
     *,
     granted_capabilities: Iterable[str] = frozenset(),
     capability_resolver: Optional[Callable[[ToolDescriptor], Iterable[str]]] = None,
-    policy: Optional[Callable[[ToolDescriptor, Mapping[str, Any]], PolicyDecision]] = None,
+    policy: Optional[Callable[[ToolDescriptor, Mapping[str, Any]], PolicyGateDecision]] = None,
     authorizer: Optional[Callable[[ToolDescriptor, Mapping[str, Any]], AuthorizationDecision]] = None,
     evidence: Optional[EvidenceChain] = None,
 ) -> InvocationOutcome:
@@ -539,7 +539,7 @@ def invoke(
 
     # 5) policy check (M3) — default deny
     decision = (policy(descriptor, arguments) if policy
-                else PolicyDecision(False, "no policy wired (default-deny)"))
+                else PolicyGateDecision(False, "no policy wired (default-deny)"))
     if not decision.allowed:
         return _event(InvocationStatus.POLICY_DENIED,
                       f"{tool_id}: policy denied: {decision.reason or 'not allowed'}",

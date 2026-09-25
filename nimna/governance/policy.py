@@ -19,7 +19,7 @@ class ToolRisk(str, Enum):
     SECRET = "SECRET"
 
 
-class PolicyDecision(str, Enum):
+class PolicyVerdict(str, Enum):
     ALLOW = "allow"
     APPROVAL_REQUIRED = "approval_required"
     DENY = "deny"
@@ -27,13 +27,13 @@ class PolicyDecision(str, Enum):
 
 @dataclass(frozen=True)
 class PolicyResult:
-    decision: PolicyDecision
+    decision: PolicyVerdict
     risk: ToolRisk
     reason: str
 
     @property
     def allowed(self) -> bool:
-        return self.decision is not PolicyDecision.DENY
+        return self.decision is not PolicyVerdict.DENY
 
 
 @dataclass
@@ -59,9 +59,9 @@ class PolicyEngine:
         explicit_consent: bool = False,
     ) -> PolicyResult:
         if allowed_tools is not None and tool_name not in set(allowed_tools):
-            return PolicyResult(PolicyDecision.DENY, ToolRisk.HIGH, "tool is outside the active capability scope")
+            return PolicyResult(PolicyVerdict.DENY, ToolRisk.HIGH, "tool is outside the active capability scope")
         if self.deny_tools and tool_name in self.deny_tools:
-            return PolicyResult(PolicyDecision.DENY, ToolRisk.HIGH, "tool is denied by policy")
+            return PolicyResult(PolicyVerdict.DENY, ToolRisk.HIGH, "tool is denied by policy")
         if contains_secret:
             risk = ToolRisk.SECRET
         else:
@@ -73,8 +73,8 @@ class PolicyEngine:
             threshold_risk = ToolRisk(str(threshold_risk).upper())
         threshold = order.index(threshold_risk)
         if order.index(risk) >= threshold and not explicit_consent:
-            return PolicyResult(PolicyDecision.APPROVAL_REQUIRED, risk, "explicit user approval is required")
-        return PolicyResult(PolicyDecision.ALLOW, risk, "policy checks passed")
+            return PolicyResult(PolicyVerdict.APPROVAL_REQUIRED, risk, "explicit user approval is required")
+        return PolicyResult(PolicyVerdict.ALLOW, risk, "policy checks passed")
 
 
-__all__ = ["PolicyDecision", "PolicyEngine", "PolicyResult", "ToolRisk"]
+__all__ = ["PolicyVerdict", "PolicyEngine", "PolicyResult", "ToolRisk"]

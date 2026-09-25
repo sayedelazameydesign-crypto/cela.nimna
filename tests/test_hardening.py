@@ -229,7 +229,6 @@ def test_skill_unknown_tools_are_warned(settings, skills):
     # csv_analysis lists only known tools, so no unknown warning
     assert "unknown tools" not in " ".join(report["csv_analysis"]).lower()
     # inject a bogus skill
-    from pathlib import Path
     import tempfile, textwrap
     with tempfile.TemporaryDirectory() as td:
         d = Path(td) / "evil"

@@ -294,7 +294,6 @@ class PlannerSwarm:
 def _extract_json(text: str) -> Optional[dict]:
     if not text:
         return None
-    import json, re
 
     fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, flags=re.DOTALL)
     cands = [fenced.group(1)] if fenced else []

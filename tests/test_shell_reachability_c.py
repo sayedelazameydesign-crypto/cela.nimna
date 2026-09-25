@@ -58,7 +58,6 @@ def test_no_gateway_no_skill_shell_is_unreachable(settings, tmp_path, monkeypatc
                     session_id="c-neg"))
     assert ok is False and "unknown tool" in res
     # 3) ومسار المهارات لا يعرضه: allowed_tools فارغ بلا مهارات
-    from nimna.core.state import RunState
     st = RunState(run_id="c-neg", user_id="t", session_id="c-neg", user_message="x")
     agent._refresh_allowed_tools(st)
     assert "run_command" not in st.allowed_tools

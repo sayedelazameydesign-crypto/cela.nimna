@@ -40,7 +40,7 @@ def _get_swarm_components():
 
 from ..config import Settings
 from ..evidence import EvidenceJournal
-from ..governance import PolicyDecision, PolicyEngine
+from ..governance import PolicyVerdict, PolicyEngine
 from ..memory.store import MemoryStore
 from ..models import BudgetExceededError, CostGuard, GovernedModelProvider, ModelRegistry
 from ..providers.base import Message, ModelProvider, ProviderError, ToolCall
@@ -522,11 +522,11 @@ class Agent:
                 explicit_consent=(scoped_approved or legacy_approved or self.settings.auto_approve),
                 contains_secret=("secret" in tool.tags),
             )
-            if policy_result.decision is PolicyDecision.DENY:
+            if policy_result.decision is PolicyVerdict.DENY:
                 self._record_tool_error(state, call, f"policy denied '{tool.name}': {policy_result.reason}")
                 state.consecutive_failures += 1
                 continue
-            if policy_result.decision is PolicyDecision.APPROVAL_REQUIRED and not scoped_approved and not legacy_approved and not self.settings.auto_approve:
+            if policy_result.decision is PolicyVerdict.APPROVAL_REQUIRED and not scoped_approved and not legacy_approved and not self.settings.auto_approve:
                 decision = self.approval_policy.decide(state, tool, call)
                 self._audit(state, "approval_requested", {"tool": tool.name, "arguments": call.arguments,
                                                           "decision": decision.value, "approval_key": approval_key})

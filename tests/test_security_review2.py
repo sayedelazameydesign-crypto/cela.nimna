@@ -168,7 +168,7 @@ def test_duplicate_resume_is_rejected(agent, provider, workspace):
 
 
 def test_secret_is_absent_from_exception_trace(workspace, settings, skills):
-    from nimna.tools import ToolContext, default_registry
+    from nimna.tools import default_registry
     from nimna.memory import MemoryStore
     import traceback
     registry = default_registry()

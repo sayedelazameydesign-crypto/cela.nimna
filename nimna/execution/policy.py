@@ -38,7 +38,7 @@ from typing import Any, Iterable, Mapping, Optional
 from .observation import ScopeError, resolve_inside_workspace
 
 __all__ = [
-    "Effect", "PolicyDecision", "PolicyInput", "PolicyRule", "Policy",
+    "Effect", "PolicyOutcome", "PolicyInput", "PolicyRule", "Policy",
     "CapabilityCatalog", "AuthorizationGrant", "Authorizer",
     "adjudicate", "t5_capability_resolver", "t5_policy_adapter", "t5_authorizer_adapter",
     "PolicyError", "WorkspaceBoundary",
@@ -64,7 +64,7 @@ class Effect(str, enum.Enum):
 
 
 @dataclass(frozen=True)
-class PolicyDecision:
+class PolicyOutcome:
     """The outcome of a deterministic policy evaluation (never an impression)."""
     effect: Effect
     reason: str
@@ -206,9 +206,9 @@ class Policy:
                 raise PolicyError(f"{self.policy_id}: duplicate rule_id {rule.rule_id!r}")
             seen.add(rule.rule_id)
 
-    def evaluate(self, input_: PolicyInput, *, boundary: Optional[WorkspaceBoundary] = None) -> PolicyDecision:
+    def evaluate(self, input_: PolicyInput, *, boundary: Optional[WorkspaceBoundary] = None) -> PolicyOutcome:
         """Deterministic evaluation. Every failure mode is fail-closed."""
-        deny = lambda reason, rule: PolicyDecision(Effect.DENY, reason, self.policy_id, self.version, rule)
+        deny = lambda reason, rule: PolicyOutcome(Effect.DENY, reason, self.policy_id, self.version, rule)
         try:
             problems = input_.validate_problems()
             if problems:
@@ -221,7 +221,7 @@ class Policy:
                                 "workspace-boundary")
             for rule in self.rules:                    # first match wins, in order
                 if rule.matches(input_):
-                    return PolicyDecision(rule.effect, rule.note or f"rule {rule.rule_id}",
+                    return PolicyOutcome(rule.effect, rule.note or f"rule {rule.rule_id}",
                                           self.policy_id, self.version, rule.rule_id)
             return deny("no rule matched (default-deny)", "default-deny")
         except Exception as exc:  # noqa: BLE001 — policy errors must fail closed (M9)
@@ -320,7 +320,7 @@ class Authorizer:
 # --------------------------------------------------------------------------- #
 def adjudicate(policy: Policy, catalog: CapabilityCatalog, authorizer: Authorizer,
                input_: PolicyInput, *, boundary: Optional[WorkspaceBoundary] = None,
-               now: Optional[datetime] = None) -> PolicyDecision:
+               now: Optional[datetime] = None) -> PolicyOutcome:
     """Resolver → Policy → Authorization for one request. Final word, fail-closed.
 
     ``REQUIRE_CONFIRMATION`` survives ONLY when the attached grant is valid AND
@@ -328,7 +328,7 @@ def adjudicate(policy: Policy, catalog: CapabilityCatalog, authorizer: Authorize
     try:
         catalog.resolve(input_.capabilities)
     except ValueError as exc:
-        return PolicyDecision(Effect.DENY, str(exc), policy.policy_id, policy.version,
+        return PolicyOutcome(Effect.DENY, str(exc), policy.policy_id, policy.version,
                               "capability-catalog")
     decision = policy.evaluate(input_, boundary=boundary)
     if decision.effect is Effect.DENY:
@@ -338,11 +338,11 @@ def adjudicate(policy: Policy, catalog: CapabilityCatalog, authorizer: Authorize
     authorization = authorizer.check(grant, actor=input_.actor, tool_id=input_.tool_id,
                                      policy_version=policy.version, now=now)
     if not authorization.granted:
-        return PolicyDecision(Effect.DENY,
+        return PolicyOutcome(Effect.DENY,
                               f"policy {decision.matched_rule} but authorization refused: {authorization.reason}",
                               policy.policy_id, policy.version, authorization.matched_rule)
     if needs_consent and not (grant is not None and grant.consent):
-        return PolicyDecision(Effect.DENY,
+        return PolicyOutcome(Effect.DENY,
                               f"rule {decision.matched_rule} requires confirmation and the grant carries no consent",
                               policy.policy_id, policy.version, "confirmation-consent")
     return decision
@@ -366,7 +366,7 @@ def t5_policy_adapter(policy: Policy, *, boundary: Optional[WorkspaceBoundary] =
     REQUIRE_CONFIRMATION pass the policy gate — confirmation still has to clear
     T5's authorization gate, and the policy identity lands in the evidence reason."""
     def _policy(descriptor, arguments):
-        from .tool_registry import PolicyDecision as T5Decision
+        from .tool_registry import PolicyGateDecision as T5Decision
         input_ = PolicyInput(
             actor="registry-invocation",
             tool_id=descriptor.tool_id,
