@@ -144,9 +144,10 @@ curl -s "$BASE/api/chat" -H "X-Nimna-Key: $NIMNA_API_KEY" -H 'Content-Type: appl
 | تعليق عند **حجم traffic صادر استثنائي** من الخدمة | agent يستدعي مزوّد النموذج | Free للـdemo؛ للـusage المستمر ارفع الخطة |
 | `robots.txt` يُجاب آلياً بـdisallow أثناء النوم | محركات بحث لا ترى الخدمة نائمة | غير مهم للـdemo |
 
-الصورة لا تثبّت `redis` ولا `qdrant-client` ولا `numpy` (تلك في `requirements.txt`
-وليس في `pyproject`): لذلك تظهر مساراتها **معطلة بوضوح** في `/api/health` بدل أن تنفجر —
-وهذا مقصود: الصورة أصغر، والقدرة غير المتوفرة مُعلنة لا مُموّهة.
+الصورة تثبّت `.[infra]` منذ توحيد مصدر الحقيقة في `pyproject.toml` (تدقيق 2026-09-25):
+`redis` و`qdrant-client` و`numpy` و`prometheus-client` صارت extra اسمها `infra` تُثبَّت في
+`Dockerfile` صراحةً. إن عطّلت `REDIS_URL`/`QDRANT_URL` تظهر مساراتها **معطلة بوضوح** في
+`/api/health` بدل أن تنفجر — وهذا مقصود: القدرة غير المتوفرة مُعلنة لا مُموّهة.
 
 ---
 

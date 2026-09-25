@@ -13,8 +13,10 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: "3.11", cache: pip}
       - run: pip install -r requirements.txt
-      - name: Install Nimna package for test imports
-        run: pip install -e . --no-deps
+      - name: Install Nimna package (editable) with dev + infra extras
+        # ".[dev]"   → pytest وأدوات الجودة (خرجت من requirements.txt — P3-5)
+        # ".[infra]" → redis/qdrant/numpy/prometheus-client (كانت في requirements.txt — P3-4)
+        run: pip install -e ".[dev,infra]"
       - run: python -m pytest -q --tb=short
 
   security-blocklist:
@@ -251,8 +253,9 @@ jobs:
       - uses: actions/setup-python@v5
         with: {python-version: "3.11", cache: pip}
       - run: pip install -r requirements.txt
-      - name: Install Nimna package for test imports
-        run: pip install -e . --no-deps
+      - name: Install Nimna package (editable) with dev + infra extras
+        # production_gate.sh يشغّل pytest → يحتاج extras التطوير بعد خروج pytest من requirements.txt
+        run: pip install -e ".[dev,infra]"
       - name: Install the dependency auditor
         run: pip install pip-audit
       - name: Production gate (sequential, falsifiable, no masks)

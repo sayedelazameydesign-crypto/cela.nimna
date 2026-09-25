@@ -12,7 +12,9 @@ RUN useradd --create-home --uid 1000 nimna
 
 COPY pyproject.toml README.md ./
 COPY nimna ./nimna
-RUN pip install --upgrade "pip>=26.2" "setuptools>=83" && pip install .
+# ".[infra]": redis/qdrant/numpy/prometheus-client (كاش الرؤية، الذاكرة الشعاعية، /metrics)
+# كانت تضيع سابقًا لأنها خارج تبعيات pyproject — الانظر P3-4 في docs/REPO-AUDIT-2026-09-25.md
+RUN pip install --upgrade "pip>=26.2" "setuptools>=83" && pip install ".[infra]"
 
 COPY skills ./skills
 COPY workspace ./workspace

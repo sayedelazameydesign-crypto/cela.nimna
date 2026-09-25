@@ -1,3 +1,9 @@
+# التبعيات الزمنية للتشغيل (مرآة لقسم [project].dependencies في pyproject.toml — مصدر الحقيقة الواحد).
+# ملاحظات التوحيد (تدقيق 2026-09-25):
+#   * pytest وأدوات التطوير → extras التطوير:   pip install -e ".[dev]"
+#   * redis / qdrant-client / numpy / prometheus-client → extras البنية التحتية:
+#         pip install ".[infra]"          (Dockerfile وRender يستخدمانها)
+#   * matplotlib (الرسوم) →               pip install -e ".[charts]"
 pydantic==2.13.5
 pyyaml==6.0.3
 httpx==0.28.1
@@ -5,8 +11,3 @@ fastapi[standard]==0.141.1
 uvicorn[standard]==0.53.0
 google-genai==2.25.0
 Pillow>=10.0
-pytest==9.1.1
-redis>=5.0.0  # optional: VisionCache backend (fallback to memory if absent)
-prometheus-client>=0.19  # HPA custom metric active_websockets
-qdrant-client>=1.11.0  # optional: Vector Memory (fallback to in-memory cosine)
-numpy>=1.24  # for vector math (optional, hash embedding works without)

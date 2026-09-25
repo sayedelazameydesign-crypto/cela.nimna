@@ -7,7 +7,10 @@ name = "nimna"
 version = "0.1.0"
 description = "Reusable-skills AI agent: SKILL.md progressive loading, scoped tools, SQLite memory, approvals; runs on Gemini (free tier), NVIDIA NIM or any OpenAI-compatible model."
 readme = "README.md"
-requires-python = ">=3.10"
+# P1-3 (حسم): توحيد على 3.11 لأن CI وDockerfile والكود (tomllib) كلها عليها فعلًا.
+# البديل — إن أردت الإبقاء على 3.10 — تحتاج: requires-python = ">=3.10" + tomli marker بالأسفل
+# + تغليف استيراد tomllib في السكربت بـ try/except. لكن التوحيد أبسط وأصدق.
+requires-python = ">=3.11"
 dependencies = [
   "pydantic==2.13.5",
   "pyyaml==6.0.3",
@@ -19,7 +22,22 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest==9.1.1"]
+# P3-5: pytest للتطوير فقط — أُخرج من requirements.txt فعلاً (انظر سجل التنفيذ في تقرير التدقيق)
+dev = [
+  "pytest==9.1.1",
+  "ruff>=0.6",
+  "mypy>=1.10",
+  "bandit>=1.8",
+  "types-PyYAML",      # أنواع stub لـ pyyaml — يقلل أخطاء mypy الوهمية كثيرًا
+]
+# P3-4: البنية التحتية الاختيارية — كانت حصرًا في requirements.txt فتضيع من Dockerfile.
+# Dockerfile الإنتاج يجب أن يصبح:  pip install ".[infra]"
+infra = [
+  "redis>=5.0",
+  "qdrant-client>=1.9",
+  "numpy>=1.26",
+  "prometheus-client>=0.20",
+]
 charts = ["matplotlib==3.8.4"]
 
 [project.scripts]
@@ -37,3 +55,42 @@ entrypoint = "nimna.api.app:app"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+# ─── P4: تكوين التحليل الساكن (جديد) ─────────────────────────────
+# ملاحظة استراتيجية: ابدأ متساهلًا وشدّد تدريجيًا (المرحلة 2 من خطة التدقيق).
+# تشغيل أول مرة:  ruff check --statistics  لترتيب الأخطاء حسب الكثافة.
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100          # عدّلها لاحقًا حسب أسلوب المشروع — لا تستخدم الافتراضي 88 بعناد
+src = ["nimna", "tests"]
+
+[tool.ruff.lint]
+# بدءًا: الأخطاء الواضحة والاستيرادات غير المستخدمة + الأمن الأساسي.
+# B = bugbear, S = bandit-rules داخل ruff (لا يغني عن bandit الكامل لكنه يصطاد الظاهر)
+select = ["E", "F", "W", "I", "B", "UP", "S"]
+# استبعادات مؤقتة معقولة لمشروع فيه دين جودة:
+ignore = [
+  "E501",   # طول السطر — أعد تفعيله بعد ruff format
+  "B008",   # استدعاءات في الافتراضيات — شائعة في FastAPI (Query(...) إلخ)
+  "S101",   # assert — مسموح في الاختبارات والكود الفعلي له استخدامات
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S"]                      # لا أمن داخل الاختبارات
+"scripts/**" = ["S"]                    # سكربتات داخلية موثوقة
+# الملفات التي فيها md5/pickle المذكورة في التدقيق — عالجها في المرحلة 1 لا الآن:
+# "nimna/.../X.py" = ["S324"]  # md5 — فعّل هذا السطر مؤقتًا حتى تستبدلها
+
+[tool.ruff.lint.isort]
+known-first-party = ["nimna"]
+
+[tool.mypy]
+python_version = "3.11"
+# ابدأ متساهلًا — 88 خطأً لا يُصلح دفعة واحدة:
+ignore_missing_imports = true
+follow_imports = "silent"
+warn_unused_ignores = true
+warn_redundant_casts = true
+# لا تفعّل strict الآن. عندما يصل عدد الأخطاء للصفر ارفع السقف:
+# disallow_untyped_defs = true
