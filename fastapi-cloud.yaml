@@ -1,0 +1,107 @@
+# عقد ربط ومزامنة — GitHub ↔ FastAPI Cloud
+#
+# FastAPI Cloud لا يقرأ هذا الملف. هو عقد داخل المستودع تفحصه
+# `scripts/check_fastapi_cloud_link.py` (00-integrity.yml) قبل أي نشر.
+#
+# المستودع: https://github.com/sayedelazameydesign-crypto/cela.nimna
+# اللوحة:   https://dashboard.fastapicloud.com/sayedelazameydesign-424e4d8c/apps
+#
+# لا تضع أسراراً هنا. الأسرار تُضبط في لوحة FastAPI Cloud (Secret) وفي
+# GitHub Actions secrets (FASTAPI_CLOUD_TOKEN / FASTAPI_CLOUD_APP_ID).
+#
+# المزامنة الحية: FastAPI Cloud GitHub App (`fastapi-cloud[bot]`) على كل دفع
+# إلى main — تطبيقان مربوطان بنفس المستودع (كل دفع ينشر الاثنين).
+# لا تُضف `on.push: main` إلى workflow الـActions وإلا صار النشر ثلاثياً.
+# انظر docs/DEPLOY-FASTAPI-CLOUD.md.
+
+link:
+  github_owner: "sayedelazameydesign-crypto"
+  github_repo: "cela.nimna"
+  github_url: "https://github.com/sayedelazameydesign-crypto/cela.nimna"
+  fastapi_cloud_team_slug: "sayedelazameydesign-424e4d8c"
+  fastapi_cloud_team_url: "https://dashboard.fastapicloud.com/sayedelazameydesign-424e4d8c/apps"
+  default_branch: "main"
+  python: "3.11"
+  entrypoint: "nimna.api.app:app"
+  health_path: "/api/health"
+  # github_app     = Source Repository (الوضع الحي: fastapi-cloud[bot]).
+  # github_actions = workflow يدوي فقط في هذا المستودع (بلا push إلى main).
+  sync_mode: "github_app"
+  primary_app: "celanimna-3ffa6b22"
+  primary_url: "https://celanimna-3ffa6b22.fastapicloud.dev"
+  # تطبيق ثانٍ مربوط بنفس المستودع ونفس الفرع — ليس staging (GitHub App
+  # لا ينشر إلا default branch). نسخة قديمة/مكررة: افصل Source Repository
+  # من اللوحة إن لم يكن له غرض مستقل.
+  spare_app: "celanimna"
+  spare_role: "legacy-duplicate"
+  spare_disconnect_todo: "open"
+  spare_disconnect_owner: "sayedelazameydesign-crypto"
+  spare_disconnect_since: "2026-09-25"
+  workflow: ".github/workflows/fastapi-cloud-deploy.yml"
+  docs: "docs/DEPLOY-FASTAPI-CLOUD.md"
+
+env:
+  # -- المزوّد -------------------------------------------------------
+  - key: MODEL_PROVIDER
+    value: "gemini"
+  - key: GEMINI_MODEL
+    value: "gemini-2.5-flash"
+  - key: GEMINI_API_KEY
+    secret: true
+  - key: GOOGLE_API_KEY
+    secret: true
+  - key: OPENAI_API_KEY
+    secret: true
+  - key: NVIDIA_API_KEY
+    secret: true
+  - key: BROWSER_USE_API_KEY
+    secret: true
+
+  # -- أمن الـAPI ----------------------------------------------------
+  - key: NIMNA_ENV
+    value: "production"
+  - key: NIMNA_API_KEY
+    secret: true
+
+  # -- حدود الحكم ----------------------------------------------------
+  - key: COST_GUARD_ENABLED
+    value: "true"
+  - key: COST_GUARD_HARD
+    value: "true"
+  - key: MAX_SPEND_USD
+    value: "0"
+  - key: AGENT_MAX_STEPS
+    value: "12"
+  - key: AGENT_MAX_TOOL_CALLS
+    value: "30"
+  - key: AGENT_MAX_RUNTIME_SECONDS
+    value: "300"
+  - key: AGENT_VERIFY
+    value: "true"
+  - key: AGENT_AUTO_APPROVE
+    value: "false"
+
+  # -- العزل ---------------------------------------------------------
+  - key: SANDBOX_BACKEND
+    value: "subprocess"
+  - key: SANDBOX_TIMEOUT
+    value: "20"
+  - key: SANDBOX_MEMORY_MB
+    value: "512"
+  - key: BROWSER_USE_ENABLED
+    value: "false"
+  - key: COMPUTER_ENABLED
+    value: "false"
+
+  # -- المسارات (ليست Docker /app/… — FastAPI Cloud يشغّل المشروع كما هو)
+  - key: SKILLS_DIR
+    value: "skills"
+  - key: WORKSPACE_DIR
+    value: "workspace"
+  - key: DB_PATH
+    value: "data/nimna.db"
+
+  - key: EMBEDDING_PROVIDER
+    value: "hash"
+  - key: REDIS_URL
+    secret: true
