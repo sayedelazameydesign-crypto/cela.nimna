@@ -115,9 +115,17 @@ python -B -m pytest tests/test_x.py     # -B: write no .pyc during the mutation 
 file — hence the cache wipe. An isolated `git worktree add` avoids the issue
 entirely at a higher cost.
 
+### Scripted edits: print → assert → modify
+
+Any script that pipes a computed value into an in-place edit (`sed -i`, codemods, count updates in `README.md`) must print the value and assert it (present, numeric, in range) *before* modifying. Never trust an empty variable: a missing `bc` once wiped every test count from `README.md` because `sed` ran with an empty `$TOTAL`. Prefer Python with `assert` over bare shell pipelines for documented files.
+
+The same rule binds interactive commands, not just scripts: any state-changing command (git or otherwise) is preceded by a command that *shows* the state, and its output is *read* before executing. A `reset --soft` + chained `commit` once pushed a mass deletion because the stale index was never read. Concretely for git recovery: prefer `reset --mixed <parent>` (zeroes the index, no inherited surprises), `git add` explicit files (never bare `-A` after a restore), `git diff --cached <parent>` (read it), then commit.
+
 ## Pull requests
 
 - Keep commits focused; `git push origin arena/<id>` on your arena branch.
+- Assume `.git` evaporates between sessions: the worktree persists, unpushed objects may not. Every commit is pushed immediately — no dangling local commits across turns. Run `scripts/session_start.sh` first each session (report-only; it never recovers automatically).
+- `gh pr edit` is broken in this environment (it queries the retired GraphQL `projectCards` field). Use REST instead: `gh api -X PATCH repos/{owner}/{repo}/pulls/{n} -F 'body=@file.md'`.
 - Describe the skill/tool change, risk level, and include a `tests/` case.
 - For user-visible changes, update `README.md`, `.env.example`, and `SECURITY.md` if needed.
 

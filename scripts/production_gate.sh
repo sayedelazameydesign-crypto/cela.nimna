@@ -7,7 +7,12 @@
 # CI: runs the same script in the production-gate job.
 set -uo pipefail
 cd "$(dirname "$0")/.."
-T8_SHA="9885f3c33b908b131855db4e8ac1277c881ea56c"
+# Certified baseline: squash-merge of PR #22 (T7.1 evidence + T8 gate + cost-guard
+# fail-closed).  The pre-squash T8 commit 9885f3c no longer exists in this
+# history, so the ancestor pin was re-anchored here on 2026-09-25: any future
+# production candidate must descend from this commit.  Re-anchor ONLY to a
+# commit whose tree you have certified the same way (full gate, green).
+T8_SHA="0a3a5636f36313bebcc6e1dffffaa747eb565a51"
 PY="${PYTHON:-python3}"
 PASS=0; FAIL=0
 TOTAL=7
@@ -15,7 +20,7 @@ step() { echo; echo "=== [$1/$TOTAL] $2 ==="; }
 ok()   { echo "    ✔ $1"; PASS=$((PASS+1)); }
 bad()  { echo "    ✘ $1"; FAIL=$((FAIL+1)); }
 
-step 1 "T8 ancestor — candidate must contain 9885f3c (T7.1 closed + T8)"
+step 1 "T8 ancestor — candidate must contain 0a3a563 (T7.1 closed + T8, squash baseline)"
 if git merge-base --is-ancestor "$T8_SHA" HEAD 2>/dev/null; then
   ok "T8 commit is an ancestor of HEAD ($(git rev-parse --short HEAD))"
 else

@@ -1,0 +1,23 @@
+# Upstream license watch — the Gitness guard runs monthly, not just once.
+#
+# Harness ports proprietary UI files (with PolyForm headers) into
+# harness/harness at irregular intervals, so a pinned tag is only safe
+# until the next upgrade. This workflow re-counts the markers against the
+# baselines in docs/FREE-STACK.md and fails loudly on any increase.
+# Forgejo is expected to stay at zero outside its license-picker templates.
+name: upstream-license-watch
+
+on:
+  schedule:
+    - cron: "0 6 1 * *"
+  workflow_dispatch:
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Harness PolyForm count (baseline 27 = 26 headers + 1 code reference)
+        run: python scripts/check_upstream_licenses.py --clone https://github.com/harness/harness --baseline 27
+      - name: Forgejo proprietary-header count (baseline 0)
+        run: python scripts/check_upstream_licenses.py --clone https://github.com/qundao/mirror-forgejo --baseline 0 --exclude options/license

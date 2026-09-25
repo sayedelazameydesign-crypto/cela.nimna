@@ -27,9 +27,11 @@ spec:
         app: nimna-redis
     spec:
       containers:
+      # Valkey (BSD-3) — RESP-compatible Redis replacement; names below keep
+      # the `redis` prefix for compatibility (service name, REDIS_URL).
       - name: redis
-        image: redis:7-alpine
-        command: ["redis-server","/usr/local/etc/redis/redis.conf"]
+        image: valkey/valkey:8
+        command: ["valkey-server","/usr/local/etc/redis/redis.conf"]
         ports: [{containerPort: 6379}]
         volumeMounts: [{name: config, mountPath: /usr/local/etc/redis/redis.conf, subPath: redis.conf}]
         resources: {requests: {memory: "128Mi", cpu: "100m"}, limits: {memory: "300Mi", cpu: "500m"}}
