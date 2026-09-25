@@ -260,3 +260,42 @@
 | ⏸️ | قرار د | **موقوف بقاعدة التوقف** — النتيجة لا تطابق الفرعين المتوقعين: ليس «ميتًا في المصدر» (TEST-A أثبت العكس) ولا «قابلًا للتمرير» (لا استدعاء لتمريره إليه). `policy_stats` **يتيم هجرة T5→T7**. الخياران: (1) حذفه + توثيق أن إحصاءات البوابة الحية من gateway حصرًا — (2) إنشاء مسار T5 مباشر جديد في السويت (تغيير معماري). بانتظار القرار؛ السطر يحمل `# noqa: F841 # TODO(decision-D)` |
 
 **بعد الدفعة 4:** ruff = أخضر · F841 خرج من ignore الشامل إلى noqa واحد موسوم · pytest = 512/512 · suite (مع الراية): 9 ran / 0 error / 0 regressions.
+
+### decision-D — حذف policy_stats المتيتم (قرار 2026-09-25، الإغلاق)
+
+**القرار:** الخيار (1) — حذف المتيم، مع حفظ دليل TEST-A كاختبار regression دائم.
+
+**ترياج الـ17 المرجعي (حُسم قبل التنفيذ):**
+
+| الفئة | العدد | المواضع | الحكم |
+|---|---|---|---|
+| أ — إسقاط الإسناد مع حفظ النداء | 6 | agents/base:156 (validate أمني) · api/app:94 (singleton) · test_binding:462 (agent.run) · test_security_review2:140 (resume) · test_shell_reachability_c:76 (بناء Agent) · test_verification:98 | النداء مقدس؛ الإسناد موت |
+| ب — assert يحفظ النية | 8 | test_binding: 412, 449, 482, 533, 557, 579, 610 (legacy) + 483 (ctx) | guard صامت → assert صريح |
+| ج — حذف نظيف | 2 | agents/base:115 (last_text) · code_agent:88 (has_retry شبه ميت + NOTE مانع للعودة) | حذف |
+| د — قرار ملكية | 1 | run_arena_suite:703 | ⬇ انظر التجربتين |
+
+**TEST-A — هل بوابة T5 تصدر إحصاءات عند الرفض؟ (in-process، نفس سياسات السويت):**
+```
+denied status : InvocationStatus.POLICY_DENIED      (resource: "system/etc/passwd")
+allowed status: InvocationStatus.EXECUTED           (resource: "workspace")
+statsVerbatim : {'DENY': 1, 'ALLOW': 1}
+TEST-A PASS
+```
+
+**TEST-B — هل يعبر السويت بمسار T5 الذي يغذيها؟**
+```
+grep -c "t5_policy_adapter(" scripts/run_arena_suite.py  →  0 استدعاء
+
+SHELL_TOOL_ENABLED=1 → suite: 9 ran / 0 error
+code-05-shell-fix-retry: policy → allow=1 deny=0   ← إحصاءات gateway حية ومعروضة
+code-01-fizzbuzz-module: policy → allow=0 deny=0   (verify بلا عبور)
+بلا الراية: المهام الحاملة لـverify (code-01/05 كلتاهما requires=shell_tool) كلها SKIPPED
+→ لا صف يحمل حقل policy أصلًا
+```
+
+**الاستنتاج (ثالث غير متوقع):** دُحض الفرعان معًا — البوابة **ليست ميتة في المصدر** (TEST-A) ولا **قابلًا للتمرير** (TEST-B: صفر استدعاءات). `policy_stats` **يتيم هجرة P1-T7**: مسار T5 المباشر أُزيل لصالح العبور عبر gateway واحد، وإحصاءات البوابة الحية تصدر وتُعرض من `gateway.policy_stats` حصرًا. لذلك لا بند P3 «البوابة لا تصدر» (توثيق كذبة) — التوثيق الصحيح: «إحصاءات بوابة السياسة في السويت من طبقة gateway حصرًا؛ محول T5 متاح للاستدعاء المباشر ومحمي باختبار regression».
+
+**التنفيذ الختامي:**
+1. حذف سطر المتيم من `run_arena_suite.py` + استخراج بناء الحوكمة إلى `_suite_policy_and_catalog()` (مصدر حقيقة واحد — الاختبار يستورد الكائن الحقيقي لا نسخة).
+2. `tests/test_policy_gate_stats.py` — يحرس: رفض خارج الحوزة → `POLICY_DENIED`، سماح داخلها → `EXECUTED`، و`stats = {'DENY' ≥ 1, 'ALLOW' ≥ 1}`.
+3. بقايا `grep policy_stats` في السكربت = 4 أسطر كلها `gateway.policy_stats` (كائن حي — يبقى).

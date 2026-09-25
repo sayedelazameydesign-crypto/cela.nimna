@@ -539,6 +539,27 @@ def _shell_metrics(agent: Any, session_id: str, result: Any, row: dict[str, Any]
     }
 
 
+def _suite_policy_and_catalog():
+    """كائنا الحوكمة الحقيقيان للسويت (P1-T6) — مصدر الحقيقة الواحد.
+
+    استُخرجا من run_task كي يحرس الاختبار الكائن الحقيقي لا نسخة طبق الأصل
+    (regression قرار decision-D: tests/test_policy_gate_stats.py)."""
+    from nimna.execution.policy import CapabilityCatalog, Effect, Policy, PolicyRule
+
+    catalog = CapabilityCatalog(known={"shell"})
+    policy = Policy("arena-suite-policy", "1.0.0", rules=(
+        PolicyRule("deny-outside-workspace", Effect.DENY,
+                   capabilities=frozenset({"shell"}), operation="*",
+                   resource_patterns=("system/*", "/etc/*", "/*"),
+                   note="no verification command may leave the workspace"),
+        PolicyRule("allow-sandbox-shell", Effect.ALLOW,
+                   capabilities=frozenset({"shell"}), operation="*",
+                   resource_patterns=("workspace", "workspace/*", "workspace/**"),
+                   note="sandboxed verification re-run inside the workspace"),
+    ))
+    return catalog, policy
+
+
 def run_task(spec: TaskSpec, mode: str) -> dict[str, Any]:
     """Run one task end-to-end and return an honest row dict."""
     row: dict[str, Any] = {
@@ -680,27 +701,10 @@ def run_task(spec: TaskSpec, mode: str) -> dict[str, Any]:
 
                 # P1-T6: deterministic governance — CapabilityCatalog → Policy →
                 # Authorization. Same inputs, same decision; every refusal fail-closed.
-                from nimna.execution.policy import (
-                    AuthorizationGrant,
-                    Authorizer,
-                    CapabilityCatalog,
-                    Effect,
-                    Policy,
-                    PolicyRule,
-                )
-                catalog = CapabilityCatalog(known={"shell"})
-                suite_policy = Policy("arena-suite-policy", "1.0.0", rules=(
-                    PolicyRule("deny-outside-workspace", Effect.DENY,
-                               capabilities=frozenset({"shell"}), operation="*",
-                               resource_patterns=("system/*", "/etc/*", "/*"),
-                               note="no verification command may leave the workspace"),
-                    PolicyRule("allow-sandbox-shell", Effect.ALLOW,
-                               capabilities=frozenset({"shell"}), operation="*",
-                               resource_patterns=("workspace", "workspace/*", "workspace/**"),
-                               note="sandboxed verification re-run inside the workspace"),
-                ))
+                # (البناء مستخرج إلى _suite_policy_and_catalog — الاختبار يحرس الكائن الحقيقي)
+                from nimna.execution.policy import AuthorizationGrant, Authorizer
+                catalog, suite_policy = _suite_policy_and_catalog()
                 suite_authorizer = Authorizer()
-                policy_stats: dict = {}  # noqa: F841  # TODO(decision-D): تجربة السلك جارية — قرار معلّق (سجل الدفعة 4 في تقرير التدقيق)
 
                 def _operator_consent(descriptor, arguments):
                     return AuthorizationGrant(actor="arena-suite-operator",
